@@ -232,7 +232,23 @@ func TestPutAndGetNisd(t *testing.T) {
 	resp, err := c.GetNisds(req)
 	assert.GreaterOrEqualf(t, len(resp), len(mockNisd), "expected atleast %v nisds", len(mockNisd))
 	assert.NoError(t, err)
+	
+	expected := mockNisd[1]
+	returned := res[0]
 
+	// Validate all key fields match
+	assert.Equal(t, expected.ID, returned.ID, "ID mismatch")
+	assert.Equal(t, expected.DevID, returned.DevID, "DevID mismatch")
+	assert.Equal(t, expected.HyperVisorID, returned.HyperVisorID, "HyperVisorID mismatch")
+	assert.Equal(t, expected.FailureDomain, returned.FailureDomain, "FailureDomain mismatch")
+	assert.Equal(t, expected.IPAddr, returned.IPAddr, "IPAddr mismatch")
+	assert.Equal(t, expected.ClientPort, returned.ClientPort, "ClientPort mismatch")
+	assert.Equal(t, expected.PeerPort, returned.PeerPort, "PeerPort mismatch")
+	assert.Equal(t, expected.TotalSize, returned.TotalSize, "TotalSize mismatch")
+	assert.Equal(t, expected.AvailableSize, returned.AvailableSize, "AvailableSize mismatch")
+	assert.Equal(t, expected.InitDev, returned.InitDev, "InitDev mismatch")
+
+	log.Info("All NISD PUT/GET validations successful.")
 }
 
 func TestPutAndGetDevice(t *testing.T) {
@@ -305,6 +321,29 @@ func TestPutAndGetDevice(t *testing.T) {
 	resp, err := c.GetDevices(cpLib.GetReq{ID: "60447cd0-ab3e-11f0-aa15-1f40dd976538"})
 	log.Infof("fetch single device info: %s, %s, %s", resp[0].ID, resp[0].HypervisorID, resp[0].SerialNumber)
 	assert.NoError(t, err)
+
+	returned := res[0]
+	expected := mockDevices[2]
+
+	// Validate single fetch matches inserted data
+	assert.Equal(t, expected.ID, returned.ID)
+	assert.Equal(t, expected.SerialNumber, returned.SerialNumber)
+	assert.Equal(t, expected.HypervisorID, returned.HypervisorID)
+	assert.Equal(t, expected.FailureDomain, returned.FailureDomain)
+	assert.Equal(t, expected.DevicePath, returned.DevicePath)
+	assert.Equal(t, expected.Name, returned.Name)
+	assert.Equal(t, expected.Size, returned.Size)
+	assert.Equal(t, len(expected.Partitions), len(returned.Partitions), "Mismatch in number of partitions")
+
+	for i := range expected.Partitions {
+		assert.Equal(t, expected.Partitions[i].PartitionID, returned.Partitions[i].PartitionID)
+		assert.Equal(t, expected.Partitions[i].PartitionPath, returned.Partitions[i].PartitionPath)
+		assert.Equal(t, expected.Partitions[i].NISDUUID, returned.Partitions[i].NISDUUID)
+		assert.Equal(t, expected.Partitions[i].DevID, returned.Partitions[i].DevID)
+		assert.Equal(t, expected.Partitions[i].Size, returned.Partitions[i].Size)
+	}
+
+	log.Infof("Validated single device fetch: %s (%s)", returned.ID, returned.SerialNumber)
 
 	resp, err = c.GetDevices(cpLib.GetReq{GetAll: true})
 	log.Infof("fetech all device list: %s,%v", resp[0].ID, resp[0].Partitions)
