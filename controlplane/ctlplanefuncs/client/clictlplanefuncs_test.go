@@ -167,6 +167,7 @@ func newClientWithToken(t testing.TB, token string) *CliCFuncs {
 func TestPutAndGetSingleNisd(t *testing.T) {
 	c := newClient(t)
 
+	mockNisd := cpLib.Nisd{
 	pdu := cpLib.PDU{
 		ID: "95f62aee-997e-11f0-9f1b-a70cff4b660b",
 		Name:          "pdu-1",
@@ -427,7 +428,7 @@ func TestPutAndGetMultipleDevices(t *testing.T) {
 	assert.GreaterOrEqual(t, len(resp), len(mockDevices))
 }
 
-func TestPutAndGetMultiplePDUs(t *testing.T) {
+func TestPutAndGetMultipleNisds(t *testing.T) {
 	c := newClient(t)
 
 	pdus := []cpLib.PDU{
