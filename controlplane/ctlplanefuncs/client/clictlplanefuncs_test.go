@@ -2984,3 +2984,6 @@ func TestMountVdevByName(t *testing.T) {
 		assert.Equal(t, uint64(2), info.VdevMountInfo.MountCounter)
 	})
 }
+=======
+}
+>>>>>>> 955463c ( Added two sub-tests for each entity.)
