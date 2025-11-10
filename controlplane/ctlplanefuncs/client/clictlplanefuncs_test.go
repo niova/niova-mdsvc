@@ -807,6 +807,7 @@ func BenchmarkPutAndGetRack(b *testing.B) {
 	for b.Loop() {
 		runPutAndGetRack(b, c)
 	}
+<<<<<<< HEAD
 }
 
 func TestVdevNisdChunk(t *testing.T) {
