@@ -166,7 +166,7 @@ func newClientWithToken(t testing.TB, token string) *CliCFuncs {
 func TestPutAndGetSingleNisd(t *testing.T) {
 	c := newClient(t)
 
-	mockNisd := cpLib.Nisd{
+	nisd := cpLib.Nisd{
 			ClientPort:    7001,
 			PeerPort:      8001,
 			ID:            "nisd-001",
@@ -180,12 +180,12 @@ func TestPutAndGetSingleNisd(t *testing.T) {
 	}
 
 	// PUT operation 
-	resp, err := c.PutNisdCfg(&n)
+	resp, err := c.PutNisdCfg(&nisd)
 	assert.NoError(t, err)
 	assert.True(t, resp.Success)
 
 	// GET operation 
-	res, err := c.GetNisdCfg(cpLib.GetReq{ID: n.ID})
+	res, err := c.GetNisdCfg(cpLib.GetReq{ID: nisd.ID})
 	log.Info("GetNisdCfg: ", res)
 	assert.NoError(t, err)
 	assert.NotEmpty(t, res)
@@ -193,16 +193,16 @@ func TestPutAndGetSingleNisd(t *testing.T) {
 	returned := res[0]
 
 	// Validate all key fields match
-	assert.Equal(t, n.ID, returned.ID, "ID mismatch")
-	assert.Equal(t, n.DevID, returned.DevID, "DevID mismatch")
-	assert.Equal(t, n.HyperVisorID, returned.HyperVisorID, "HyperVisorID mismatch")
-	assert.Equal(t, n.FailureDomain, returned.FailureDomain, "FailureDomain mismatch")
-	assert.Equal(t, n.IPAddr, returned.IPAddr, "IPAddr mismatch")
-	assert.Equal(t, n.ClientPort, returned.ClientPort, "ClientPort mismatch")
-	assert.Equal(t, n.PeerPort, returned.PeerPort, "PeerPort mismatch")
-	assert.Equal(t, n.TotalSize, returned.TotalSize, "TotalSize mismatch")
-	assert.Equal(t, n.AvailableSize, returned.AvailableSize, "AvailableSize mismatch")
-	assert.Equal(t, n.InitDev, returned.InitDev, "InitDev mismatch")
+	assert.Equal(t, nisd.ID, returned.ID, "ID mismatch")
+	assert.Equal(t, nisd.DevID, returned.DevID, "DevID mismatch")
+	assert.Equal(t, nisd.HyperVisorID, returned.HyperVisorID, "HyperVisorID mismatch")
+	assert.Equal(t, nisd.FailureDomain, returned.FailureDomain, "FailureDomain mismatch")
+	assert.Equal(t, nisd.IPAddr, returned.IPAddr, "IPAddr mismatch")
+	assert.Equal(t, nisd.ClientPort, returned.ClientPort, "ClientPort mismatch")
+	assert.Equal(t, nisd.PeerPort, returned.PeerPort, "PeerPort mismatch")
+	assert.Equal(t, nisd.TotalSize, returned.TotalSize, "TotalSize mismatch")
+	assert.Equal(t, nisd.AvailableSize, returned.AvailableSize, "AvailableSize mismatch")
+	assert.Equal(t, nisd.InitDev, returned.InitDev, "InitDev mismatch")
 
 	log.Info("Single NISD PUT/GET validations successful.")
 }
@@ -471,7 +471,7 @@ func TestPutAndGetSingleRack(t *testing.T) {
 	log.Infof("Single Rack PUT/GET validation successful for Rack ID: %s", rack.ID)
 }
 
-func TestPutAndGetRack(t *testing.T) {
+func TestPutAndGetMultipleRacks(t *testing.T) {
 	c := newClient(t)
 
 	racks := []cpLib.Rack{
