@@ -20,7 +20,7 @@ var (
 	TestNisds = make(map[string]cpLib.Nisd)
 )
 
-func TestBulkPDUsAndRacks(t *testing.T) {
+func TestEnitityHeirarchy(t *testing.T) {
 	c := newClient(t)
 
 	// -------------------------
@@ -132,6 +132,61 @@ func TestBulkPDUsAndRacks(t *testing.T) {
 	TestHypervisors = make(map[string]cpLib.Hypervisor)
 	for _, hv := range allHvs {
 		TestHypervisors[hv.ID] = hv
+	}
+
+	// -------------------------
+	// 4) Create 2 Devices per Hypervisor
+	// -------------------------
+	deviceCounter := 1
+
+	for _, hv := range Test_Hypervisors {
+
+		for d := 1; d <= 2; d++ {
+
+			devID := fmt.Sprintf("dev-%03d-uuid", deviceCounter)
+			partID := fmt.Sprintf("part-%03d-uuid", deviceCounter)
+
+			device := cpLib.Device{
+				ID:            devID,
+				SerialNumber:  fmt.Sprintf("SN-%06d", deviceCounter),
+				State:         2,
+				HypervisorID:  hv.ID,
+				FailureDomain: fmt.Sprintf("fd-%02d", d),
+				DevicePath:    fmt.Sprintf("/dev/%s/%d", hv.Name, d),
+				Name:          fmt.Sprintf("device-%03d", deviceCounter),
+				Size:          int64(1_000_000 * deviceCounter),
+				Partitions: []cpLib.DevicePartition{
+					{
+						PartitionID:   partID,
+						PartitionPath: fmt.Sprintf("/dev/%s/%d/part1", hv.Name, d),
+						NISDUUID:      fmt.Sprintf("nisd-%03d", deviceCounter),
+						DevID:         devID,
+						Size:          int64(500_000),
+					},
+				},
+			}
+
+			// PUT device
+			resp, err := c.PutDevice(&device)
+			assert.NoError(t, err)
+			assert.True(t, resp.Success)
+
+			Test_Devices[device.ID] = device
+			deviceCounter++
+		}
+	}
+
+	log.Infof("Created %d Hypervisors", len(Test_Hypervisors))
+
+	// GET ALL devices
+	allDevices, err := c.GetDevices(&cpLib.GetReq{GetAll: true})
+	assert.NoError(t, err)
+	assert.Equal(t, len(Test_Devices), len(allDevices))
+
+	// Overwrite global map
+	Test_Devices = make(map[string]cpLib.Hypervisor)
+	for _, d := range allDevices {
+		Test_Devices[d.ID] = d
 	}
 
 	// -------------------------
