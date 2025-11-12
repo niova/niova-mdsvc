@@ -167,6 +167,17 @@ func newClientWithToken(t testing.TB, token string) *CliCFuncs {
 func TestPutAndGetSingleNisd(t *testing.T) {
 	c := newClient(t)
 
+	pdu := cpLib.PDU{
+		ID: "95f62aee-997e-11f0-9f1b-a70cff4b660b",
+		Name:          "pdu-1",
+		Location:      "us-west",
+		PowerCapacity: "15Kw",
+		Specification: "specification1",
+	}
+
+func TestPutAndGetSinglePDU(t *testing.T) {
+	c := newClient(t) 
+
 	mockNisd := []cpLib.Nisd{
 		{
 			ClientPort: 7001,
