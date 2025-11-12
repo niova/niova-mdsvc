@@ -188,17 +188,6 @@ func TestBulkPDUsAndRacks(t *testing.T) {
 		Test_Devices[d.ID] = d
 	}
 
-log.Infof("Successfully created and validated %d devices", len(Test_Devices))
-
-
-
-
-
-
-
-
-
-
-
+	log.Infof("Successfully created and validated %d devices", len(Test_Devices))
 
 }
