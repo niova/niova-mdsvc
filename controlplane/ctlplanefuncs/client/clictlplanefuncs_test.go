@@ -411,14 +411,14 @@ func TestPutAndGetMultiplePDUs(t *testing.T) {
 		{
 			ID:            "95f62aee-997e-11f0-9f1b-a70cff4b660b",
 			Name:          "pdu-1",
-			Location:      "us-west",
+			Location:      "us-east",
 			PowerCapacity: "15Kw",
 			Specification: "specification1",
 		},
 		{
 			ID:            "13ce1c48-9979-11f0-8bd0-4f62ec9356ea",
 			Name:          "pdu-2",
-			Location:      "us-east",
+			Location:      "us-west",
 			PowerCapacity: "15Kw",
 			Specification: "specification2",
 		},
