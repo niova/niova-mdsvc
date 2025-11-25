@@ -737,7 +737,6 @@ func TestVdevLifecycleByName(t *testing.T) {
 
 	// Step 3: Fetch all Vdevs
 	getAllReq := &cpLib.GetReq{GetAll: true}
-
 	allCResp, err := c.GetVdevsWithChunkInfo(getAllReq)
 	assert.NoError(t, err)
 	assert.NotNil(t, allCResp)
