@@ -19,6 +19,14 @@ import (
 	userlib "github.com/00pauln00/niova-mdsvc/controlplane/user/lib"
 )
 
+var (
+	TestPDUs  = make(map[string]cpLib.PDU)
+	TestRacks = make(map[string]cpLib.Rack)
+	TestHypervisors = make(map[string]cpLib.Hypervisor)
+	TestDevices = make(map[string]cpLib.Device)
+	TestNisds = make(map[string]cpLib.Nisd)
+)
+
 var VDEV_ID string
 
 // Package-level test configuration initialized once in TestMain.
@@ -2984,6 +2992,99 @@ func TestMountVdevByName(t *testing.T) {
 		assert.Equal(t, uint64(2), info.VdevMountInfo.MountCounter)
 	})
 }
-=======
+
+func TestBulkPDUsAndRacks(t *testing.T) {
+	c := newClient(t)
+
+	// -------------------------
+	// 1) Create 10 PDUs
+	// -------------------------
+	locations := []string{
+		"us-east", "us-west", "us-central", "us-south", "us-north",
+		"eu-west", "eu-east", "ap-south", "ap-north", "africa-east",
+	}
+
+	var pduList []cpLib.PDU
+
+	for i := 1; i <= 10; i++ {
+		pdu := cpLib.PDU{
+			ID:            fmt.Sprintf("pdu-%02d-uuid", i),
+			Name:          fmt.Sprintf("pdu-%d", i),
+			Location:      locations[i-1],
+			PowerCapacity: "20Kw",
+			Specification: fmt.Sprintf("spec-%d", i),
+		}
+
+		resp, err := c.PutPDU(&pdu)
+		assert.NoError(t, err)
+		assert.True(t, resp.Success)
+
+		pduList = append(pduList, pdu)
+	}
+
+	// GET all PDUs
+	allPdus, err := c.GetPDUs(&cpLib.GetReq{GetAll: true})
+	assert.NoError(t, err)
+	assert.Equal(t, len(pduList), len(allPdus), "Mismatch PDU count")
+
+	// Store in global PDUs map
+	for _, p := range allPdus {
+		TestPDUs[p.ID] = p
+	}
+
+	log.Infof("Successfully created and validated %d PDUs", len(allPdus))
+
+	// -------------------------
+	// 2) Create 10 racks for each PDU (100 racks total)
+	// -------------------------
+	totalRacks := 0
+	for _, pdu := range allPdus {
+
+		for r := 1; r <= 10; r++ {
+			rack := cpLib.Rack{
+				ID:            fmt.Sprintf("%s-rack-%02d", pdu.ID, r),
+				PDUID:         pdu.ID,
+				Name:          fmt.Sprintf("%s-rack-%d", pdu.Name, r),
+				Location:      pdu.Location,
+				Specification: fmt.Sprintf("spec-%s-%d", pdu.Name, r),
+			}
+
+			resp, err := c.PutRack(&rack)
+			assert.NoError(t, err)
+			assert.True(t, resp.Success)
+			totalRacks++
+		}
+	}
+
+	// GET all racks
+	rackResp, err := c.GetRacks(&cpLib.GetReq{GetAll: true})
+	assert.NoError(t, err)
+	assert.Equal(t, totalRacks, len(rackResp), "Mismatch total rack count")
+
+	// Store in global Racks map
+	for _, r := range rackResp {
+		TestRacks[r.ID] = r
+	}
+
+	log.Infof("Successfully created and validated %d racks", len(rackResp))
+
+	// -------------------------
+	// 3) Validation: Rack ↔ PDU mapping and metadata checks
+	// -------------------------
+	for _, rack := range TestRacks {
+		pdu, ok := TestPDUs[rack.PDUID]
+		assert.True(t, ok, "Rack %s references missing PDUID %s", rack.Name, rack.PDUID)
+
+		// Location validation
+		assert.Equal(t, pdu.Location, rack.Location,
+			"Location mismatch Rack=%s (%s) PDU=%s (%s)",
+			rack.Name, rack.Location, pdu.Name, pdu.Location)
+
+		// Non-empty rack fields
+		assert.NotEmpty(t, rack.Specification)
+		assert.NotEmpty(t, rack.Name)
+	}
+
+	log.Infof("Validated all %d Rack↔PDU associations successfully", len(TestRacks))
 }
->>>>>>> 955463c ( Added two sub-tests for each entity.)
+
