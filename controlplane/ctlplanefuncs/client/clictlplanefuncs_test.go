@@ -166,6 +166,17 @@ func newClientWithToken(t testing.TB, token string) *CliCFuncs {
 func TestPutAndGetSingleNisd(t *testing.T) {
 	c := newClient(t)
 
+	mockNisd := []cpLib.Nisd{
+		{
+			ClientPort: 7001,
+			PeerPort:   8001,
+			ID:         "nisd-001",
+			ParentID: []string{
+				"pdu-01",
+				"rack-01",
+				"hv-01",
+				"dev-001",
+			},
 	nisd := cpLib.Nisd{
 			ClientPort:    7001,
 			PeerPort:      8001,
@@ -174,7 +185,6 @@ func TestPutAndGetSingleNisd(t *testing.T) {
 			HyperVisorID:  "hv-01",
 			FailureDomain: "fd-01",
 			IPAddr:        "192.168.1.10",
-			InitDev:       true,
 			TotalSize:     1_000_000_000_000, // 1 TB
 			AvailableSize: 750_000_000_000,   // 750 GB
 	}
