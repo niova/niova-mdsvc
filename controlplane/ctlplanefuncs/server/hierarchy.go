@@ -125,6 +125,36 @@ func removeNisdFromDevice(dn *cpLib.DeviceAlloc, nisdID string) bool {
 	return len(dn.Nisds) == 0
 }
 
+func (fd *FailureDomain) getOrCreateEntity(id string) *Entities {
+	e, ok := fd.Tree.Get(Entities{ID: id})
+	if ok {
+		return &e
+	}
+	n := Entities{
+		ID:    id,
+		Nisds: cbtree.NewBTreeG[*cpLib.Nisd](compareNisd),
+	}
+	fd.Tree.Set(n)
+	return &n
+}
+
+func (fd *FailureDomain) deleteEmptyEntity(id string) {
+	e, ok := fd.Tree.Get(Entities{ID: id})
+	if !ok {
+		return
+	}
+	if e.Nisds.Len() == 0 {
+		fd.Tree.Delete(e)
+	}
+}
+
+func GetIndex(hash uint64, size int) (int, error) {
+	if size <= 0 {
+		return 0, errors.New("invalid size")
+	}
+	return int(hash % uint64(size)), nil
+}
+
 // Add NISD and the corresponding parent entities to the Hierarchy
 func (hr *Hierarchy) AddNisd(n *cpLib.Nisd) error {
 	if n.AvailableSize < cpLib.CHUNK_SIZE {
