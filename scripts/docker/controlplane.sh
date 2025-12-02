@@ -29,7 +29,11 @@ done
 
 sleep 5
 
-CUUID="$(uuidgen)"
+if [ "$2" = "new" ]; then
+    CUUID="$(uuidgen)"
+else
+    CUUID="$3"
+fi
 
 # Run the proxy
 ./libexec/niova/CTLPlane_proxy \
