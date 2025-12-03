@@ -126,20 +126,20 @@ func removeNisdFromDevice(dn *cpLib.DeviceAlloc, nisdID string) bool {
 }
 
 func (fd *FailureDomain) getOrCreateEntity(id string) *Entities {
-	e, ok := fd.Tree.Get(Entities{ID: id})
+	e, ok := fd.Tree.Get(&Entities{ID: id})
 	if ok {
-		return &e
+		return e
 	}
 	n := Entities{
 		ID:    id,
 		Nisds: cbtree.NewBTreeG[*cpLib.Nisd](compareNisd),
 	}
-	fd.Tree.Set(n)
+	fd.Tree.Set(&n)
 	return &n
 }
 
 func (fd *FailureDomain) deleteEmptyEntity(id string) {
-	e, ok := fd.Tree.Get(Entities{ID: id})
+	e, ok := fd.Tree.Get(&Entities{ID: id})
 	if !ok {
 		return
 	}
