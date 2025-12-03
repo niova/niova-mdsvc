@@ -418,6 +418,24 @@ func ApplyNisd(args ...interface{}) (interface{}, error) {
 	return resp, nil
 }
 
+func ApplyNisd(args ...interface{}) (interface{}, error) {
+	cbargs := args[1].(*PumiceDBServer.PmdbCbArgs)
+	nisd := args[0].(ctlplfl.Nisd)
+	var intrm funclib.FuncIntrm
+	buf := C.GoBytes(cbargs.AppData, C.int(cbargs.AppDataSize))
+	err := pmCmn.Decoder(pmCmn.GOB, buf, &intrm)
+	if err != nil {
+		log.Error("Failed to decode the apply changes: ", err)
+		return nil, fmt.Errorf("failed to decode apply changes: %v", err)
+	}
+
+	applyKV(intrm.Changes, cbargs)
+
+	HR.AddNisd(&nisd)
+
+	return intrm.Response, nil
+}
+
 // TODO: This method needs to be tested
 func ReadAllNisdConfigs(args ...interface{}) (interface{}, error) {
 	cbArgs := args[0].(*PumiceDBServer.PmdbCbArgs)
