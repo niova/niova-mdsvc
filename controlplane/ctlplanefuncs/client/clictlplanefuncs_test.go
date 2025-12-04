@@ -171,7 +171,7 @@ func TestPutAndGetSingleNisd(t *testing.T) {
 			ClientPort: 7001,
 			PeerPort:   8001,
 			ID:         "nisd-001",
-			ParentID: []string{
+			FailureDomain: []string{
 				"pdu-01",
 				"rack-01",
 				"hv-01",
