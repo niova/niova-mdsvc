@@ -29,7 +29,7 @@ done
 
 sleep 5
 
-if [ "$2" = "new" ]; then
+if [ "$2" = "init" ]; then
     CUUID="$(uuidgen)"
 else
     CUUID="$3"
