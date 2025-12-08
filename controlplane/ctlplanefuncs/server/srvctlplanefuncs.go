@@ -1886,6 +1886,10 @@ func ReadChunkNisd(args ...interface{}) (interface{}, error) {
 		NisdUUIDs:   strings.Join(ids, ","),
 		NumReplicas: uint8(len(rqResult.ResultMap)),
 	}
+	for _, v := range rqResult.ResultMap {
+		chunkInfo.NisdUUID = append(chunkInfo.NisdUUID, string(v))
+	}
+	chunkInfo.NumReplicas = uint8(len(chunkInfo.NisdUUID)) - 1
 
 	log.Debugf("ReadChunkNisd: returning chunk-nisd info for vdev %s chunk %s", vdevID, chunk)
 	return ctlplfl.EncodeResponse(chunkInfo)
