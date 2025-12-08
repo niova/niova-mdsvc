@@ -149,9 +149,11 @@ func (fd *FailureDomain) deleteEmptyEntity(id string) {
 }
 
 func GetIndex(hash uint64, size int) (int, error) {
+	// if no elements are present in the tree, return a error
 	if size <= 0 {
 		return 0, errors.New("invalid size")
 	}
+	// if only one element is present in the tree, return 0th idx
 	if size == 1 {
 		return 0, nil
 	}
