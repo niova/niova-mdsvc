@@ -152,6 +152,9 @@ func GetIndex(hash uint64, size int) (int, error) {
 	if size <= 0 {
 		return 0, errors.New("invalid size")
 	}
+	if size == 1 {
+		return 0, nil
+	}
 	return int(hash % uint64(size)), nil
 }
 
