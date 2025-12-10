@@ -40,7 +40,8 @@ type FailureDomain struct {
 // Index 3 - Device
 // Index 4 - Partition
 type Hierarchy struct {
-	FD []FailureDomain
+	FD            []FailureDomain
+	AvailableSize uint64
 }
 
 var HR Hierarchy
