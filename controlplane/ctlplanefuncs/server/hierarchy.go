@@ -42,6 +42,7 @@ type FailureDomain struct {
 type Hierarchy struct {
 	FD            []FailureDomain
 	AvailableSize uint64
+	NisdMap       map[string]*ctlplfl.NisdCopy
 }
 
 var HR Hierarchy
