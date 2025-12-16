@@ -371,6 +371,10 @@ func BytesToGB(b int64) float64 {
 	const gb = 1024 * 1024 * 1024
 	return float64(b) / float64(gb)
 }
+func BytesToGB(b int64) float64 {
+	const gb = 1024 * 1024 * 1024
+	return float64(b) / float64(gb)
+}
 
 func (hr *Hierarchy) Dump() {
 	if hr.FD == nil {
