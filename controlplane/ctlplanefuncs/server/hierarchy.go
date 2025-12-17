@@ -134,7 +134,7 @@ func (fd *FailureDomain) getOrCreateEntity(id string) *Entities {
 	}
 	n := Entities{
 		ID:    id,
-		Nisds: cbtree.NewBTreeG[*cpLib.Nisd](compareNisd),
+		Nisds: btree.NewBTreeG[*cpLib.Nisd](compareNisd),
 	}
 	fd.Tree.Set(&n)
 	return &n

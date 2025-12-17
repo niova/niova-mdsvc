@@ -431,7 +431,10 @@ func ApplyNisd(args ...interface{}) (interface{}, error) {
 
 	applyKV(intrm.Changes, cbargs)
 
-	HR.AddNisd(&nisd)
+	err = HR.AddNisd(&nisd)
+	if err != nil {
+		log.Error("AddNisd()", err)
+	}
 
 	return intrm.Response, nil
 }
