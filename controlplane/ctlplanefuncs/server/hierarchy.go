@@ -147,13 +147,14 @@ func (fd *FailureDomain) deleteEmptyEntity(id string) {
 	}
 	if e.Nisds.Len() == 0 {
 		fd.Tree.Delete(e)
+		log.Tracef("deleting entity: %s, no nisd's available: ", e.ID)
 	}
 }
 
 func GetIndex(hash uint64, size int) (int, error) {
 	// if no elements are present in the tree, return a error
 	if size <= 0 {
-		return 0, errors.New("invalid size")
+		return 0, fmt.Errorf("invalid size: %d", size)
 	}
 	// if only one element is present in the tree, return 0th idx
 	if size == 1 {
@@ -371,6 +372,7 @@ func BytesToGB(b int64) float64 {
 	const gb = 1024 * 1024 * 1024
 	return float64(b) / float64(gb)
 }
+
 func BytesToGB(b int64) float64 {
 	const gb = 1024 * 1024 * 1024
 	return float64(b) / float64(gb)
