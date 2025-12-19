@@ -19,14 +19,6 @@ import (
 	userlib "github.com/00pauln00/niova-mdsvc/controlplane/user/lib"
 )
 
-var (
-	TestPDUs  = make(map[string]cpLib.PDU)
-	TestRacks = make(map[string]cpLib.Rack)
-	TestHypervisors = make(map[string]cpLib.Hypervisor)
-	TestDevices = make(map[string]cpLib.Device)
-	TestNisds = make(map[string]cpLib.Nisd)
-)
-
 var VDEV_ID string
 
 // Package-level test configuration initialized once in TestMain.
