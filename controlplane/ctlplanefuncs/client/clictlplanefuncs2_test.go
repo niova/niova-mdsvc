@@ -1,7 +1,6 @@
 package clictlplanefuncs
 
 import (
-	"os"
 	"testing"
 	"fmt"
 	"context"
@@ -9,7 +8,6 @@ import (
     "golang.org/x/sync/errgroup"
 
 	cpLib "github.com/00pauln00/niova-mdsvc/controlplane/ctlplanefuncs/lib"
-	"github.com/google/uuid"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 )
@@ -157,24 +155,91 @@ func TestBulkPDUsAndRacks(t *testing.T) {
 
 	log.Infof("Validated all PDUs, Racks, and Hypervisors successfully")
 
+	vdevs := []*cpLib.Vdev{
+        {Size: 700 * 1024 * 1024 * 1024},
+        {Size: 400 * 1024 * 1024 * 1024},
+    }
+
+    ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+    defer cancel()
+
+    eg, ctx := errgroup.WithContext(ctx)
+
+    // concurrency limiter (e.g., allow at most 2 concurrent creates)
+    maxConcurrent := 2
+    sem := make(chan struct{}, maxConcurrent)
+
+    // result channel
+    results := make(chan *cpLib.Vdev, len(vdevs))
+
+    for _, v := range vdevs {
+        vv := v
+
+        eg.Go(func() error {
+            // each goroutine gets its own client
+            c := newClient(t)
+            // TODO: if CliCFuncs has a Close()/Shutdown(), defer it here
+
+            // acquire slot
+            select {
+            case sem <- struct{}{}:
+            case <-ctx.Done():
+                return ctx.Err()
+            }
+            defer func() { <-sem }() // release
+
+            // create vdev via this goroutine's client
+            if err := c.CreateVdev(vv); err != nil {
+                t.Logf("CreateVdev failed for size=%d: %v", vv.Size, err)
+                return err
+            }
+
+            // send result
+            select {
+            case results <- vv:
+                return nil
+            case <-ctx.Done():
+                return ctx.Err()
+            }
+        })
+    }
+
+    // wait for all goroutines
+    if err := eg.Wait(); err != nil {
+        t.Fatalf("parallel create failed: %v", err)
+    }
+    close(results)
+
+    created := make([]*cpLib.Vdev, 0, len(vdevs))
+    for r := range results {
+        created = append(created, r)
+    }
+
+    // assertions
+    assert.Len(t, created, len(vdevs))
+    if len(created) >= 2 {
+        assert.NotEqual(t, created[0].VdevID, created[1].VdevID, "Vdev IDs must be unique")
+    }
+
 	// -------------------------
 	// 3) Validation: Rack ↔ PDU mapping and metadata checks
 	// -------------------------
-	// for _, rack := range TestRacks {
-	// 	pdu, ok := TestPDUs[rack.PDUID]
-	// 	assert.True(t, ok, "Rack %s references missing PDUID %s", rack.Name, rack.PDUID)
 
-	// 	// Location validation
-	// 	assert.Equal(t, pdu.Location, rack.Location,
-	// 		"Location mismatch Rack=%s (%s) PDU=%s (%s)",
-	// 		rack.Name, rack.Location, pdu.Name, pdu.Location)
+	for _, rack := range TestRacks {
+		pdu, ok := TestPDUs[rack.PDUID]
+		assert.True(t, ok, "Rack %s references missing PDUID %s", rack.Name, rack.PDUID)
 
-	// 	// Non-empty rack fields
-	// 	assert.NotEmpty(t, rack.Specification)
-	// 	assert.NotEmpty(t, rack.Name)
-	// }
+		// Location validation
+		assert.Equal(t, pdu.Location, rack.Location,
+			"Location mismatch Rack=%s (%s) PDU=%s (%s)",
+			rack.Name, rack.Location, pdu.Name, pdu.Location)
 
-	// log.Infof("Validated all %d Rack↔PDU associations successfully", len(TestRacks))
+		// Non-empty rack fields
+		assert.NotEmpty(t, rack.Specification)
+		assert.NotEmpty(t, rack.Name)
+	}
+
+	log.Infof("Validated all %d Rack↔PDU associations successfully", len(TestRacks))
 }
 
 func TestMultiCreateVdevErrGroup(t *testing.T) {
