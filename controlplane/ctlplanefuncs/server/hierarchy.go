@@ -41,8 +41,6 @@ type FailureDomain struct {
 // Index 4 - Partition
 type Hierarchy struct {
 	FD []FailureDomain
-	// AvailableSize uint64
-	NisdMap *btree.Map[string, *ctlplfl.NisdCopy]
 }
 
 var HR Hierarchy
@@ -149,18 +147,6 @@ func (fd *FailureDomain) deleteEmptyEntity(id string) {
 		fd.Tree.Delete(e)
 		log.Tracef("deleting entity: %s, no nisd's available: ", e.ID)
 	}
-}
-
-func GetIndex(hash uint64, size int) (int, error) {
-	// if no elements are present in the tree, return a error
-	if size <= 0 {
-		return 0, fmt.Errorf("invalid size: %d", size)
-	}
-	// if only one element is present in the tree, return 0th idx
-	if size == 1 {
-		return 0, nil
-	}
-	return int(hash % uint64(size)), nil
 }
 
 // Add NISD and the corresponding parent entities to the Hierarchy

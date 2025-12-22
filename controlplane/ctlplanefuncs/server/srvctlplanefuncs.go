@@ -429,7 +429,11 @@ func ApplyNisd(args ...interface{}) (interface{}, error) {
 		return nil, fmt.Errorf("failed to decode apply changes: %v", err)
 	}
 
-	applyKV(intrm.Changes, cbargs)
+	err = applyKV(intrm.Changes, cbargs)
+	if err != nil {
+		log.Error("applyKV(): ", err)
+		return nil, err
+	}
 
 	err = HR.AddNisd(&nisd)
 	if err != nil {
