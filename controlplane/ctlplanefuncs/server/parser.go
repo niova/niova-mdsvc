@@ -217,9 +217,9 @@ func (NisdParser) ParseField(entity Entity, parts []string, value []byte) {
 			p, _ := strconv.Atoi(string(value))
 			nisd.PeerPort = uint16(p)
 		case hvKey:
-			nisd.FailureDomain[ctlplfl.HV_IDX] = string(value)
+			nisd.FailureDomain[ctlplfl.FD_HV] = string(value)
 		case pduKey:
-			nisd.FailureDomain[ctlplfl.PDU_IDX] = string(value)
+			nisd.FailureDomain[ctlplfl.FD_PDU] = string(value)
 		case rackKey:
 			nisd.FailureDomain[ctlplfl.RACK_IDX] = string(value)
 		case ptKey:
