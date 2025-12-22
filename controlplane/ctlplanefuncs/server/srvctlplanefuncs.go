@@ -2,6 +2,7 @@ package srvctlplanefuncs
 
 import (
 	"C"
+	"encoding/binary"
 	"fmt"
 	"math/rand"
 	"path"
@@ -419,8 +420,16 @@ func ApplyNisd(args ...interface{}) (interface{}, error) {
 }
 
 func ApplyNisd(args ...interface{}) (interface{}, error) {
-	cbargs := args[1].(*PumiceDBServer.PmdbCbArgs)
-	nisd := args[0].(ctlplfl.Nisd)
+	cbargs, ok := args[1].(*PumiceDBServer.PmdbCbArgs)
+	if !ok {
+		err := fmt.Errorf("invalid argument: expecting type PmdbCbArgs")
+		return nil, err
+	}
+	nisd, ok := args[0].(ctlplfl.Nisd)
+	if !ok {
+		err := fmt.Errorf("invalid argument: expecting type Nisd")
+		return nil, err
+	}
 	var intrm funclib.FuncIntrm
 	buf := C.GoBytes(cbargs.AppData, C.int(cbargs.AppDataSize))
 	err := pmCmn.Decoder(pmCmn.GOB, buf, &intrm)
