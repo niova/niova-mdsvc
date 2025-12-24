@@ -29,11 +29,7 @@ done
 
 sleep 5
 
-if [ "$2" = "init" ]; then
-    CUUID="$(uuidgen)"
-else
-    CUUID="$3"
-fi
+CUUID="$(uuidgen)"
 
 # Run the proxy
 ./libexec/niova/CTLPlane_proxy \

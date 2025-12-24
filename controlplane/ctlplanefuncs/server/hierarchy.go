@@ -141,6 +141,7 @@ func (fd *FailureDomain) getOrCreateEntity(id string) *Entities {
 func (fd *FailureDomain) deleteEmptyEntity(id string) {
 	e, ok := fd.Tree.Get(&Entities{ID: id})
 	if !ok {
+		log.Trace("failed to find the entity in hierarchy tree: ", id)
 		return
 	}
 	if e.Nisds.Len() == 0 {
