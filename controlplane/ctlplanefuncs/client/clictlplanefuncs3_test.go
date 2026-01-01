@@ -192,6 +192,7 @@ func TestBulkPDUsAndRacks(t *testing.T) {
 	log.Infof("Successfully created and validated %d devices", len(Test_Devices))
 =======
 log.Infof("Successfully created and validated %d devices", len(Test_Devices))
+	log.Infof("Successfully created and validated %d devices", len(Test_Devices))
 
 
 
