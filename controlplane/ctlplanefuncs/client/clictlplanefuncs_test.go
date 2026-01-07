@@ -2,7 +2,6 @@ package clictlplanefuncs
 
 import (
 	"fmt"
-	"fmt"
 	"os"
 	"path"
 	"slices"
@@ -167,11 +166,10 @@ func newClientWithToken(t testing.TB, token string) *CliCFuncs {
 func TestPutAndGetSingleNisd(t *testing.T) {
 	c := newClient(t)
 
-	mockNisd := cpLib.Nisd{
-	pdu := cpLib.PDU{
+	pdu := []cpLib.PDU{
 		ID: "95f62aee-997e-11f0-9f1b-a70cff4b660b",
 		Name:          "pdu-1",
-		Location:      "us-west",
+		Location:      "us-east",
 		PowerCapacity: "15Kw",
 		Specification: "specification1",
 	}
@@ -1197,13 +1195,13 @@ func TestCreateSmallHierarchy(t *testing.T) {
 		"e5bdb838-df76-11f0-9d60-d3a87e703a42",
 	}
 
-	// 10 RACKS
+	// 2 RACKS
 	racks := []string{
 		"3f082930-df29-11f0-ab7b-4bd430991101",
 		"3f082930-df29-11f0-ab7b-4bd430991102",
 	}
 
-	// 20 HVs
+	// 5 HVs
 	hvs := []string{
 		"bde1f08a-df63-11f0-88ef-430ddec19901",
 		"bde1f08a-df63-11f0-88ef-430ddec19902",
@@ -1212,7 +1210,7 @@ func TestCreateSmallHierarchy(t *testing.T) {
 		"bde1f08a-df63-11f0-88ef-430ddec19905",
 	}
 
-	// 40 Devices
+	// 6 Devices
 	devices := []string{
 		"nvme-fb6358163001",
 		"nvme-fb6358163002",
@@ -1302,6 +1300,7 @@ func TestCreateSmallHierarchy(t *testing.T) {
 			AvailableSize: 1073741824000,
 		},
 	}
+
 	for _, n := range mockNisd {
 		resp, err := c.PutNisd(&n)
 		if assert.NoError(t, err) {
@@ -1330,7 +1329,7 @@ func TestCreateVdev(t *testing.T) {
 		},
 	}
 
-	resp, err := c.CreateVdev(vdev)
+	resp, err := c.CreateVdev(vdev1)
 	assert.NoError(t, err)
 	assert.True(t, resp.Success)
 }
