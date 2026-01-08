@@ -765,7 +765,6 @@ func TestPutAndGetSinglePartition(t *testing.T) {
 
 	pt := &cpLib.DevicePartition{
 		PartitionID:   "nvme-Amazon_Elastic_Block_Store_vol0dce303259b3884dc-part1",
-		PartitionID:   "nvme-Amazon_Elastic_Block_Store_vol0dce303259b3884dc-part1",
 		DevID:         "nvme-Amazon_Elastic_Block_Store_vol0dce303259b3884dc",
 		Size:          10 * 1024 * 1024 * 1024,
 		PartitionPath: "some path",
