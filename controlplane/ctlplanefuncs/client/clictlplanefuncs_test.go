@@ -1333,6 +1333,177 @@ func TestCreateVdev(t *testing.T) {
 	assert.True(t, resp.Success)
 }
 
+func TestCreateVdevParallelFailure(t *testing.T) {
+	c := newClient(t)
+
+	log.Info("Starting TestCreateVdevParallel")
+
+	// PDU
+	pdu := cpLib.PDU{
+		ID:            "2f4c7c3a-9d2a-4e3e-b1b7-6a6f8d7b2f1a",
+		Name:          "pdu-2",
+		Location:      "us-east",
+		PowerCapacity: "15Kw",
+		Specification: "spec-pdu",
+	}
+
+	resp, err := c.PutPDU(&pdu)
+	assert.NoError(t, err)
+	assert.True(t, resp.Success)
+
+	log.Info("PDU created: ", pdu.ID)
+
+	// Rack
+	rack := cpLib.Rack{
+		ID:            "6a9e1c44-3b9a-4d63-8f5c-0a2c1e8f4b77",
+		PDUID:         "2f4c7c3a-9d2a-4e3e-b1b7-6a6f8d7b2f1a",
+		Name:          "rack-2",
+		Location:      "us-east",
+		Specification: "rack-spec",
+	}
+
+	resp, err = c.PutRack(&rack)
+	assert.NoError(t, err)
+	assert.True(t, resp.Success)
+
+	log.Info("Rack created: ", rack.ID)
+
+	// Hypervisor
+	hv := cpLib.Hypervisor{
+		ID:        "b3d8f0a2-7c5e-4b9f-9a62-2d7e1f6c8a54",
+		RackID:    "6a9e1c44-3b9a-4d63-8f5c-0a2c1e8f4b77",
+		Name:      "hv-2",
+		IPAddress: "127.0.0.1",
+		PortRange: "8000-9000",
+		SSHPort:   "6999",
+	}
+
+	resp, err = c.PutHypervisor(&hv)
+	assert.NoError(t, err)
+	assert.True(t, resp.Success)
+
+	log.Info("Hypervisor created: ", hv.ID)
+
+	// Device
+	device := cpLib.Device{
+		ID:            "nvme-5e6b9c7f1a33",   
+		SerialNumber:  "SN123456789",   
+		State:         1,
+		HypervisorID:  "b3d8f0a2-7c5e-4b9f-9a62-2d7e1f6c8a54",
+		FailureDomain: "fd-02",
+		DevicePath:    "/dev/path1",
+		Name:          "dev-2",
+		Size:          600 * 1024 * 1024 * 1024, // 600 GB raw
+		Partitions: []cpLib.DevicePartition{cpLib.DevicePartition{
+			PartitionID:   "b97c3464-ab3e-11f0-b32d-9775558a141a",
+			PartitionPath: "/part/path3",
+			NISDUUID:      "1",
+			DevID:         "nvme-5e6b9c7f1a33",
+			Size:          123467,
+		},
+		},
+	}
+
+	resp, err = c.PutDevice(&device)
+	assert.NoError(t, err)
+	assert.True(t, resp.Success)
+
+	log.Info("Device created: ", device.ID)
+
+	// NISDs (Total = 320 GB)
+	const nisdSize = 160 * 1024 * 1024 * 1024 // 160 GB
+
+	nisds := []cpLib.Nisd{
+		cpLib.Nisd{
+			ClientPort: 7000,
+			PeerPort:   8000,
+			ID:         "86adee3a-d5da-11f0-8250-5f1ad86a5661",
+			FailureDomain: []string{
+				"2f4c7c3a-9d2a-4e3e-b1b7-6a6f8d7b2f1a",
+				"6a9e1c44-3b9a-4d63-8f5c-0a2c1e8f4b77",
+				"b3d8f0a2-7c5e-4b9f-9a62-2d7e1f6c8a54",
+				"nvme-5e6b9c7f1a33",
+			},
+			IPAddr:        "192.168.1.1",
+			TotalSize:     nisdSize,
+			AvailableSize: nisdSize,
+		},
+		cpLib.Nisd{
+			ClientPort: 7000,
+			PeerPort:   8000,
+			ID:         "86adee3a-d5da-11f0-8250-5f1ad86a5662",
+			FailureDomain: []string{
+				"2f4c7c3a-9d2a-4e3e-b1b7-6a6f8d7b2f1a",
+				"6a9e1c44-3b9a-4d63-8f5c-0a2c1e8f4b77",
+				"b3d8f0a2-7c5e-4b9f-9a62-2d7e1f6c8a54",
+				"nvme-5e6b9c7f1a33",
+			},
+			IPAddr:        "192.168.1.1",
+			TotalSize:     nisdSize,
+			AvailableSize: nisdSize,
+		},
+	}
+
+	for _, nisd := range nisds {
+		resp, err = c.PutNisd(&nisd)
+		require.NoError(t, err)
+		require.True(t, resp.Success)
+		log.Info("NISD created: ", nisd.ID)
+	}
+
+	// Create 5 VDEVs in parallel
+	const (
+		vdevCount = 5
+		vdevSize  = 100 * 1024 * 1024 * 1024 // 100 GB
+	)
+
+	var(
+		eg        errgroup.Group
+		mu        sync.Mutex
+		createdVdevs []*cpLib.Vdev
+	)
+
+	for i := 0; i < vdevCount; i++ {
+		i := i // capture loop variable
+		eg.Go(func() error {
+			log.Info("Starting VDEV creation worker: ", i)
+
+			vdev := &cpLib.Vdev{
+				Cfg: cpLib.VdevCfg{
+					Size:       vdevSize,
+					NumReplica: 1,
+				},
+			}
+
+			resp, err := c.CreateVdev(vdev)
+			if err != nil {
+				return fmt.Errorf("worker %d: CreateVdev error: %w", i, err)
+			}
+			if resp == nil || !resp.Success {
+				return fmt.Errorf("worker %d: CreateVdev failed", i)
+			}
+
+			mu.Lock()
+			createdVdevs = append(createdVdevs, vdev)
+			mu.Unlock()
+
+			log.Info("VDEV created | worker=", i)
+
+			return nil
+		})
+	}
+
+	err = eg.Wait()
+	require.NoError(t, err)
+	require.Len(t, createdVdevs, vdevCount)
+
+	log.Info("All VDEVs created successfully. Total: ", len(createdVdevs))
+
+	// validation of created vdevs
+	assert.Equal(t, vdevCount, len(createdVdevs),
+		"unexpected number of VDEVs created")
+}
+
 func usagePercent(n cpLib.Nisd) int64 {
 	used := n.TotalSize - n.AvailableSize
 	return (used * 100) / n.TotalSize
