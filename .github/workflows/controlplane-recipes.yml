@@ -111,6 +111,11 @@ jobs:
       run: mkdir  /home/runner/work/niovad/niovad/code_cov &&
            export GOCOVERDIR=/work/niovad/niovad/code_cov
 
+    - name: Print working directory before running recipes
+      run: |
+        echo "Current working directory:"
+        pwd
+
     - name:  run recipes for controlplane application
       run: export GOCOVERDIR=/home/runner/work/niovad/niovad/code_cov &&
             cd /home/runner/work/niovad/niovad/build_dir/holon/ &&
