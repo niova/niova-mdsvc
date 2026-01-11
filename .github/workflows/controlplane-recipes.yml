@@ -24,12 +24,14 @@ jobs:
   
     # Install golang
     - name: Install golang 1.20.3
-      run: sudo rm -rf /usr/bin/go &&
+      run: |
+           sudo rm -rf /usr/bin/go &&
            sudo wget https://golang.org/dl/go1.23.0.linux-amd64.tar.gz &&
            sudo mkdir /home/runner/work/go &&
            sudo tar -C /home/runner/work/go -xzf  go1.23.0.linux-amd64.tar.gz &&
            export PATH=$PATH:/home/runner/work/go/go/bin &&
            go version
+           
            echo "/home/runner/work/go/go/bin" >> $GITHUB_PATH
            /home/runner/work/go/go/bin/go version
 
