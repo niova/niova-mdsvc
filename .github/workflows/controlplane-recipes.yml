@@ -30,6 +30,8 @@ jobs:
            sudo tar -C /home/runner/work/go -xzf  go1.23.0.linux-amd64.tar.gz &&
            export PATH=$PATH:/home/runner/work/go/go/bin &&
            go version
+           echo "/home/runner/work/go/go/bin" >> $GITHUB_PATH
+           /home/runner/work/go/go/bin/go version
 
     # Install Ansible
     - name: Install Ansible
