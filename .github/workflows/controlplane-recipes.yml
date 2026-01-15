@@ -82,6 +82,13 @@ jobs:
     - name: Build go applications using makefile
       run: export PATH=$PATH:/home/runner/work/go/go/bin && make -e DIR=/home/runner/work/niovad/niovad/build_dir
 
+    - name: Build controlplane client go test binary
+      run: |
+        export PATH=$PATH:/home/runner/work/go/go/bin
+        cd /home/runner/work/niova-mdsvc/niova-mdsvc/controlplane/ctlplanefuncs/client
+        go test -c -o /home/runner/work/niovad/niovad/build_dir/ctlplane_test/ctlplanefuncs_client.test
+        ls -lh /home/runner/work/niovad/niovad/build_dir/ctlplane_test/ctlplanefuncs_client.test
+
       env:
         LD_LIBRARY_PATH: /home/runner/work/niovad/niovad/build_dir/lib
 
