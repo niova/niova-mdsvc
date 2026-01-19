@@ -56,7 +56,7 @@ func TestCreateVdevParallel(t *testing.T) {
 		ID:        "b3d8f0a2-7c5e-4b9f-9a62-2d7e1f6c8a54",
 		RackID:    "6a9e1c44-3b9a-4d63-8f5c-0a2c1e8f4b77",
 		Name:      "hv-1",
-		IPAddrs: "127.0.0.1",
+		IPAddrs:   []string{"127.0.0.1", "127.0.0.1"},
 		PortRange: "8000-9000",
 		SSHPort:   "6999",
 	}
@@ -270,7 +270,7 @@ func TestCreateVdevParallelFailure(t *testing.T) {
 		ID:        "b3d8f0a2-7c5e-4b9f-9a62-2d7e1f6c8a54",
 		RackID:    "6a9e1c44-3b9a-4d63-8f5c-0a2c1e8f4b77",
 		Name:      "hv-2",
-		IPAddrs: "127.0.0.1",
+		IPAddrs:   []string{"127.0.0.1", "127.0.0.1"},
 		PortRange: "8000-9000",
 		SSHPort:   "6999",
 	}
