@@ -2,15 +2,10 @@ package clictlplanefuncs
 
 import (
 	"fmt"
-	"os"
-	"path"
 	"sync"
 	"testing"
-    "time"
-    "golang.org/x/sync/errgroup"
 
 	cpLib "github.com/00pauln00/niova-mdsvc/controlplane/ctlplanefuncs/lib"
-	"github.com/google/uuid"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
