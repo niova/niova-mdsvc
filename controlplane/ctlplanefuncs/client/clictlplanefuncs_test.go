@@ -329,7 +329,7 @@ func TestPutAndGetMultipleDevices(t *testing.T) {
 
 	mockDevices := []cpLib.Device{
 		{
-			ID:            "6qp847cd0-ab3e-11f0-aa15-1f40dd976538",
+			ID:            "nvme-fb6358162001",
 			SerialNumber:  "SN123456789",
 			State:         1,
 			HypervisorID:  "hv-01",
@@ -338,7 +338,7 @@ func TestPutAndGetMultipleDevices(t *testing.T) {
 			Name:          "dev-1",
 		},
 		{
-			ID:            "6bd604a6-ab3e-11f0-805a-3f086c1f2d21",
+			ID:            "nvme-fb6358162002",
 			SerialNumber:  "SN987654321",
 			State:         0,
 			HypervisorID:  "hv-02",
@@ -364,7 +364,7 @@ func TestPutAndGetMultipleDevices(t *testing.T) {
 			},
 		},
 		{
-			ID:            "60447cd0-ab3e-11f0-aa15-1f40dd976538",
+			ID:            "nvme-fb6358162003",
 			SerialNumber:  "SN112233445",
 			State:         2,
 			HypervisorID:  "hv-01",
@@ -613,6 +613,18 @@ func TestVdevLifecycle(t *testing.T) {
 		},
 		TotalSize:     15_000_000_000_000, // 1 TB
 		AvailableSize: 15_000_000_000_000, // 750 GB
+		SocketPath:    "/path/sockets1",
+		NetInfo: cpLib.NetInfoList{
+			 	cpLib.NetworkInfo{
+					IPAddr: "192.168.0.0.1",
+					Port:   5444,
+				},
+				cpLib.NetworkInfo{
+					IPAddr: "192.168.0.0.2",
+					Port:   6444,
+				},
+		    },
+		NetInfoCnt: 2,
 	}
 	resp, err := c.PutNisd(&n)
 	assert.NoError(t, err)
@@ -824,6 +836,18 @@ func TestVdevNisdChunk(t *testing.T) {
 		},
 		TotalSize:     1_000_000_000_000, // 1 TB
 		AvailableSize: 750_000_000_000,   // 750 GB
+		SocketPath:    "/path/sockets1",
+		NetInfo: cpLib.NetInfoList{
+			 	cpLib.NetworkInfo{
+					IPAddr: "192.168.0.0.1",
+					Port:   5444,
+				},
+				cpLib.NetworkInfo{
+					IPAddr: "192.168.0.0.2",
+					Port:   6444,
+				},
+		},
+		NetInfoCnt: 2,
 	}
 	resp, err := c.PutNisd(&mockNisd)
 	if assert.NoError(t, err) {
