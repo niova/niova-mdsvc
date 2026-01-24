@@ -310,7 +310,7 @@ func TestCreateHierarchy(t *testing.T) {
 		Cfg: cpLib.VdevCfg{
 			Size: 1024 * 1024 * 1024 * 1024,    // 1 TB
 			NumReplica: 2,
-		}
+		},
 	}
 
 	resp, err := c.CreateVdev(vdev)
@@ -326,7 +326,7 @@ func TestCreateVdevAfterLeaderKill(t *testing.T) {
 		Cfg: cpLib.VdevCfg{
 			Size: 200 * 1024 * 1024 * 1024,     // 200 GB
 			NumReplica: 2,
-		}
+		},
 	}
 
 	resp, err := c.CreateVdev(vdev1)
@@ -375,7 +375,7 @@ func TestCreateVdevAfterLeaderRestart(t *testing.T) {
 		Cfg: cpLib.VdevCfg{
 			Size: 200 * 1024 * 1024 * 1024,     // 200 GB
 			NumReplica: 2,
-		}
+		},
 	}
 
 	resp, err := c.CreateVdev(vdev2)
