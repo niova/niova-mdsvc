@@ -1,49 +1,46 @@
 package clictlplanefuncs
 
 import (
-	"fmt"
-	"sync"
 	"testing"
 
 	cpLib "github.com/00pauln00/niova-mdsvc/controlplane/ctlplanefuncs/lib"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
+// 2 PDUs
+var pdus = []string{
+	"a1d3f8c2-df29-11f0-b14e-3c9eaf21d540001",
+	"a1d3f8c2-df29-11f0-b14e-3c9eaf21d540002",
+}
+
+// 2 RACKS
+var racks = []string{
+	"b7e91a4d-df29-11f0-9f6a-8a42bc7de111",
+	"b7e91a4d-df29-11f0-9f6a-8a42bc7de112",
+}
+
+// 4 HVs
+var hvs = []string{
+	"c02ab9e7-df29-11f0-8d3c-5e91f4aa98231",
+	"c02ab9e7-df29-11f0-8d3c-5e91f4aa98232",
+	"c02ab9e7-df29-11f0-8d3c-5e91f4aa98233",
+	"c02ab9e7-df29-11f0-8d3c-5e91f4aa98234",
+}
+
+// 8 Devices
+var devices = []string{
+	"nvme-ab6358164001",
+	"nvme-ab6358164002",
+	"nvme-ab6358164003",
+	"nvme-ab6358164004",
+	"nvme-ab6358164005",
+	"nvme-ab6358164006",
+	"nvme-ab6358164007",
+	"nvme-ab6358164008",
+}
 
 func TestCreateHierarchy(t *testing.T) {
 	c := newClient(t)
-
-	pdus := []string{
-		"a1d3f8c2-df29-11f0-b14e-3c9eaf21d540001",
-		"a1d3f8c2-df29-11f0-b14e-3c9eaf21d540002",
-	}
-
-	// 2 RACKS
-	racks := []string{
-		"b7e91a4d-df29-11f0-9f6a-8a42bc7de111",
-		"b7e91a4d-df29-11f0-9f6a-8a42bc7de112",
-	}
-
-	// 4 HVs
-	hvs := []string{
-		"c02ab9e7-df29-11f0-8d3c-5e91f4aa98231",
-		"c02ab9e7-df29-11f0-8d3c-5e91f4aa98232",
-		"c02ab9e7-df29-11f0-8d3c-5e91f4aa98233",
-		"c02ab9e7-df29-11f0-8d3c-5e91f4aa98234",
-	}
-
-	// 8 Devices
-	devices := []string{
-		"nvme-ab6358164001",
-		"nvme-ab6358164002",
-		"nvme-ab6358164003",
-		"nvme-ab6358164004",
-		"nvme-ab6358164005",
-		"nvme-ab6358164006",
-		"nvme-ab6358164007",
-		"nvme-ab6358164008",
-	}
 
 	PDUs := []cpLib.PDU{
 		{	ID: 		   pdus[0],
