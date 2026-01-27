@@ -171,17 +171,48 @@ func TestCreateVdevParallel(t *testing.T) {
 		createdVdevs []*cpLib.Vdev
 	)
 
-	// buffered so goroutines don't block while reporting errors
-	errCh := make(chan error, vdevCount)
+	// total workers = NISD workers + VDEV workers
+	totalWorkers := len(nisds) + vdevCount
+	errCh := make(chan error, totalWorkers)
 
-	for i := 0; i < vdevCount; i++ {
-		i := i // capture loop variable
-
+	//
+	// ----------- NISD WORKERS -----------
+	//
+	for i := range nisds {
+		i := i
 		wg.Add(1)
+
 		go func() {
 			defer wg.Done()
 
-			log.Info("Starting VDEV creation worker: ", i)
+			nisd := nisds[i]
+			log.Info("Starting NISD worker: ", i)
+
+			resp, err := c.PutNisd(&nisd)
+			if err != nil {
+				errCh <- fmt.Errorf("nisd worker %d: PutNisd error: %w", i, err)
+				return
+			}
+			if resp == nil || !resp.Success {
+				errCh <- fmt.Errorf("nisd worker %d: PutNisd failed", i)
+				return
+			}
+
+			log.Info("NISD created | worker=", i, " | nisdID=", nisd.ID)
+		}()
+	}
+
+	//
+	// ----------- VDEV WORKERS -----------
+	//
+	for i := 0; i < vdevCount; i++ {
+		i := i
+		wg.Add(1)
+
+		go func() {
+			defer wg.Done()
+
+			log.Info("Starting VDEV worker: ", i)
 
 			vdev := &cpLib.Vdev{
 				Cfg: cpLib.VdevCfg{
@@ -192,11 +223,11 @@ func TestCreateVdevParallel(t *testing.T) {
 
 			resp, err := c.CreateVdev(vdev)
 			if err != nil {
-				errCh <- fmt.Errorf("worker %d: CreateVdev error: %w", i, err)
+				errCh <- fmt.Errorf("vdev worker %d: CreateVdev error: %w", i, err)
 				return
 			}
 			if resp == nil || !resp.Success {
-				errCh <- fmt.Errorf("worker %d: CreateVdev failed", i)
+				errCh <- fmt.Errorf("vdev worker %d: CreateVdev failed", i)
 				return
 			}
 
@@ -211,18 +242,13 @@ func TestCreateVdevParallel(t *testing.T) {
 	wg.Wait()
 	close(errCh)
 
-	// If any goroutine failed, fail the test
 	for e := range errCh {
 		require.NoError(t, e)
 	}
 
 	require.Len(t, createdVdevs, vdevCount)
 
-	log.Info("All VDEVs created successfully. Total: ", len(createdVdevs))
-
-	// validation of created vdevs
-	assert.Equal(t, vdevCount, len(createdVdevs),
-		"unexpected number of VDEVs created")	
+	log.Info("All parallel NISD and VDEV operations completed successfully")
 }
 
 func TestCreateVdevParallelFailure(t *testing.T) {

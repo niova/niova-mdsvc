@@ -70,6 +70,10 @@ jobs:
            make -j 4 && 
            make install
 
+    - name: Copy niova-raft
+      run: cd modules/niova-pumicedb/modules/niova-raft/scripts/verification &&
+           cp verify_kv_crc.sh /home/runner/work/niovad/niovad/build_dir/
+
     - name: Build niova-pumicedb
       run: cd modules/niova-pumicedb/ &&
            git fetch origin &&
