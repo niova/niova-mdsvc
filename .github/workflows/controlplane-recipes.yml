@@ -48,6 +48,30 @@ jobs:
       run: git submodule update --init --recursive
       shell: bash
 
+    - name: Install OpenSSH server
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y openssh-server
+
+    - name: Start SSH service
+      run: |
+        sudo service ssh start
+        sleep 2
+
+    - name: Generate SSH key for runner
+      run: |
+        mkdir -p ~/.ssh
+        ssh-keygen -t rsa -N "" -f ~/.ssh/id_rsa
+
+    - name: Authorize SSH key for localhost access
+      run: |
+        cat ~/.ssh/id_rsa.pub >> ~/.ssh/authorized_keys
+        chmod 600 ~/.ssh/authorized_keys
+
+    - name: Disable strict host key checking
+      run: |
+        printf "Host *\n  StrictHostKeyChecking no\n" >> ~/.ssh/config
+
     - name: build libbacktrace
       run: cd modules/niova-pumicedb/modules/libbacktrace/ && 
            ./configure && 
