@@ -185,6 +185,18 @@ func TestCreateHierarchy(t *testing.T) {
 			},
 			TotalSize:     1024*1024*1024*1024,    // 1 TB
 			AvailableSize: 1024*1024*1024*1024,
+			SocketPath:    "/path/sockets1",
+			NetInfo: cpLib.NetInfoList{
+				cpLib.NetworkInfo{
+					IPAddr: "192.168.0.0.1",
+					Port:   5444,
+				},
+				cpLib.NetworkInfo{
+					IPAddr: "192.168.0.0.2",
+					Port:   6444,
+				},
+			},
+			NetInfoCnt: 2,
 		},
 		cpLib.Nisd{
 			PeerPort: 8001,
@@ -197,6 +209,18 @@ func TestCreateHierarchy(t *testing.T) {
 			},
 			TotalSize:     1024*1024*1024*1024,
 			AvailableSize: 1024*1024*1024*1024,
+			SocketPath:    "/path/sockets2",
+			NetInfo: cpLib.NetInfoList{
+				cpLib.NetworkInfo{
+					IPAddr: "192.168.0.0.1",
+					Port:   5444,
+				},
+				cpLib.NetworkInfo{
+					IPAddr: "192.168.0.0.2",
+					Port:   6444,
+				},
+			},
+			NetInfoCnt: 2,
 		},
 		cpLib.Nisd{
 			PeerPort: 8002,
@@ -209,6 +233,18 @@ func TestCreateHierarchy(t *testing.T) {
 			},
 			TotalSize:     1024*1024*1024*1024,
 			AvailableSize: 1024*1024*1024*1024,
+			SocketPath:    "/path/sockets3",
+			NetInfo: cpLib.NetInfoList{
+				cpLib.NetworkInfo{
+					IPAddr: "192.168.0.0.1",
+					Port:   5444,
+				},
+				cpLib.NetworkInfo{
+					IPAddr: "192.168.0.0.2",
+					Port:   6444,
+				},
+			},
+			NetInfoCnt: 2,
 		},
 		cpLib.Nisd{
 			PeerPort: 8003,
@@ -221,6 +257,18 @@ func TestCreateHierarchy(t *testing.T) {
 			},
 			TotalSize:     1024*1024*1024*1024,
 			AvailableSize: 1024*1024*1024*1024,
+			SocketPath:    "/path/sockets4",
+			NetInfo: cpLib.NetInfoList{
+				cpLib.NetworkInfo{
+					IPAddr: "192.168.0.0.1",
+					Port:   5444,
+				},
+				cpLib.NetworkInfo{
+					IPAddr: "192.168.0.0.2",
+					Port:   6444,
+				},
+			},
+			NetInfoCnt: 2,
 		},
 		cpLib.Nisd{
 			PeerPort: 8004,
@@ -233,6 +281,18 @@ func TestCreateHierarchy(t *testing.T) {
 			},
 			TotalSize:     1024*1024*1024*1024,
 			AvailableSize: 1024*1024*1024*1024,
+			SocketPath:    "/path/sockets5",
+			NetInfo: cpLib.NetInfoList{
+				cpLib.NetworkInfo{
+					IPAddr: "192.168.0.0.1",
+					Port:   5444,
+				},
+				cpLib.NetworkInfo{
+					IPAddr: "192.168.0.0.2",
+					Port:   6444,
+				},
+			},
+			NetInfoCnt: 2,
 		},
 		cpLib.Nisd{
 			PeerPort: 8005,
@@ -245,6 +305,18 @@ func TestCreateHierarchy(t *testing.T) {
 			},
 			TotalSize:     1024*1024*1024*1024,
 			AvailableSize: 1024*1024*1024*1024,
+			SocketPath:    "/path/sockets6",
+			NetInfo: cpLib.NetInfoList{
+				cpLib.NetworkInfo{
+					IPAddr: "192.168.0.0.1",
+					Port:   5444,
+				},
+				cpLib.NetworkInfo{
+					IPAddr: "192.168.0.0.2",
+					Port:   6444,
+				},
+			},
+			NetInfoCnt: 2,
 		},
 		cpLib.Nisd{
 			PeerPort: 8006,
@@ -257,6 +329,18 @@ func TestCreateHierarchy(t *testing.T) {
 			},
 			TotalSize:     1024*1024*1024*1024,
 			AvailableSize: 1024*1024*1024*1024,
+			SocketPath:    "/path/sockets7",
+			NetInfo: cpLib.NetInfoList{
+				cpLib.NetworkInfo{
+					IPAddr: "192.168.0.0.1",
+					Port:   5444,
+				},
+				cpLib.NetworkInfo{
+					IPAddr: "192.168.0.0.2",
+					Port:   6444,
+				},
+			},
+			NetInfoCnt: 2,
 		},
 		cpLib.Nisd{
 			PeerPort: 8007,
@@ -269,6 +353,18 @@ func TestCreateHierarchy(t *testing.T) {
 			},
 			TotalSize:     1024*1024*1024*1024,
 			AvailableSize: 1024*1024*1024*1024,
+			SocketPath:    "/path/sockets8",
+			NetInfo: cpLib.NetInfoList{
+				cpLib.NetworkInfo{
+					IPAddr: "192.168.0.0.1",
+					Port:   5444,
+				},
+				cpLib.NetworkInfo{
+					IPAddr: "192.168.0.0.2",
+					Port:   6444,
+				},
+			},
+			NetInfoCnt: 2,
 		},
 		cpLib.Nisd{
 			PeerPort: 8008,
@@ -281,6 +377,18 @@ func TestCreateHierarchy(t *testing.T) {
 			},
 			TotalSize:     1024*1024*1024*1024,
 			AvailableSize: 1024*1024*1024*1024,
+			SocketPath:    "/path/sockets9",
+			NetInfo: cpLib.NetInfoList{
+				cpLib.NetworkInfo{
+					IPAddr: "192.168.0.0.1",
+					Port:   5444,
+				},
+				cpLib.NetworkInfo{
+					IPAddr: "192.168.0.0.2",
+					Port:   6444,
+				},
+			},
+			NetInfoCnt: 2,
 		},
 		cpLib.Nisd{
 			PeerPort: 8009,
@@ -293,6 +401,18 @@ func TestCreateHierarchy(t *testing.T) {
 			},
 			TotalSize:     1024*1024*1024*1024,
 			AvailableSize: 1024*1024*1024*1024,
+			SocketPath:    "/path/sockets10",
+			NetInfo: cpLib.NetInfoList{
+				cpLib.NetworkInfo{
+					IPAddr: "192.168.0.0.1",
+					Port:   5444,
+				},
+				cpLib.NetworkInfo{
+					IPAddr: "192.168.0.0.2",
+					Port:   6444,
+				},
+			},
+			NetInfoCnt: 2,
 		},
 		
 	}
