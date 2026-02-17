@@ -423,8 +423,8 @@ func TestCreateHierarchy(t *testing.T) {
 		assert.True(t, resp.Success)
 	}
 
-	vdev := &cpLib.Vdev{
-		Cfg: cpLib.VdevCfg{
+	vdev := &cpLib.VdevReq{
+		Vdev: &cpLib.VdevCfg{
 			Size: 1024 * 1024 * 1024 * 1024,    // 1 TB
 			NumReplica: 2,
 		},
@@ -439,8 +439,8 @@ func TestCreateHierarchy(t *testing.T) {
 func TestCreateVdevAfterLeaderKill(t *testing.T) {
 	c := newClient(t)
 
-	vdev1 := &cpLib.Vdev{
-		Cfg: cpLib.VdevCfg{
+	vdev1 := &cpLib.VdevReq{
+		Vdev: &cpLib.VdevCfg{
 			Size: 200 * 1024 * 1024 * 1024,     // 200 GB
 			NumReplica: 2,
 		},
@@ -488,8 +488,8 @@ func TestCreateVdevAfterLeaderRestart(t *testing.T) {
 		assert.True(t, resp.Success)
 	}
 
-	vdev2 := &cpLib.Vdev{
-		Cfg: cpLib.VdevCfg{
+	vdev2 := &cpLib.VdevReq{
+		Vdev: &cpLib.VdevCfg{
 			Size: 200 * 1024 * 1024 * 1024,     // 200 GB
 			NumReplica: 2,
 		},

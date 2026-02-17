@@ -15,7 +15,7 @@ import (
 	cpLib "github.com/00pauln00/niova-mdsvc/controlplane/ctlplanefuncs/lib"
 )
 
-func TestCreateLargeHierarchy(t *testing.T) {
+func TestCreateLargeHierarchyForEntityFilters(t *testing.T) {
 	c := newClient(t)
 	adminToken := getAdminToken(t)
 

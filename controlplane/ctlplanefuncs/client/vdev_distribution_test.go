@@ -168,7 +168,7 @@ func TestCreateVdevParallel(t *testing.T) {
 	var (
 		wg           sync.WaitGroup
 		mu           sync.Mutex
-		createdVdevs []*cpLib.Vdev
+		createdVdevs []*cpLib.VdevCfg
 	)
 
 	// total workers = NISD workers + VDEV workers
@@ -214,8 +214,8 @@ func TestCreateVdevParallel(t *testing.T) {
 
 			log.Info("Starting VDEV worker: ", i)
 
-			vdev := &cpLib.Vdev{
-				Cfg: cpLib.VdevCfg{
+			vdev := &cpLib.VdevReq{
+				Vdev: &cpLib.VdevCfg{
 					Size:       vdevSize,
 					NumReplica: 1,
 				},
@@ -232,7 +232,7 @@ func TestCreateVdevParallel(t *testing.T) {
 			}
 
 			mu.Lock()
-			createdVdevs = append(createdVdevs, vdev)
+			createdVdevs = append(createdVdevs, vdev.Vdev)
 			mu.Unlock()
 
 			log.Info("VDEV created | worker=", i)
@@ -408,7 +408,7 @@ func TestCreateVdevParallelFailure(t *testing.T) {
 	var (
 		wg           sync.WaitGroup
 		mu           sync.Mutex
-		createdVdevs []*cpLib.Vdev
+		createdVdevs []*cpLib.VdevCfg
 	)
 
 	// buffered so goroutines don't block while reporting errors
@@ -423,8 +423,8 @@ func TestCreateVdevParallelFailure(t *testing.T) {
 
 			log.Info("Starting VDEV creation worker: ", i)
 
-			vdev := &cpLib.Vdev{
-				Cfg: cpLib.VdevCfg{
+			vdev := &cpLib.VdevReq{
+				Vdev: &cpLib.VdevCfg{
 					Size:       vdevSize,
 					NumReplica: 1,
 				},
@@ -441,7 +441,7 @@ func TestCreateVdevParallelFailure(t *testing.T) {
 			}
 
 			mu.Lock()
-			createdVdevs = append(createdVdevs, vdev)
+			createdVdevs = append(createdVdevs, vdev.Vdev)
 			mu.Unlock()
 
 			log.Info("VDEV created | worker=", i)

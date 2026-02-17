@@ -465,8 +465,8 @@ func TestEqualVdevDistribution(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		for i := 0; i < 144; i++ {
-			vdev := &cpLib.Vdev{
-				Cfg: cpLib.VdevCfg{
+			vdev := &cpLib.VdevReq{
+				Vdev: &cpLib.VdevCfg{
 					Size:       1024 * 1024 * 1024 * 1024,
 					NumReplica: 1,
 				},
