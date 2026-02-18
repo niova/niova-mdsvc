@@ -149,7 +149,7 @@ jobs:
            export GOCOVERDIR=/work/niovad/niovad/code_cov
 
       env:
-        ENV USER_ENCRYPTION_KEY: 81gavMyXh9dEMT7kM7gR+gS79ovzPwyjWmV1VA/TUII
+        USER_ENCRYPTION_KEY: 81gavMyXh9dEMT7kM7gR+gS79ovzPwyjWmV1VA/TUII
 
     - name:  run recipes for controlplane application
       run: export GOCOVERDIR=/home/runner/work/niovad/niovad/code_cov &&
