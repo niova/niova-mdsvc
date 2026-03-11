@@ -51,6 +51,46 @@ func main() {
 
 	switch cmd {
 
+	case "create-admin":
+
+		if len(os.Args) < 4 {
+			fmt.Println("usage: authClient create-admin <username> <secretKey>")
+			os.Exit(1)
+		}
+
+		username := os.Args[2]
+		secret := os.Args[3]
+
+		req := &userlib.UserReq{
+			Username:     username,
+			NewSecretKey: secret,
+		}
+
+		resp, err := client.CreateAdminUser(req)
+		if err != nil {
+			fmt.Println("Admin creation returned:", err)
+		}
+
+		printJSON(resp)
+
+	case "login":
+
+		if len(os.Args) < 4 {
+			fmt.Println("usage: authClient login <username> <secretKey>")
+			os.Exit(1)
+		}
+
+		username := os.Args[2]
+		secret := os.Args[3]
+
+		resp, err := client.Login(username, secret)
+		if err != nil {
+			fmt.Println(err)
+			os.Exit(1)
+		}
+
+		printJSON(resp)
+
 	case "create-user":
 
 		if len(os.Args) < 4 {
@@ -67,24 +107,6 @@ func main() {
 		}
 
 		resp, err := client.CreateUser(req)
-		if err != nil {
-			fmt.Println(err)
-			os.Exit(1)
-		}
-
-		printJSON(resp)
-
-	case "login":
-
-		if len(os.Args) < 4 {
-			fmt.Println("usage: authClient login <username> <secretKey>")
-			os.Exit(1)
-		}
-
-		username := os.Args[2]
-		secret := os.Args[3]
-
-		resp, err := client.Login(username, secret)
 		if err != nil {
 			fmt.Println(err)
 			os.Exit(1)
