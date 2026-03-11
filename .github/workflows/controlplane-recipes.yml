@@ -68,6 +68,7 @@ jobs:
 
     - name: Build niova-pumicedb
       run: cd modules/niova-pumicedb/ &&
+           git checkout main &&
            git fetch origin &&
            git checkout fix/lease_rebuild_on_bootup &&
            git pull origin fix/lease_rebuild_on_bootup &&
