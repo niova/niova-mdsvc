@@ -33,7 +33,7 @@ jobs:
 
     # Install Ansible
     - name: Install Ansible
-      run:  pip3 install ansible==9.2
+      run:  pip3 install ansible==9.2 ansible-core==2.16.3
 
     # Install python libraries
     - name: Install python libraries
@@ -101,6 +101,7 @@ jobs:
 
     - name: run recipes for controlplane application
       run: export GOCOVERDIR=/home/runner/work/niovad/niovad/code_cov && 
+           export USER_ENCRYPTION_KEY=81gavMyXh9dEMT7kM7gR+gS79ovzPwyjWmV1VA/TUII &&
             cd /home/runner/work/niovad/niovad/build_dir/holon/ &&
            ../run-recipes.sh '/home/runner/work/niovad/niovad/build_dir/holon'
                              '/home/runner/work/niovad/niovad/build_dir'

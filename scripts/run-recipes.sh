@@ -18,8 +18,8 @@ export CGO_CFLAGS="-I$BIN_PATH/include/niova"
 export LD_LIBRARY_PATH="$BIN_PATH/lib"
 export PATH="$PATH:$GO_PATH"
 export NIOVA_APPLY_HANDLER_VERSION=0
-export USER_ENCRYPTION_KEY=81gavMyXh9dEMT7kM7gR+gS79ovzPwyjWmV1VA/TUII
-export NIOVA_NISD_SECRET="NISD-secret"
+export USER_ENCRYPTION_KEY="81gavMyXh9dEMT7kM7gR+gS79ovzPwyjWmV1VA/TUII"
+export NIOVA_NISD_SECRET=”NISD-secret”
 export NIOVA_NISD_DO_TOKEN_VALIDATION=1
 
 while IFS= read -r line; do
