@@ -108,6 +108,14 @@ jobs:
       run: mkdir  /home/runner/work/niovad/niovad/code_cov &&
            export GOCOVERDIR=/work/niovad/niovad/code_cov
 
+    - name: Copy ctlauth.yaml to build_dir.
+      run: cd /home/runner/work/niova-mdsvc/niova-mdsvc/controlplane/authorizer &&
+           cp ctlauth.yaml /home/runner/work/niovad/niovad/build_dir/holon
+
+    - name: Build the user CLI wrapper and move it to niova bin dir.
+      run: go build -o authClient /home/runner/work/niova-mdsvc/niova-mdsvc/controlplane/user/cmd/authClient &&
+           mv authClient /home/runner/work/niovad/niovad/build_dir/libexec/niova
+
     - name:  run recipes for controlplane application
       run: export GOCOVERDIR=/home/runner/work/niovad/niovad/code_cov &&
             cd /home/runner/work/niovad/niovad/build_dir/holon/ &&
