@@ -1,9 +1,7 @@
 package clictlplanefuncs
 
 import (
-	"fmt"
 	"testing"
-	"time"
 
 	cpLib "github.com/00pauln00/niova-mdsvc/controlplane/ctlplanefuncs/lib"
 	userlib "github.com/00pauln00/niova-mdsvc/controlplane/user/lib"
@@ -45,64 +43,70 @@ func TestCreateHierarchyforUserAuthentication(t *testing.T) {
 		"nvme-fb6358163005",
 	}
 
-	mockNisd := make([]cpLib.Nisd, 0, 160)
-
-	pduCount := len(pdus)
-	rackPerPdu := 2
-	hvPerRack := 2
-	devPerHv := 1
-	nisdPerDev := 1
-
-	rackIdx := 0
-	hvIdx := 0
-	devIdx := 0
-
-	nisdID := 1
-
-	for p := 0; p < pduCount; p++ {
-		pdu := pdus[p]
-
-		for r := 0; r < rackPerPdu; r++ {
-			rack := racks[rackIdx]
-			rackIdx++
-
-			for h := 0; h < hvPerRack; h++ {
-				hv := hvs[hvIdx]
-				hvIdx++
-
-				for d := 0; d < devPerHv; d++ {
-					dev := devices[devIdx]
-					devIdx++
-
-					for n := 0; n < nisdPerDev; n++ {
-						nisd := cpLib.Nisd{
-							PeerPort: 8000 + uint16(nisdID),
-							ID:       fmt.Sprintf("ed7914c3-2e96-4f3e-8e0d-%012x", nisdID),
-							FailureDomain: []string{
-								pdu,
-								rack,
-								hv,
-								dev,
-								fmt.Sprintf("%s-%d", dev, n),
-							},
-							TotalSize:     1_000_000_000_000,
-							AvailableSize: 1_000_000_000_000,
-							UserToken:     adminToken,
-						}
-
-						mockNisd = append(mockNisd, nisd)
-						nisdID++
-					}
-				}
-			}
-		}
+	mockNisd := []cpLib.Nisd{
+		cpLib.Nisd{
+			PeerPort: 8001,
+			ID:       "86adee3a-d5da-11f0-8250-5f1ad86a5661",
+			FailureDomain: []string{
+				pdus[0],
+				racks[0],
+				hvs[0],
+				devices[0],
+				"pt-" + devices[0] + "-0",
+			},
+			TotalSize:     1_000_000_000_000,
+			AvailableSize: 1_000_000_000_000,
+			UserToken:     adminToken,
+		},
+		cpLib.Nisd{
+			PeerPort: 8002,
+			ID:       "86adee3a-d5da-11f0-8250-5f1ad86a5662",
+			FailureDomain: []string{
+				pdus[0],
+				racks[0],
+				hvs[1],
+				devices[1],
+				"pt-" + devices[1] + "-0",
+			},
+			TotalSize:     1_000_000_000_000,
+			AvailableSize: 1_000_000_000_000,
+			UserToken:     adminToken,
+		},
+		cpLib.Nisd{
+			PeerPort: 8003,
+			ID:       "86adee3a-d5da-11f0-8250-5f1ad86a5663",
+			FailureDomain: []string{
+				pdus[0],
+				racks[1],
+				hvs[2],
+				devices[2],
+				"pt-" + devices[2] + "-0",
+			},
+			TotalSize:     1_000_000_000_000,
+			AvailableSize: 1_000_000_000_000,
+			UserToken:     adminToken,
+		},
+		cpLib.Nisd{
+			PeerPort: 8004,
+			ID:       "86adee3a-d5da-11f0-8250-5f1ad86a5664",
+			FailureDomain: []string{
+				pdus[0],
+				racks[1],
+				hvs[3],
+				devices[3],
+				"pt-" + devices[3] + "-0",
+			},
+			TotalSize:     1_000_000_000_000,
+			AvailableSize: 1_000_000_000_000,
+			UserToken:     adminToken,
+		},
 	}
+
 	for _, n := range mockNisd {
 		resp, err := c.PutNisd(&n)
 		if assert.NoError(t, err) {
 			assert.True(t, resp.Success)
 		}
-		time.Sleep(10 * time.Millisecond)
 		log.Info("response : ", resp, err)
 	}
 
@@ -130,7 +134,7 @@ func TestUserVdevCreation(t *testing.T) {
 	adminToken := getAdminToken(t)
 	t.Logf("Admin logged in/setup complete")
 
-	// Step 2: Create normal user1
+	// Step 1: Create normal user1
 	user1Username := "vdev_owner_" + uuid.New().String()[:8]
 	user1Req := &userlib.UserReq{
 		Username:  user1Username,
@@ -146,7 +150,7 @@ func TestUserVdevCreation(t *testing.T) {
 	assert.Equal(t, userlib.DefaultUserRole, user1Resp.UserRole)
 	t.Logf("Created user1: %s with ID: %s", user1Username, user1Resp.UserID)
 
-	// Step 3: Login with user1 to get access token
+	// Step 2: Login with user1 to get access token
 	user1LoginResp, err := authClient.Login(user1Username, user1Resp.SecretKey)
 	assert.NoError(t, err, "user1 login should succeed")
 	assert.True(t, user1LoginResp.Success)
@@ -154,7 +158,7 @@ func TestUserVdevCreation(t *testing.T) {
 	user1AccessToken := user1LoginResp.AccessToken
 	t.Logf("User1 logged in, access token obtained")
 
-	// Step 4: User1 creates a vdev with their access token
+	// Step 3: User1 creates a vdev with their access token
 	vdev1 := &cpLib.VdevReq{
 		Vdev: &cpLib.VdevCfg{
 			Size:       500 * 1024 * 1024 * 1024, // 500 GB
@@ -171,7 +175,7 @@ func TestUserVdevCreation(t *testing.T) {
 	vdevID := vdevResp.ID
 	t.Logf("User1 created vdev with ID: %s", vdevID)
 
-	// Step 5: Verify user1 can access their own vdev
+	// Step 4: Verify user1 can access their own vdev
 	getReqUser1 := &cpLib.GetReq{
 		ID:        vdevID,
 		UserToken: user1AccessToken,
