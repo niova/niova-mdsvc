@@ -148,7 +148,8 @@ func TestUserVdevCreation(t *testing.T) {
 	assert.NotEmpty(t, user1Resp.SecretKey)
 	assert.NotEmpty(t, user1Resp.UserID)
 	assert.Equal(t, userlib.DefaultUserRole, user1Resp.UserRole)
-	t.Logf("Created user1: %s with ID: %s", user1Username, user1Resp.UserID)
+	log.Infof("Created user1: %s with ID: %s", user1Username, user1Resp.UserID)
+	log.Infof("Secret key of user1: %s", user1Resp.SecretKey)
 
 	// Step 2: Login with user1 to get access token
 	user1LoginResp, err := authClient.Login(user1Username, user1Resp.SecretKey)
@@ -184,5 +185,5 @@ func TestUserVdevCreation(t *testing.T) {
 	vdevCfg, err := ctlClient.GetVdevCfg(getReqUser1)
 	assert.NoError(t, err, "user1 should be able to read their own vdev")
 	assert.Equal(t, vdevID, vdevCfg.ID, "fetched vdev ID should match")
-	t.Logf("User1 successfully accessed their vdev: %s", vdevCfg.ID)
+	log.Infof("User1 successfully accessed their vdev: %s", vdevCfg.ID)
 }
