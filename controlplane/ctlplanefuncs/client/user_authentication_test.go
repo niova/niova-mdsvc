@@ -35,70 +35,35 @@ func TestCreateHierarchyforUserAuthentication(t *testing.T) {
 	}
 
 	// 4 Devices
-	devices := []string{
-		"nvme-fb6358163001",
-		"nvme-fb6358163002",
-		"nvme-fb6358163003",
-		"nvme-fb6358163004",
-		"nvme-fb6358163005",
-	}
+	// devices := []string{
+	// 	"nvme-fb6358163001",
+	// 	"nvme-fb6358163002",
+	// 	"nvme-fb6358163003",
+	// 	"nvme-fb6358163004",
+	// 	"nvme-fb6358163005",
+	// }
 
 	mockNisd := []cpLib.Nisd{
 		cpLib.Nisd{
-			PeerPort: 8001,
+			PeerPort: 13000,
 			ID:       "86adee3a-d5da-11f0-8250-5f1ad86a5661",
 			FailureDomain: []string{
 				pdus[0],
 				racks[0],
 				hvs[0],
-				devices[0],
-				"pt-" + devices[0] + "-0",
+				"/dev/loop25",
+				"/dev/loop25",
 			},
-			TotalSize:     1_000_000_000_000,
-			AvailableSize: 1_000_000_000_000,
+			TotalSize:     24 * 1024 * 1024 * 1024,
+			AvailableSize: 24 * 1024 * 1024 * 1024,
 			UserToken:     adminToken,
-		},
-		cpLib.Nisd{
-			PeerPort: 8002,
-			ID:       "86adee3a-d5da-11f0-8250-5f1ad86a5662",
-			FailureDomain: []string{
-				pdus[0],
-				racks[0],
-				hvs[1],
-				devices[1],
-				"pt-" + devices[1] + "-0",
+			NetInfo: cpLib.NetInfoList{
+				cpLib.NetworkInfo{
+					IPAddr: "172.31.24.182",
+					Port:   13001,
+				},
 			},
-			TotalSize:     1_000_000_000_000,
-			AvailableSize: 1_000_000_000_000,
-			UserToken:     adminToken,
-		},
-		cpLib.Nisd{
-			PeerPort: 8003,
-			ID:       "86adee3a-d5da-11f0-8250-5f1ad86a5663",
-			FailureDomain: []string{
-				pdus[0],
-				racks[1],
-				hvs[2],
-				devices[2],
-				"pt-" + devices[2] + "-0",
-			},
-			TotalSize:     1_000_000_000_000,
-			AvailableSize: 1_000_000_000_000,
-			UserToken:     adminToken,
-		},
-		cpLib.Nisd{
-			PeerPort: 8004,
-			ID:       "86adee3a-d5da-11f0-8250-5f1ad86a5664",
-			FailureDomain: []string{
-				pdus[0],
-				racks[1],
-				hvs[3],
-				devices[3],
-				"pt-" + devices[3] + "-0",
-			},
-			TotalSize:     1_000_000_000_000,
-			AvailableSize: 1_000_000_000_000,
-			UserToken:     adminToken,
+			NetInfoCnt: 1,
 		},
 	}
 
@@ -162,7 +127,7 @@ func TestUserVdevCreation(t *testing.T) {
 	// Step 3: User1 creates a vdev with their access token
 	vdev1 := &cpLib.VdevReq{
 		Vdev: &cpLib.VdevCfg{
-			Size:       500 * 1024 * 1024 * 1024, // 500 GB
+			Size:       16 * 1024 * 1024 * 1024, // 16 GB
 			NumReplica: 1,
 		},
 		UserToken: user1AccessToken,
