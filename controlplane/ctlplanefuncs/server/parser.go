@@ -384,7 +384,7 @@ func (vdevParser) NewEntity(id string) Entity {
 }
 func (vdevParser) ParseField(entity Entity, parts []string, value []byte) {
 	vdev := entity.(*ctlplfl.VdevCfg)
-	if len(parts) > KEY_LEN {
+	if len(parts) > VDEV_ELEMENT_KEY && parts[VDEV_CFG_C_KEY] == cfgkey {
 		switch parts[VDEV_ELEMENT_KEY] {
 		case SIZE:
 			if sz, err := strconv.ParseInt(string(value), 10, 64); err == nil {

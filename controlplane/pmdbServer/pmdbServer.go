@@ -207,6 +207,8 @@ func main() {
 	cpAPI.RegisterApplyFunc(cpLib.CREATE_VDEV, srvctlplanefuncs.APCreateVdev)
 	cpAPI.RegisterApplyFunc("*", srvctlplanefuncs.ApplyFunc)
 	cpAPI.RegisterApplyFunc(cpLib.PUT_NISD, srvctlplanefuncs.ApplyNisd)
+	cpAPI.RegisterWritePrepFunc(cpLib.MOUNT_VDEV, srvctlplanefuncs.WPMountVdev)
+	cpAPI.RegisterApplyFunc(cpLib.MOUNT_VDEV, srvctlplanefuncs.APMountVdev)
 
 	nso.pso = &PumiceDBServer.PmdbServerObject{
 		RaftUuid:       nso.raftUuid.String(),

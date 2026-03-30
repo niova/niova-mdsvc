@@ -45,6 +45,8 @@ const (
 	ReadAllVdevInfo               FunctionName = "ReadAllVdevInfo"
 	ReadChunkNisd                 FunctionName = "ReadChunkNisd"
 	RdNisdArgs                    FunctionName = "RdNisdArgs"
+	WPMountVdev                   FunctionName = "WPMountVdev"
+	APMountVdev                   FunctionName = "APMountVdev"
 	WPPFSCfg                      FunctionName = "WPPFSCfg"
 	ReadPFSCfg                    FunctionName = "ReadPFSCfg"
 	PutUser                       FunctionName = "PutUser"
@@ -137,6 +139,15 @@ var defaultPolicies = map[FunctionName]FunctionPolicy{
 	},
 	ReadPFSCfg: {
 		RBAC: []string{"admin", "user"},
+	},
+	WPMountVdev: {
+		RBAC: []string{"admin", "user"},
+	},
+	APMountVdev: {
+		RBAC: []string{"admin", "user"},
+		ABAC: []ABACRule{
+			{Argument: "vdev", Prefix: "v/"},
+		},
 	},
 	PutUser: {
 		RBAC: []string{"admin"},
