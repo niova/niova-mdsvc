@@ -1993,3 +1993,76 @@ func TestVdevWithPFS(t *testing.T) {
 
 	}
 }
+
+func TestMountVdev(t *testing.T) {
+	c := newClient(t)
+
+	// Step 0: Create a NISD to allocate space for Vdevs
+	n := cpLib.Nisd{
+		PeerPort: 8001,
+		ID:       uuid.NewString(),
+		FailureDomain: []string{
+			uuid.NewString(),
+			uuid.NewString(),
+			uuid.NewString(),
+			uuid.NewString(),
+			uuid.NewString(),
+		},
+		TotalSize:     15_000_000_000_000,
+		AvailableSize: 15_000_000_000_000,
+	}
+	_, err := c.PutNisd(&n)
+	require.NoError(t, err)
+
+	// Step 1: Create a Vdev
+	vdevReq := &cpLib.VdevReq{
+		Vdev: &cpLib.VdevCfg{
+			ID:         uuid.NewString(),
+			Size:       100 * 1024 * 1024 * 1024,
+			NumReplica: 1,
+		},
+	}
+	vdevResp, err := c.CreateVdev(vdevReq)
+	require.NoError(t, err)
+	require.True(t, vdevResp.Success)
+	vdevID := vdevResp.ID
+
+	t.Run("Successful Mount", func(t *testing.T) {
+		req := &cpLib.MountVdevRequest{
+			VdevID: vdevID,
+		}
+		info, err := c.MountVdev(req)
+		assert.NoError(t, err)
+		assert.Equal(t, vdevID, info.Vdev.ID)
+		assert.GreaterOrEqual(t, info.MountCounter, uint64(1))
+		assert.NotEmpty(t, info.AccessToken)
+		assert.False(t, info.LastUpdatedLTS.IsZero())
+	})
+
+	t.Run("Cooldown Limit", func(t *testing.T) {
+		req := &cpLib.MountVdevRequest{
+			VdevID: vdevID,
+		}
+		_, err := c.MountVdev(req)
+		// Based on server code: log.Errorf("APMountVdev: vdev %s mount request within active window", req.VdevID)
+		// We expect an error here because the default window is 30s
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "mount request within active window")
+	})
+
+	t.Run("Non-existent Vdev", func(t *testing.T) {
+		req := &cpLib.MountVdevRequest{
+			VdevID: uuid.NewString(),
+		}
+		_, err := c.MountVdev(req)
+		assert.Error(t, err)
+	})
+
+	t.Run("Invalid Vdev ID", func(t *testing.T) {
+		req := &cpLib.MountVdevRequest{
+			VdevID: "invalid-uuid",
+		}
+		_, err := c.MountVdev(req)
+		assert.Error(t, err)
+	})
+}
