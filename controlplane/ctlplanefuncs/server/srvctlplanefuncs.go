@@ -1403,12 +1403,12 @@ func ReadVdevInfo(args ...interface{}) (interface{}, error) {
 	req := cpReq.Payload.(ctlplfl.GetReq)
 	err := req.ValidateRequest()
 	if err != nil {
-		log.Errorf("ReadVdevInfo: invalid request: %v", err)
+		log.Errorf("invalid request: %v", err)
 		return ctlplfl.FuncError(fmt.Errorf("Invalid Request"))
 	}
 	tc, err := ValidateToken(cpReq.Token)
 	if err != nil {
-		log.Errorf("ReadVdevInfo: token validation failed: %v", err)
+		log.Errorf("token validation failed: %v", err)
 		return ctlplfl.AuthError(fmt.Errorf("Invalid Token"))
 	}
 	vdevID := req.ID
@@ -1456,13 +1456,13 @@ func ReadVdevInfo(args ...interface{}) (interface{}, error) {
 
 	vdevList := ParseEntities[ctlplfl.VdevCfg](rqResult.ResultMap, vdevParser{})
 	if len(vdevList) == 0 {
-		log.Errorf("ReadVdevInfo: vdev %s not found", req.ID)
+		log.Errorf("vdev %s not found", req.ID)
 		return ctlplfl.FuncError(fmt.Errorf("vdev not found"))
 	}
 
 	vdevInfo := vdevList[0]
 
-	log.Debugf("ReadVdevInfo: returning vdev config for %s", req.ID)
+	log.Debugf("returning vdev config for %s", req.ID)
 	return ctlplfl.EncodeResponse(vdevInfo)
 }
 
@@ -1471,22 +1471,21 @@ func WPMountVdev(args ...interface{}) (interface{}, error) {
 	if !ok {
 		return nil, fmt.Errorf("invalid request type")
 	}
-	log.Infof("WPMountVdev: cp request %v", cpReq)
-	req, _ := cpReq.Payload.(ctlplfl.MountVdevRequest)
+	log.Debugf("mount vdev request received %v", cpReq)
+	_, _ = cpReq.Payload.(ctlplfl.MountVdevRequest)
 	if !ok {
 		return nil, fmt.Errorf("invalid payload type")
 	}
-	log.Infof("WPMountVdev: mount request %v", req)
 
 	tc, err := ValidateToken(cpReq.Token)
 	if err != nil {
-		log.Errorf("WPMountVdev: token validation failed: %v", err)
+		log.Errorf("token validation failed: %v", err)
 		return ctlplfl.WPAuthError(err)
 	}
 
 	if authorizer != nil {
 		if !authorizer.CheckRBAC(authz.WPMountVdev, []string{tc.Role}) {
-			log.Errorf("WPMountVdev: user %s with role %s not authorized", tc.UserID, tc.Role)
+			log.Errorf("user %s with role %s not authorized", tc.UserID, tc.Role)
 			return ctlplfl.WPAuthError(fmt.Errorf("User is not authorized"))
 		}
 	}
@@ -1502,7 +1501,7 @@ func WPMountVdev(args ...interface{}) (interface{}, error) {
 	funcIntrm := funclib.FuncIntrm{
 		Response: resp,
 	}
-	log.Infof("WPMountVdev Succesfull: %v", funcIntrm)
+	log.Debugf("mount vdev request processed %v", funcIntrm)
 	return pmCmn.Encoder(pmCmn.GOB, funcIntrm)
 }
 
@@ -1516,19 +1515,19 @@ func APMountVdev(args ...interface{}) (interface{}, error) {
 	if !ok {
 		return nil, fmt.Errorf("invalid payload type")
 	}
-	log.Infof("APMountVdev: mount vdev request %v", req)
+	log.Debugf("mount vdev request received %v", req)
 
 	// Do we need separate token validation for APMountVdev
 	tc, err := ValidateToken(cpReq.Token)
 	if err != nil {
-		log.Errorf("APMountVdev: token validation failed: %v", err)
+		log.Errorf("token validation failed: %v", err)
 		return ctlplfl.AuthError(err)
 	}
 
 	if authorizer != nil {
 		attributes := map[string]string{"vdev": req.VdevID}
 		if !authorizer.Authorize(authz.APMountVdev, tc.UserID, []string{tc.Role}, attributes, cbArgs.Store, colmfamily) {
-			log.Errorf("APMountVdev: user %s with role %s not authorized for vdev %s", tc.UserID, tc.Role, req.VdevID)
+			log.Errorf("user %s with role %s not authorized for vdev %s", tc.UserID, tc.Role, req.VdevID)
 			return ctlplfl.AuthError(fmt.Errorf("User is not authorized"))
 		}
 	}
@@ -1536,12 +1535,12 @@ func APMountVdev(args ...interface{}) (interface{}, error) {
 	var intrm funclib.FuncIntrm
 	appData := C.GoBytes(cbArgs.AppData, C.int(cbArgs.AppDataSize))
 	if err := pmCmn.Decoder(pmCmn.GOB, appData, &intrm); err != nil {
-		log.Errorf("APMountVdev: failed to decode intermediate data: %v", err)
+		log.Errorf("failed to decode intermediate data: %v", err)
 		return ctlplfl.FuncError(err)
 	}
 	mntResp := &ctlplfl.VdevMountInfo{}
 	if err := pmCmn.Decoder(pmCmn.GOB, intrm.Response.([]byte), mntResp); err != nil {
-		log.Errorf("APMountVdev: failed to decode mount response: %v", err)
+		log.Errorf("failed to decode mount response: %v", err)
 		return ctlplfl.FuncError(err)
 	}
 	currentTime := mntResp.LastUpdatedLTS
@@ -1552,8 +1551,6 @@ func APMountVdev(args ...interface{}) (interface{}, error) {
 
 	var counter uint64 = 1
 	var lastUpdated time.Time
-	log.Infof("APMountVdev: query vdev %v", vdevKey)
-
 	// Fetch current state using RangeRead
 	vdevKey := fmt.Sprintf("%s/%s/", vdevKey, req.VdevID)
 	mntStateRR, err := cbArgs.Store.RangeRead(storageiface.RangeReadArgs{
@@ -1563,7 +1560,7 @@ func APMountVdev(args ...interface{}) (interface{}, error) {
 		Prefix:   vdevKey,
 	})
 	if err != nil {
-		log.Errorf("APMountVdev: failed to read mount state for vdev %s: %v", req.VdevID, err)
+		log.Errorf("failed to read mount state for vdev %s: %v", req.VdevID, err)
 		return ctlplfl.FuncError(err)
 	}
 
@@ -1576,12 +1573,13 @@ func APMountVdev(args ...interface{}) (interface{}, error) {
 		}
 
 		if currentTime.Sub(lastUpdated) < ctlplfl.VDEV_MOUNT_LIMIT {
-			log.Errorf("APMountVdev: vdev %s mount request within active window", req.VdevID)
+			log.Errorf("vdev %s mount request within active window", req.VdevID)
 			return ctlplfl.FuncError(fmt.Errorf("mount request within active window"))
+		} else {
+			counter++
 		}
-		counter++
 	}
-	log.Infof("APMountVdev: generate vdev token with mc %v, time %v", counter, currentTime)
+
 
 	// Generate Token
 	authtc := &auth.Token{
@@ -1595,30 +1593,20 @@ func APMountVdev(args ...interface{}) (interface{}, error) {
 	}
 	token, err := authtc.CreateToken(claims)
 	if err != nil {
-		log.Errorf("APMountVdev: token creation failed: %v", err)
+		log.Errorf("token creation failed: %v", err)
 		return ctlplfl.FuncError(err)
 	}
 
-	// // Fetch VdevCfg using standardized parser
-	// vKey := getConfKey(vdevKey, req.VdevID)
-	// rqResult, err := cbArgs.Store.RangeRead(storageiface.RangeReadArgs{
-	// 	Selector: colmfamily,
-	// 	Key:      vKey,
-	// 	BufSize:  cbArgs.ReplySize,
-	// 	Prefix:   vKey,
-	// })
-	// if err != nil {
-	// 	log.Errorf("APMountVdev: failed to read vdev config: %v", err)
-	// 	return ctlplfl.FuncError(err)
-	// }
+	log.Debugf("vdev token gen successfull with mc %v, time %v, token %v", counter, currentTime, token)
 
-	log.Infof("APMountVdev: parse vdev config %v", mntStateRR.ResultMap)
 	vdevList := ParseEntities[ctlplfl.VdevCfg](mntStateRR.ResultMap, vdevParser{})
 	if len(vdevList) == 0 {
-		log.Errorf("APMountVdev: vdev %s not found", req.VdevID)
+		log.Errorf("vdev %s not found", req.VdevID)
 		return ctlplfl.FuncError(fmt.Errorf("vdev not found"))
 	}
 	vdevCfg := vdevList[0]
+
+	log.Debugf("vdev parsing succesfull %v", mntStateRR.ResultMap)
 
 	// Commit changes
 	commitChgs := []funclib.CommitChg{
@@ -1626,7 +1614,7 @@ func APMountVdev(args ...interface{}) (interface{}, error) {
 		{Key: []byte(luKey), Value: []byte(currentTime.Format(time.RFC3339))},
 	}
 	if err := applyKV(commitChgs, cbArgs.Store); err != nil {
-		log.Errorf("APMountVdev: failed to commit state: %v", err)
+		log.Errorf("failed to commit state: %v", err)
 		return ctlplfl.FuncError(err)
 	}
 
@@ -1637,7 +1625,7 @@ func APMountVdev(args ...interface{}) (interface{}, error) {
 		AccessToken:    token,
 	}
 
-	log.Infof("APMountVdev: vdev %s mounted successfully, counter=%d", req.VdevID, counter)
+	log.Debugf("vdev %s mounted successfully, counter=%d", req.VdevID, counter)
 	return ctlplfl.EncodeResponse(resp)
 }
 
