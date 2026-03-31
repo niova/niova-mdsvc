@@ -98,6 +98,14 @@ const (
 
 const logFileName = "client.log"
 
+// Error message returned by PMDB when key is not found
+const errKeyNotFoundMsg = "Failed to lookup for key"
+
+// IsKeyNotFoundError checks if the error indicates that the key was not found in PMDB
+func IsKeyNotFoundError(err error) bool {
+	return err != nil && err.Error() == errKeyNotFoundMsg
+}
+
 // DefaultLogPath returns an absolute path for the application log file:
 //   - root:         /var/log/niova/client.log
 //   - regular user: ~/.niova/client.log

@@ -640,7 +640,7 @@ func (ccf *CliCFuncs) DeleteVdev(req *ctlplfl.DeleteVdevReq) (*ctlplfl.ResponseX
 	return resp, nil
 }
 
-func (ccf *CliCFuncs) MountVdev(req ctlplfl.MountVdevRequest) (ctlplfl.VdevMountInfo, error) {
+func (ccf *CliCFuncs) MountVdev(req *ctlplfl.MountVdevRequest) (ctlplfl.VdevMountInfo, error) {
 	info := ctlplfl.VdevMountInfo{}
 	cpReq := &ctlplfl.CPReq{
 		Token:   ccf.token,

@@ -1454,22 +1454,6 @@ func ReadVdevInfo(args ...interface{}) (interface{}, error) {
 		return ctlplfl.FuncError(err)
 	}
 
-	authtc := &auth.Token{
-		Secret: []byte(ctlplfl.NISD_SECRET),
-		TTL:    time.Minute,
-	}
-
-	claims := map[string]any{
-		"vdevID": req.ID,
-	}
-
-	authtoken, err := authtc.CreateToken(claims)
-	if err != nil {
-		log.Error("Token Creation failed with: ", err)
-		return ctlplfl.FuncError(err)
-	}
-	log.Trace("Created AuthToken ", authtoken, " for vdev ", req.ID)
-
 	vdevList := ParseEntities[ctlplfl.VdevCfg](rqResult.ResultMap, vdevParser{})
 	if len(vdevList) == 0 {
 		log.Errorf("ReadVdevInfo: vdev %s not found", req.ID)
@@ -1477,7 +1461,6 @@ func ReadVdevInfo(args ...interface{}) (interface{}, error) {
 	}
 
 	vdevInfo := vdevList[0]
-	vdevInfo.AuthToken = authtoken
 
 	log.Debugf("ReadVdevInfo: returning vdev config for %s", req.ID)
 	return ctlplfl.EncodeResponse(vdevInfo)
@@ -1488,10 +1471,12 @@ func WPMountVdev(args ...interface{}) (interface{}, error) {
 	if !ok {
 		return nil, fmt.Errorf("invalid request type")
 	}
-	_, ok = cpReq.Payload.(ctlplfl.MountVdevRequest)
+	log.Infof("WPMountVdev: cp request %v", cpReq)
+	req, _ := cpReq.Payload.(ctlplfl.MountVdevRequest)
 	if !ok {
 		return nil, fmt.Errorf("invalid payload type")
 	}
+	log.Infof("WPMountVdev: mount request %v", req)
 
 	tc, err := ValidateToken(cpReq.Token)
 	if err != nil {
@@ -1506,7 +1491,6 @@ func WPMountVdev(args ...interface{}) (interface{}, error) {
 		}
 	}
 
-	// TODO remove this context change and pass VdevMountInfo as response
 	now := time.Now()
 	mountInfo := ctlplfl.VdevMountInfo{
 		LastUpdatedLTS: now,
@@ -1518,7 +1502,7 @@ func WPMountVdev(args ...interface{}) (interface{}, error) {
 	funcIntrm := funclib.FuncIntrm{
 		Response: resp,
 	}
-
+	log.Infof("WPMountVdev Succesfull: %v", funcIntrm)
 	return pmCmn.Encoder(pmCmn.GOB, funcIntrm)
 }
 
@@ -1532,6 +1516,7 @@ func APMountVdev(args ...interface{}) (interface{}, error) {
 	if !ok {
 		return nil, fmt.Errorf("invalid payload type")
 	}
+	log.Infof("APMountVdev: mount vdev request %v", req)
 
 	// Do we need separate token validation for APMountVdev
 	tc, err := ValidateToken(cpReq.Token)
@@ -1554,25 +1539,29 @@ func APMountVdev(args ...interface{}) (interface{}, error) {
 		log.Errorf("APMountVdev: failed to decode intermediate data: %v", err)
 		return ctlplfl.FuncError(err)
 	}
-
-	mntResp := intrm.Response.(ctlplfl.VdevMountInfo)
+	mntResp := &ctlplfl.VdevMountInfo{}
+	if err := pmCmn.Decoder(pmCmn.GOB, intrm.Response.([]byte), mntResp); err != nil {
+		log.Errorf("APMountVdev: failed to decode mount response: %v", err)
+		return ctlplfl.FuncError(err)
+	}
 	currentTime := mntResp.LastUpdatedLTS
 
-	mcKey := fmt.Sprintf("%s/%s/%s", ctlplfl.MntKey, req.VdevID, ctlplfl.MOUNT_COUNTER)
-	luKey := fmt.Sprintf("%s/%s/%s", ctlplfl.MntKey, req.VdevID, ctlplfl.LAST_UPDATED_LTS)
+	mcKey := fmt.Sprintf("%s/%s/%s/%s", vdevKey, req.VdevID, ctlplfl.MntKey, ctlplfl.MOUNT_COUNTER)
+	luKey := fmt.Sprintf("%s/%s/%s/%s", vdevKey, req.VdevID, ctlplfl.MntKey, ctlplfl.LAST_UPDATED_LTS)
+	// TODO add mount keys as well
 
 	var counter uint64 = 1
 	var lastUpdated time.Time
+	log.Infof("APMountVdev: query vdev %v", vdevKey)
 
 	// Fetch current state using RangeRead
-	mKeyPrefix := fmt.Sprintf("%s/%s/", ctlplfl.MntKey, req.VdevID)
+	vdevKey := fmt.Sprintf("%s/%s/", vdevKey, req.VdevID)
 	mntStateRR, err := cbArgs.Store.RangeRead(storageiface.RangeReadArgs{
 		Selector: colmfamily,
-		Key:      mKeyPrefix,
+		Key:      vdevKey,
 		BufSize:  cbArgs.ReplySize,
-		Prefix:   mKeyPrefix,
+		Prefix:   vdevKey,
 	})
-	// TODO handle the scenario where lookup key is not found
 	if err != nil {
 		log.Errorf("APMountVdev: failed to read mount state for vdev %s: %v", req.VdevID, err)
 		return ctlplfl.FuncError(err)
@@ -1592,6 +1581,7 @@ func APMountVdev(args ...interface{}) (interface{}, error) {
 		}
 		counter++
 	}
+	log.Infof("APMountVdev: generate vdev token with mc %v, time %v", counter, currentTime)
 
 	// Generate Token
 	authtc := &auth.Token{
@@ -1609,20 +1599,23 @@ func APMountVdev(args ...interface{}) (interface{}, error) {
 		return ctlplfl.FuncError(err)
 	}
 
-	// Fetch VdevCfg using standardized parser
-	vKey := getConfKey(vdevKey, req.VdevID)
-	rqResult, err := cbArgs.Store.RangeRead(storageiface.RangeReadArgs{
-		Selector: colmfamily,
-		Key:      vKey,
-		BufSize:  cbArgs.ReplySize,
-		Prefix:   vKey,
-	})
-	if err != nil {
-		log.Errorf("APMountVdev: failed to read vdev config: %v", err)
-		return ctlplfl.FuncError(err)
-	}
-	vdevList := ParseEntities[ctlplfl.VdevCfg](rqResult.ResultMap, vdevParser{})
+	// // Fetch VdevCfg using standardized parser
+	// vKey := getConfKey(vdevKey, req.VdevID)
+	// rqResult, err := cbArgs.Store.RangeRead(storageiface.RangeReadArgs{
+	// 	Selector: colmfamily,
+	// 	Key:      vKey,
+	// 	BufSize:  cbArgs.ReplySize,
+	// 	Prefix:   vKey,
+	// })
+	// if err != nil {
+	// 	log.Errorf("APMountVdev: failed to read vdev config: %v", err)
+	// 	return ctlplfl.FuncError(err)
+	// }
+
+	log.Infof("APMountVdev: parse vdev config %v", mntStateRR.ResultMap)
+	vdevList := ParseEntities[ctlplfl.VdevCfg](mntStateRR.ResultMap, vdevParser{})
 	if len(vdevList) == 0 {
+		log.Errorf("APMountVdev: vdev %s not found", req.VdevID)
 		return ctlplfl.FuncError(fmt.Errorf("vdev not found"))
 	}
 	vdevCfg := vdevList[0]
