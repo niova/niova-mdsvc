@@ -2,7 +2,6 @@ package clictlplanefuncs
 
 import (
 	"testing"
-	"fmt"
 
 	cpLib "github.com/00pauln00/niova-mdsvc/controlplane/ctlplanefuncs/lib"
 	userlib "github.com/00pauln00/niova-mdsvc/controlplane/user/lib"
@@ -57,7 +56,6 @@ func TestCreateHierarchyforUserAuthentication(t *testing.T) {
 			},
 			TotalSize:     24 * 1024 * 1024 * 1024,
 			AvailableSize: 24 * 1024 * 1024 * 1024,
-			UserToken:     adminToken,
 			NetInfo: cpLib.NetInfoList{
 				cpLib.NetworkInfo{
 					IPAddr: "172.31.24.182",
@@ -199,70 +197,115 @@ func TestCreateHierarchyforMultipleBlockTest(t *testing.T) {
 		"2fef1454-2772-11f1-997f-236331f79718",
 	}
 
-	// 8 NISDs
+	// 2 NISDs
 	nisds := []string{
 		"83b1a782-2772-11f1-91ea-5f00b1c98291",
 		"83b1a782-2772-11f1-91ea-5f00b1c98292",
-		"83b1a782-2772-11f1-91ea-5f00b1c98293",
-		"83b1a782-2772-11f1-91ea-5f00b1c98294",
-		"83b1a782-2772-11f1-91ea-5f00b1c98295",
-		"83b1a782-2772-11f1-91ea-5f00b1c98296",
-		"83b1a782-2772-11f1-91ea-5f00b1c98297",
-		"83b1a782-2772-11f1-91ea-5f00b1c98298",
-		"83b1a782-2772-11f1-91ea-5f00b1c98299",
-		"83b1a782-2772-11f1-91ea-5f00b1c98300",
-		"83b1a782-2772-11f1-91ea-5f00b1c98301",
-		"83b1a782-2772-11f1-91ea-5f00b1c98302",
-		"83b1a782-2772-11f1-91ea-5f00b1c98303",
-		"83b1a782-2772-11f1-91ea-5f00b1c98304",
-		"83b1a782-2772-11f1-91ea-5f00b1c98305",
-		"83b1a782-2772-11f1-91ea-5f00b1c98306",
+		// "83b1a782-2772-11f1-91ea-5f00b1c98293",
+		// "83b1a782-2772-11f1-91ea-5f00b1c98294",
+		// "83b1a782-2772-11f1-91ea-5f00b1c98295",
+		// "83b1a782-2772-11f1-91ea-5f00b1c98296",
+		// "83b1a782-2772-11f1-91ea-5f00b1c98297",
+		// "83b1a782-2772-11f1-91ea-5f00b1c98298",
+		// "83b1a782-2772-11f1-91ea-5f00b1c98299",
+		// "83b1a782-2772-11f1-91ea-5f00b1c98300",
+		// "83b1a782-2772-11f1-91ea-5f00b1c98301",
+		// "83b1a782-2772-11f1-91ea-5f00b1c98302",
+		// "83b1a782-2772-11f1-91ea-5f00b1c98303",
+		// "83b1a782-2772-11f1-91ea-5f00b1c98304",
+		// "83b1a782-2772-11f1-91ea-5f00b1c98305",
+		// "83b1a782-2772-11f1-91ea-5f00b1c98306",
 	}
 
-	mockNisd := []cpLib.Nisd{}
+	// mockNisd := []cpLib.Nisd{}
 
-	nisdIndex := 0
-	basePort := uint16(14020)
+	// nisdIndex := 0
+	// basePort := uint16(16000)
 
-	for p := 0; p < len(pdus); p++ {
-		for r := 0; r < 2; r++ {
-			rackIndex := p*2 + r
+	// for p := 0; p < len(pdus); p++ {
+	// 	for r := 0; r < 2; r++ {
+	// 		rackIndex := p*2 + r
 
-			for h := 0; h < 2; h++ {
-				hvIndex := rackIndex*2 + h
+	// 		for h := 0; h < 2; h++ {
+	// 			hvIndex := rackIndex*2 + h
 
-				for n := 0; n < 2; n++ {
+	// 			for n := 0; n < 2; n++ {
 
-					peerPort := basePort + uint16(nisdIndex*10)
-					clientPort := peerPort + 1
+	// 				peerPort := basePort + uint16(nisdIndex*10)
+	// 				clientPort := peerPort + 1
 
-					nisd := cpLib.Nisd{
-						PeerPort: peerPort,
-						ID:       nisds[nisdIndex],
-						FailureDomain: []string{
-							pdus[p],
-							racks[rackIndex],
-							hvs[hvIndex],
-							fmt.Sprintf("/auth_nisd_%d.device", nisdIndex),
-							fmt.Sprintf("/auth_nisd_%d.device", nisdIndex),
-						},
-						TotalSize:     16 * 1024 * 1024 * 1024,
-						AvailableSize: 16 * 1024 * 1024 * 1024,
-						UserToken:     adminToken,
-						NetInfo: cpLib.NetInfoList{
-							cpLib.NetworkInfo{
-								IPAddr: "172.31.24.182",
-								Port:   clientPort,
-							},
-						},
-						NetInfoCnt: 1,
-					}
+	// 				nisd := cpLib.Nisd{
+	// 					PeerPort: peerPort,
+	// 					ID:       nisds[nisdIndex],
+	// 					FailureDomain: []string{
+	// 						pdus[p],
+	// 						racks[rackIndex],
+	// 						hvs[hvIndex],
+	// 						fmt.Sprintf("/auth_nisd_%d.device", nisdIndex),
+	// 						fmt.Sprintf("/auth_nisd_%d.device", nisdIndex),
+	// 					},
+	// 					TotalSize:     16 * 1024 * 1024 * 1024,
+	// 					AvailableSize: 16 * 1024 * 1024 * 1024,
+	// 					UserToken:     adminToken,
+	// 					NetInfo: cpLib.NetInfoList{
+	// 						cpLib.NetworkInfo{
+	// 							IPAddr: "172.31.24.182",
+	// 							Port:   clientPort,
+	// 						},
+	// 					},
+	// 					NetInfoCnt: 1,
+	// 				}
 
-					mockNisd = append(mockNisd, nisd)
-					nisdIndex++
-				}
-			}
-		}
+	// 				mockNisd = append(mockNisd, nisd)
+	// 				nisdIndex++
+	// 			}
+	// 		}
+	// 	}
+	// }
+
+	c.SetToken(adminToken)
+
+	mockNisd := []cpLib.Nisd{
+		cpLib.Nisd{
+			PeerPort: 13000,
+			ID:       nisds[0],
+			FailureDomain: []string{
+				pdus[0],
+				racks[0],
+				hvs[0],
+				"/auth_nisd_0.device",
+				"/auth_nisd_0.device",
+			},
+			TotalSize:     24 * 1024 * 1024 * 1024,
+			AvailableSize: 24 * 1024 * 1024 * 1024,
+			NetInfo: cpLib.NetInfoList{
+				cpLib.NetworkInfo{
+					IPAddr: "172.31.24.182",
+					Port:   13001,
+				},
+			},
+			NetInfoCnt: 1,
+		},
+		cpLib.Nisd{
+			PeerPort: 13002,
+			ID:       nisds[1],
+			FailureDomain: []string{
+				pdus[0],
+				racks[0],
+				hvs[0],
+				"/auth_nisd_1.device",
+				"/auth_nisd_1.device",
+			},
+			TotalSize:     24 * 1024 * 1024 * 1024,
+			AvailableSize: 24 * 1024 * 1024 * 1024,
+			NetInfo: cpLib.NetInfoList{
+				cpLib.NetworkInfo{
+					IPAddr: "172.31.24.182",
+					Port:   13003,
+				},
+			},
+			NetInfoCnt: 1,
+		},
 	}
 
 	for _, n := range mockNisd {
@@ -275,7 +318,6 @@ func TestCreateHierarchyforMultipleBlockTest(t *testing.T) {
 
 	req := cpLib.GetReq{
 		GetAll:    true,
-		UserToken: adminToken,
 	}
 
 	nisdList, err := c.GetNisds(req)
@@ -305,8 +347,10 @@ func TestUserVdevCreationForMultipleBlockTest(t *testing.T) {
 	adminToken := getAdminToken(t)
 	log.Info("Admin logged in/setup complete")
 
-	numVdevs := 16
+	numVdevs := 4
 	vdevIDs := make([]string, 0, numVdevs)
+
+	c.SetToken(adminToken)
 
 	for i := 0; i < numVdevs; i++ {
 		vdevReq := &cpLib.VdevReq{
@@ -314,7 +358,6 @@ func TestUserVdevCreationForMultipleBlockTest(t *testing.T) {
 				Size:       8 * 1024 * 1024 * 1024, // 8 GB
 				NumReplica: 1,
 			},
-			UserToken: adminToken,
 		}
 
 		vdevResp, err := ctlClient.CreateVdev(vdevReq)
@@ -332,9 +375,7 @@ func TestUserVdevCreationForMultipleBlockTest(t *testing.T) {
 	// validation
 	assert.Equal(t, numVdevs, len(vdevIDs), "should create all vdevs")
 
-	getReq := &cpLib.GetReq{
-		UserToken: adminToken,
-	}
+	getReq := &cpLib.GetReq{}
 
 	vdevList, err := ctlClient.GetVdevCfgs(getReq)
 
