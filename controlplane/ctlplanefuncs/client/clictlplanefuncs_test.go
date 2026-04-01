@@ -2034,7 +2034,7 @@ func TestMountVdev(t *testing.T) {
 		info, err := c.MountVdev(req)
 		assert.NoError(t, err)
 		assert.Equal(t, vdevID, info.Vdev.ID)
-		assert.GreaterOrEqual(t, info.MountCounter, uint64(1))
+		assert.Equal(t, info.MountCounter, uint64(1))
 		assert.NotEmpty(t, info.AccessToken)
 		assert.False(t, info.LastUpdatedLTS.IsZero())
 	})
@@ -2064,5 +2064,18 @@ func TestMountVdev(t *testing.T) {
 		}
 		_, err := c.MountVdev(req)
 		assert.Error(t, err)
+	})
+
+	t.Run("Successful Mount After cool down period", func(t *testing.T) {
+		time.Sleep(30 * time.Second)
+		req := &cpLib.MountVdevRequest{
+			VdevID: vdevID,
+		}
+		info, err := c.MountVdev(req)
+		assert.NoError(t, err)
+		assert.Equal(t, vdevID, info.Vdev.ID)
+		assert.Equal(t, info.MountCounter, uint64(2))
+		assert.NotEmpty(t, info.AccessToken)
+		assert.False(t, info.LastUpdatedLTS.IsZero())
 	})
 }

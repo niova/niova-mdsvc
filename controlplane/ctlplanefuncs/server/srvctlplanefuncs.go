@@ -1471,8 +1471,7 @@ func WPMountVdev(args ...interface{}) (interface{}, error) {
 	if !ok {
 		return nil, fmt.Errorf("invalid request type")
 	}
-	log.Debugf("mount vdev request received %v", cpReq)
-	_, _ = cpReq.Payload.(ctlplfl.MountVdevRequest)
+	req, _ :=cpReq.Payload.(ctlplfl.MountVdevRequest)
 	if !ok {
 		return nil, fmt.Errorf("invalid payload type")
 	}
@@ -1501,7 +1500,7 @@ func WPMountVdev(args ...interface{}) (interface{}, error) {
 	funcIntrm := funclib.FuncIntrm{
 		Response: resp,
 	}
-	log.Debugf("mount vdev request processed %v", funcIntrm)
+	log.Debugf("mount vdev request proceeding to apply phase for vdevID %v", req.VdevID)
 	return pmCmn.Encoder(pmCmn.GOB, funcIntrm)
 }
 
@@ -1515,8 +1514,6 @@ func APMountVdev(args ...interface{}) (interface{}, error) {
 	if !ok {
 		return nil, fmt.Errorf("invalid payload type")
 	}
-	log.Debugf("mount vdev request received %v", req)
-
 	// Do we need separate token validation for APMountVdev
 	tc, err := ValidateToken(cpReq.Token)
 	if err != nil {
@@ -1549,7 +1546,7 @@ func APMountVdev(args ...interface{}) (interface{}, error) {
 	luKey := fmt.Sprintf("%s/%s/%s/%s", vdevKey, req.VdevID, ctlplfl.MntKey, ctlplfl.LAST_UPDATED_LTS)
 	// TODO add mount keys as well
 
-	var counter uint64 = 1
+	var counter uint64 = 0
 	var lastUpdated time.Time
 	// Fetch current state using RangeRead
 	vdevKey := fmt.Sprintf("%s/%s/", vdevKey, req.VdevID)
@@ -1575,9 +1572,8 @@ func APMountVdev(args ...interface{}) (interface{}, error) {
 		if currentTime.Sub(lastUpdated) < ctlplfl.VDEV_MOUNT_LIMIT {
 			log.Errorf("vdev %s mount request within active window", req.VdevID)
 			return ctlplfl.FuncError(fmt.Errorf("mount request within active window"))
-		} else {
-			counter++
 		}
+		counter++
 	}
 
 
@@ -1597,7 +1593,7 @@ func APMountVdev(args ...interface{}) (interface{}, error) {
 		return ctlplfl.FuncError(err)
 	}
 
-	log.Debugf("vdev token gen successfull with mc %v, time %v, token %v", counter, currentTime, token)
+	log.Debugf("vdev token gen successfull with vdev %v, mc %v, time %v, token %v", req.VdevID, counter, currentTime, token)
 
 	vdevList := ParseEntities[ctlplfl.VdevCfg](mntStateRR.ResultMap, vdevParser{})
 	if len(vdevList) == 0 {
@@ -1606,7 +1602,7 @@ func APMountVdev(args ...interface{}) (interface{}, error) {
 	}
 	vdevCfg := vdevList[0]
 
-	log.Debugf("vdev parsing succesfull %v", mntStateRR.ResultMap)
+	log.Debugf("vdev cfg parsing succesfull %s", req.VdevID)
 
 	// Commit changes
 	commitChgs := []funclib.CommitChg{
