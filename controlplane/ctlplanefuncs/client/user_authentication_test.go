@@ -350,7 +350,7 @@ func TestUserVdevCreationForMultipleBlockTest(t *testing.T) {
 	numVdevs := 4
 	vdevIDs := make([]string, 0, numVdevs)
 
-	c.SetToken(adminToken)
+	ctlClient.SetToken(adminToken)
 
 	for i := 0; i < numVdevs; i++ {
 		vdevReq := &cpLib.VdevReq{
@@ -374,6 +374,8 @@ func TestUserVdevCreationForMultipleBlockTest(t *testing.T) {
 
 	// validation
 	assert.Equal(t, numVdevs, len(vdevIDs), "should create all vdevs")
+
+	ctlClient.SetToken(user1Token)
 
 	getReq := &cpLib.GetReq{}
 
