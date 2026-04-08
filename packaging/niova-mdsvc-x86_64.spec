@@ -40,7 +40,7 @@ BuildRequires:  golang >= 1.24
 # niova-core provides the base Niova C runtime (libniova*.so, libbacktrace.so)
 Requires:       niova-core
 # rocksdb-libs ships librocksdb.so linked by niova-pumicedb at build time.
-Requires:       rocksdb-libs
+# Requires:       rocksdb-libs
 # Standard system libs (present on every Rocky 9 install)
 Requires:       openssl-libs
 Requires:       libuuid
@@ -67,7 +67,7 @@ Deployment is managed by systemd. Before starting services, configure
 /usr/share/niova-mdsvc/scripts/gen_raft_cfgs.sh.
 
 # ---------------------------------------------------------------------------
-# %prep
+# prep
 # Build-in-place mode: rpmbuild runs directly inside the git repo.
 # Submodules are initialized by the Makefile before invoking rpmbuild.
 # ---------------------------------------------------------------------------
@@ -82,7 +82,7 @@ if [ ! -f "${RAFT_DIR}/configure.ac" ] && [ ! -f "${RAFT_DIR}/configure.in" ]; t
 fi
 
 # ---------------------------------------------------------------------------
-# %build
+# build
 # ---------------------------------------------------------------------------
 %build
 
@@ -112,7 +112,7 @@ go build -o libexec/cc-manager           ./controlplane/containerConfigManager/
 go build -o libexec/cfgApp               ./controlplane/configApplication/
 
 # ---------------------------------------------------------------------------
-# %install
+# install
 # ---------------------------------------------------------------------------
 %install
 
@@ -135,6 +135,18 @@ find %{niova_build}/lib -maxdepth 1 -name '*.so*' -type f \
 
 find %{niova_build}/lib -maxdepth 1 -name '*.so*' -type l \
     -exec cp -a {} %{buildroot}%{niova_libdir}/ \;
+
+# ── Remove invalid RPATHs from shared libraries ──────────────────────────────
+find %{buildroot}%{niova_libdir} -name '*.so*' -type f \
+    -exec chrpath -d {} \;
+
+# ── Bundle dependency libraries (for standalone installation) ────────────────
+# Copy RocksDB from build environment to niova-mdsvc lib dir
+cp -a /usr/lib64/librocksdb.so.9* %{buildroot}%{niova_libdir}/
+# Also bundle common dependencies from EPEL that might be missing
+for lib in libgflags libsnappy; do
+    find /usr/lib64 -name "${lib}.so*" -exec cp -a {} %{buildroot}%{niova_libdir}/ \;
+done
 
 # ── ldconfig drop-in ────────────────────────────────────────────────────────
 install -d %{buildroot}/etc/ld.so.conf.d
@@ -277,7 +289,7 @@ echo ""
 # %changelog
 # ---------------------------------------------------------------------------
 %changelog
-* Tue Apr 08 2026 Niova Build System <build@niova.io> - 1.0.0-1
+* Wed Apr 08 2026 Niova Build System <build@niova.io> - 1.0.0-1
 - Initial RPM release
 - Bundles niova-raft and niova-pumicedb C libraries (niova-core is separate)
 - Requires niova-core RPM for base C libraries

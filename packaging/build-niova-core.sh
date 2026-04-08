@@ -35,13 +35,13 @@ fi
 
 mkdir -p "${PREFIX}"
 
-# ── libbacktrace ──────────────────────────────────────────────────────────────
-log "Building libbacktrace -> ${PREFIX}"
-cd "${BACKTRACE_DIR}"
-./configure --prefix="${PREFIX}"
-make -j"${JOBS}"
-make install
-log "libbacktrace done"
+# ── libbacktrace (Skipped: using system libbacktrace from Docker image) ───────
+# log "Building libbacktrace -> ${PREFIX}"
+# cd "${BACKTRACE_DIR}"
+# CFLAGS="-fPIC" ./configure --prefix="${PREFIX}" --enable-shared
+# make -j"${JOBS}"
+# make install
+# log "libbacktrace done"
 
 # ── niova-core ────────────────────────────────────────────────────────────────
 log "Building niova-core -> ${PREFIX}"

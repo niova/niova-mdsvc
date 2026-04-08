@@ -36,6 +36,9 @@ if [ ! -d "${NIOVA_CORE_PREFIX}/lib" ]; then
     exit 1
 fi
 
+export PKG_CONFIG_PATH="${NIOVA_CORE_PREFIX}/lib/pkgconfig:${PKG_CONFIG_PATH:-}"
+export LD_LIBRARY_PATH="${NIOVA_CORE_PREFIX}/lib:${LD_LIBRARY_PATH:-}"
+
 mkdir -p "${PREFIX}"
 
 # ── niova-raft ────────────────────────────────────────────────────────────────
@@ -56,8 +59,8 @@ log "Building niova-pumicedb -> ${PREFIX} (using niova-core from ${NIOVA_CORE_PR
 cd "${PUMICEDB_DIR}"
 ./prepare.sh
 ./configure \
-    LDFLAGS="-L${PREFIX}/lib" \
-    CPPFLAGS="-I${PREFIX}/include" \
+    LDFLAGS="-L${PREFIX}/lib -L${NIOVA_CORE_PREFIX}/lib" \
+    CPPFLAGS="-I${PREFIX}/include -I${NIOVA_CORE_PREFIX}/include" \
     --enable-devel \
     --with-niova="${NIOVA_CORE_PREFIX}" \
     --prefix="${PREFIX}"

@@ -24,7 +24,7 @@ This package is a shared dependency for niova-mdsvc and niova-block.
 Headers are included so downstream packages can build against this library.
 
 # ---------------------------------------------------------------------------
-# %prep
+# prep
 # Build-in-place mode: no tarball.
 # ---------------------------------------------------------------------------
 %prep
@@ -36,7 +36,7 @@ if [ ! -f "${CORE_DIR}/configure.ac" ] && [ ! -f "${CORE_DIR}/configure.in" ]; t
 fi
 
 # ---------------------------------------------------------------------------
-# %build
+# build
 # ---------------------------------------------------------------------------
 %build
 
@@ -47,7 +47,7 @@ mkdir -p %{niova_build}
 bash packaging/build-niova-core.sh %{niova_build} %{?_smp_mflags}
 
 # ---------------------------------------------------------------------------
-# %install
+# install
 # ---------------------------------------------------------------------------
 %install
 
@@ -59,6 +59,10 @@ find %{niova_build}/lib -maxdepth 1 -name '*.so*' -type f \
 
 find %{niova_build}/lib -maxdepth 1 -name '*.so*' -type l \
     -exec cp -a {} %{buildroot}%{niova_prefix}/lib/ \;
+
+# ── libbacktrace (copy from system to bundle in standard path) ──────────────
+install -d %{buildroot}%{_libdir}
+cp -a /usr/lib64/libbacktrace.so* %{buildroot}%{_libdir}/
 
 # ── Headers (needed for building downstream packages) ────────────────────────
 install -d %{buildroot}%{niova_prefix}/include
@@ -101,11 +105,14 @@ install -m 0644 packaging/niova-core.conf \
 # ldconfig drop-in
 /etc/ld.so.conf.d/niova-core.conf
 
+# Bundled libbacktrace (standard path)
+%{_libdir}/libbacktrace.so*
+
 # ---------------------------------------------------------------------------
 # %changelog
 # ---------------------------------------------------------------------------
 %changelog
-* Tue Apr 08 2026 Niova Build System <build@niova.io> - 1.0.0-1
+* Wed Apr 08 2026 Niova Build System <build@niova.io> - 1.0.0-1
 - Initial RPM release
 - Bundles libbacktrace and niova-core C libraries
 - aarch64 build
