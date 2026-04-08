@@ -92,6 +92,32 @@ help:
 # ---------------------------------------------------------------------------
 VERSION ?= 1.0.0
 
+# ---------------------------------------------------------------------------
+# niova-core RPM — must be built and installed before niova-mdsvc RPM
+# ---------------------------------------------------------------------------
+rpm-core-x86_64:
+	mkdir -p rpmbuild/{BUILD,BUILDROOT,RPMS,SOURCES,SPECS,SRPMS}
+	git submodule update --init --recursive
+	rpmbuild -ba packaging/niova-core-x86_64.spec \
+	    --build-in-place \
+	    --define "_topdir $(CURDIR)/rpmbuild" \
+	    --define "_builddir $(CURDIR)" \
+	    --define "version $(VERSION)"
+	@echo "RPM built: rpmbuild/RPMS/x86_64/ (niova-core)"
+
+rpm-core-aarch64:
+	mkdir -p rpmbuild/{BUILD,BUILDROOT,RPMS,SOURCES,SPECS,SRPMS}
+	git submodule update --init --recursive
+	rpmbuild -ba packaging/niova-core-aarch64.spec \
+	    --build-in-place \
+	    --define "_topdir $(CURDIR)/rpmbuild" \
+	    --define "_builddir $(CURDIR)" \
+	    --define "version $(VERSION)"
+	@echo "RPM built: rpmbuild/RPMS/aarch64/ (niova-core)"
+
+# ---------------------------------------------------------------------------
+# niova-mdsvc RPM — requires niova-core to be installed on the build host
+# ---------------------------------------------------------------------------
 rpm-x86_64:
 	mkdir -p rpmbuild/{BUILD,BUILDROOT,RPMS,SOURCES,SPECS,SRPMS}
 	git submodule update --init --recursive
@@ -100,7 +126,7 @@ rpm-x86_64:
 	    --define "_topdir $(CURDIR)/rpmbuild" \
 	    --define "_builddir $(CURDIR)" \
 	    --define "version $(VERSION)"
-	@echo "RPM built: rpmbuild/RPMS/x86_64/"
+	@echo "RPM built: rpmbuild/RPMS/x86_64/ (niova-mdsvc)"
 
 rpm-aarch64:
 	mkdir -p rpmbuild/{BUILD,BUILDROOT,RPMS,SOURCES,SPECS,SRPMS}
@@ -110,4 +136,4 @@ rpm-aarch64:
 	    --define "_topdir $(CURDIR)/rpmbuild" \
 	    --define "_builddir $(CURDIR)" \
 	    --define "version $(VERSION)"
-	@echo "RPM built: rpmbuild/RPMS/aarch64/"
+	@echo "RPM built: rpmbuild/RPMS/aarch64/ (niova-mdsvc)"
