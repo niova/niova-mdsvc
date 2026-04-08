@@ -1,7 +1,7 @@
 %global pkg_name     niova-mdsvc
 %global niova_libdir %{_libdir}/niova-mdsvc
 %global niova_build  %{_builddir}/niova-mdsvc-build
-%global niova_core   /opt/niova-core
+%{!?niova_core: %global niova_core /var/niova}
 
 Name:           %{pkg_name}
 Version:        %{version}
@@ -93,11 +93,11 @@ export CGO_ENABLED=1
 
 # ── Build niova-raft and niova-pumicedb against installed niova-core ─────────
 mkdir -p %{niova_build}
-bash packaging/build-c-deps.sh %{niova_build} %{niova_core} %{?_smp_mflags:-j}$(nproc)
+bash packaging/build-c-deps.sh %{niova_build} %{niova_core} %{?_smp_mflags}
 
 # ── Build Go binaries ────────────────────────────────────────────────────────
 # CGO flags: pumicedb/raft libs from niova_build; niova-core headers from niova_core.
-export CGO_LDFLAGS="-L%{niova_build}/lib"
+export CGO_LDFLAGS="-L%{niova_build}/lib -L%{niova_core}/lib"
 export CGO_CFLAGS="-I%{niova_build}/include -I%{niova_core}/include"
 export LD_LIBRARY_PATH="%{niova_build}/lib:%{niova_core}/lib"
 
@@ -117,13 +117,13 @@ go build -o libexec/cfgApp               ./controlplane/configApplication/
 %install
 
 # ── Go binaries ─────────────────────────────────────────────────────────────
-install -d %{buildroot}/usr/libexec/niova
-install -m 0755 libexec/CTLPlane_pmdbServer  %{buildroot}/usr/libexec/niova/
-install -m 0755 libexec/CTLPlane_proxy       %{buildroot}/usr/libexec/niova/
-install -m 0755 libexec/cp-monitor           %{buildroot}/usr/libexec/niova/
-install -m 0755 libexec/niova-ctl            %{buildroot}/usr/libexec/niova/
-install -m 0755 libexec/cc-manager           %{buildroot}/usr/libexec/niova/
-install -m 0755 libexec/cfgApp               %{buildroot}/usr/libexec/niova/
+install -d %{buildroot}/usr/local/bin/niova
+install -m 0755 libexec/CTLPlane_pmdbServer  %{buildroot}/usr/local/bin/niova/
+install -m 0755 libexec/CTLPlane_proxy       %{buildroot}/usr/local/bin/niova/
+install -m 0755 libexec/cp-monitor           %{buildroot}/usr/local/bin/niova/
+install -m 0755 libexec/niova-ctl            %{buildroot}/usr/local/bin/niova/
+install -m 0755 libexec/cc-manager           %{buildroot}/usr/local/bin/niova/
+install -m 0755 libexec/cfgApp               %{buildroot}/usr/local/bin/niova/
 
 # ── Bundled C shared libraries (niova-raft + niova-pumicedb only) ────────────
 # Installed to a private directory to avoid conflicts with system libraries.
@@ -234,13 +234,13 @@ echo ""
 %files
 
 # Go binaries
-%dir /usr/libexec/niova
-/usr/libexec/niova/CTLPlane_pmdbServer
-/usr/libexec/niova/CTLPlane_proxy
-/usr/libexec/niova/cp-monitor
-/usr/libexec/niova/niova-ctl
-/usr/libexec/niova/cc-manager
-/usr/libexec/niova/cfgApp
+%dir /usr/local/bin/niova
+/usr/local/bin/niova/CTLPlane_pmdbServer
+/usr/local/bin/niova/CTLPlane_proxy
+/usr/local/bin/niova/cp-monitor
+/usr/local/bin/niova/niova-ctl
+/usr/local/bin/niova/cc-manager
+/usr/local/bin/niova/cfgApp
 
 # Bundled C libraries — niova-raft + niova-pumicedb only
 %dir %{niova_libdir}

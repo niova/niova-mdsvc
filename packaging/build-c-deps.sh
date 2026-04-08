@@ -20,6 +20,7 @@ set -euo pipefail
 PREFIX="${1:?Usage: build-c-deps.sh <PREFIX> <NIOVA_CORE_PREFIX> [JOBS]}"
 NIOVA_CORE_PREFIX="${2:-/opt/niova-core}"
 JOBS="${3:-$(nproc)}"
+JOBS="${JOBS#-j}" # Strip leading -j if present
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
@@ -55,6 +56,8 @@ log "Building niova-pumicedb -> ${PREFIX} (using niova-core from ${NIOVA_CORE_PR
 cd "${PUMICEDB_DIR}"
 ./prepare.sh
 ./configure \
+    LDFLAGS="-L${PREFIX}/lib" \
+    CPPFLAGS="-I${PREFIX}/include" \
     --enable-devel \
     --with-niova="${NIOVA_CORE_PREFIX}" \
     --prefix="${PREFIX}"

@@ -125,6 +125,7 @@ rpm-x86_64:
 	    --build-in-place \
 	    --define "_topdir $(CURDIR)/rpmbuild" \
 	    --define "_builddir $(CURDIR)" \
+	    --define "niova_core $(shell if [ -d $(CURDIR)/niova-core-build ]; then echo $(CURDIR)/niova-core-build; else echo /var/niova; fi)" \
 	    --define "version $(VERSION)"
 	@echo "RPM built: rpmbuild/RPMS/x86_64/ (niova-mdsvc)"
 
@@ -135,5 +136,6 @@ rpm-aarch64:
 	    --build-in-place \
 	    --define "_topdir $(CURDIR)/rpmbuild" \
 	    --define "_builddir $(CURDIR)" \
+	    --define "niova_core $(shell if [ -d $(CURDIR)/niova-core-build ]; then echo $(CURDIR)/niova-core-build; else echo /var/niova; fi)" \
 	    --define "version $(VERSION)"
 	@echo "RPM built: rpmbuild/RPMS/aarch64/ (niova-mdsvc)"

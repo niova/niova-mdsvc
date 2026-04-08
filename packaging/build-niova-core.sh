@@ -15,6 +15,7 @@ set -euo pipefail
 
 PREFIX="${1:?Usage: build-niova-core.sh <PREFIX> [JOBS]}"
 JOBS="${2:-$(nproc)}"
+JOBS="${JOBS#-j}" # Strip leading -j if present
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 

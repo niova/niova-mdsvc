@@ -1,5 +1,5 @@
 %global pkg_name     niova-core
-%global niova_prefix /opt/niova-core
+%global niova_prefix /var/niova
 %global niova_build  %{_builddir}/niova-core-build
 
 Name:           %{pkg_name}
@@ -64,7 +64,7 @@ export GOARCH=amd64
 export GOOS=linux
 
 mkdir -p %{niova_build}
-bash packaging/build-niova-core.sh %{niova_build} %{?_smp_mflags:-j}$(nproc)
+bash packaging/build-niova-core.sh %{niova_build} %{?_smp_mflags}
 
 # ---------------------------------------------------------------------------
 # %install

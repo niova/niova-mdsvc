@@ -1,7 +1,7 @@
 %global pkg_name     niova-mdsvc
 %global niova_libdir %{_libdir}/niova-mdsvc
 %global niova_build  %{_builddir}/niova-mdsvc-build
-%global niova_core   /opt/niova-core
+%{!?niova_core: %global niova_core /var/niova}
 
 Name:           %{pkg_name}
 Version:        %{version}
@@ -10,27 +10,6 @@ Summary:        Niova Metadata Service Control Plane
 License:        Apache-2.0
 URL:            https://github.com/00pauln00/niova-mdsvc
 ExclusiveArch:  aarch64
-
-# ---------------------------------------------------------------------------
-# Build-time requirements
-# ---------------------------------------------------------------------------
-BuildRequires:  gcc
-BuildRequires:  gcc-c++
-BuildRequires:  make
-BuildRequires:  autoconf
-BuildRequires:  automake
-BuildRequires:  libtool
-BuildRequires:  git
-BuildRequires:  openssl-devel
-BuildRequires:  libuuid-devel
-BuildRequires:  libgcrypt-devel
-BuildRequires:  rocksdb-devel
-
-# niova-core provides libniova*.so and headers under /opt/niova-core
-BuildRequires:  niova-core
-
-# Go toolchain — must be >= 1.24; install from upstream if not in repos.
-BuildRequires:  golang >= 1.24
 
 # ---------------------------------------------------------------------------
 # Runtime requirements
@@ -82,9 +61,9 @@ export GOOS=linux
 export CGO_ENABLED=1
 
 mkdir -p %{niova_build}
-bash packaging/build-c-deps.sh %{niova_build} %{niova_core} %{?_smp_mflags:-j}$(nproc)
+bash packaging/build-c-deps.sh %{niova_build} %{niova_core} %{?_smp_mflags}
 
-export CGO_LDFLAGS="-L%{niova_build}/lib"
+export CGO_LDFLAGS="-L%{niova_build}/lib -L%{niova_core}/lib"
 export CGO_CFLAGS="-I%{niova_build}/include -I%{niova_core}/include"
 export LD_LIBRARY_PATH="%{niova_build}/lib:%{niova_core}/lib"
 
@@ -102,13 +81,13 @@ go build -o libexec/cfgApp               ./controlplane/configApplication/
 # ---------------------------------------------------------------------------
 %install
 
-install -d %{buildroot}/usr/libexec/niova
-install -m 0755 libexec/CTLPlane_pmdbServer  %{buildroot}/usr/libexec/niova/
-install -m 0755 libexec/CTLPlane_proxy       %{buildroot}/usr/libexec/niova/
-install -m 0755 libexec/cp-monitor           %{buildroot}/usr/libexec/niova/
-install -m 0755 libexec/niova-ctl            %{buildroot}/usr/libexec/niova/
-install -m 0755 libexec/cc-manager           %{buildroot}/usr/libexec/niova/
-install -m 0755 libexec/cfgApp               %{buildroot}/usr/libexec/niova/
+install -d %{buildroot}/usr/local/bin/niova
+install -m 0755 libexec/CTLPlane_pmdbServer  %{buildroot}/usr/local/bin/niova/
+install -m 0755 libexec/CTLPlane_proxy       %{buildroot}/usr/local/bin/niova/
+install -m 0755 libexec/cp-monitor           %{buildroot}/usr/local/bin/niova/
+install -m 0755 libexec/niova-ctl            %{buildroot}/usr/local/bin/niova/
+install -m 0755 libexec/cc-manager           %{buildroot}/usr/local/bin/niova/
+install -m 0755 libexec/cfgApp               %{buildroot}/usr/local/bin/niova/
 
 install -d %{buildroot}%{niova_libdir}
 
@@ -209,13 +188,13 @@ echo ""
 # ---------------------------------------------------------------------------
 %files
 
-%dir /usr/libexec/niova
-/usr/libexec/niova/CTLPlane_pmdbServer
-/usr/libexec/niova/CTLPlane_proxy
-/usr/libexec/niova/cp-monitor
-/usr/libexec/niova/niova-ctl
-/usr/libexec/niova/cc-manager
-/usr/libexec/niova/cfgApp
+%dir /usr/local/bin/niova
+/usr/local/bin/niova/CTLPlane_pmdbServer
+/usr/local/bin/niova/CTLPlane_proxy
+/usr/local/bin/niova/cp-monitor
+/usr/local/bin/niova/niova-ctl
+/usr/local/bin/niova/cc-manager
+/usr/local/bin/niova/cfgApp
 
 %dir %{niova_libdir}
 %{niova_libdir}/*.so*

@@ -1,5 +1,5 @@
 %global pkg_name     niova-core
-%global niova_prefix /opt/niova-core
+%global niova_prefix /var/niova
 %global niova_build  %{_builddir}/niova-core-build
 
 Name:           %{pkg_name}
@@ -9,26 +9,6 @@ Summary:        Niova core C libraries (libbacktrace + niova-core)
 License:        Apache-2.0
 URL:            https://github.com/00pauln00/niova-mdsvc
 ExclusiveArch:  aarch64
-
-# ---------------------------------------------------------------------------
-# Build-time requirements
-# ---------------------------------------------------------------------------
-BuildRequires:  gcc
-BuildRequires:  gcc-c++
-BuildRequires:  make
-BuildRequires:  autoconf
-BuildRequires:  automake
-BuildRequires:  libtool
-BuildRequires:  git
-BuildRequires:  openssl-devel
-BuildRequires:  libuuid-devel
-BuildRequires:  libgcrypt-devel
-
-# ---------------------------------------------------------------------------
-# Runtime requirements
-# ---------------------------------------------------------------------------
-Requires:       openssl-libs
-Requires:       libuuid
 
 %description
 Shared C libraries for the Niova distributed storage system (aarch64).
@@ -64,7 +44,7 @@ export GOARCH=arm64
 export GOOS=linux
 
 mkdir -p %{niova_build}
-bash packaging/build-niova-core.sh %{niova_build} %{?_smp_mflags:-j}$(nproc)
+bash packaging/build-niova-core.sh %{niova_build} %{?_smp_mflags}
 
 # ---------------------------------------------------------------------------
 # %install

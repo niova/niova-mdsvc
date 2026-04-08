@@ -10,7 +10,7 @@ User=niova
 Group=niova
 EnvironmentFile=/etc/niova/niova.env
 
-ExecStart=/usr/libexec/niova/CTLPlane_proxy \
+ExecStart=/usr/local/bin/niova/CTLPlane_proxy \
     -r ${RAFT_UUID} \
     -u ${CLIENT_UUID} \
     -pa /var/lib/niova/configs/gossipNodes \

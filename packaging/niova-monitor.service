@@ -10,7 +10,7 @@ User=niova
 Group=niova
 EnvironmentFile=/etc/niova/niova.env
 
-ExecStart=/usr/libexec/niova/cp-monitor -db ${DB_PATH}
+ExecStart=/usr/local/bin/niova/cp-monitor -db ${DB_PATH}
 
 Restart=on-failure
 RestartSec=10s

@@ -10,7 +10,7 @@ User=niova
 Group=niova
 EnvironmentFile=/etc/niova/niova.env
 
-ExecStart=/usr/libexec/niova/CTLPlane_pmdbServer \
+ExecStart=/usr/local/bin/niova/CTLPlane_pmdbServer \
     -r ${RAFT_UUID} \
     -u ${PEER_UUID} \
     -g /var/lib/niova/configs/gossipNodes \
