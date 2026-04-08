@@ -1,0 +1,23 @@
+[Unit]
+Description=Niova Control Plane Prometheus Monitor
+Documentation=https://github.com/00pauln00/niova-mdsvc
+After=niova-pmdbserver.service
+Wants=niova-pmdbserver.service
+
+[Service]
+Type=simple
+User=niova
+Group=niova
+EnvironmentFile=/etc/niova/niova.env
+
+ExecStart=/usr/libexec/niova/cp-monitor -db ${DB_PATH}
+
+Restart=on-failure
+RestartSec=10s
+TimeoutStopSec=10s
+
+StandardOutput=append:/var/log/niova/monitor_stdout.log
+StandardError=append:/var/log/niova/monitor_stderr.log
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,32 @@
+[Unit]
+Description=Niova Control Plane HTTP Proxy
+Documentation=https://github.com/00pauln00/niova-mdsvc
+After=niova-pmdbserver.service
+Requires=niova-pmdbserver.service
+
+[Service]
+Type=simple
+User=niova
+Group=niova
+EnvironmentFile=/etc/niova/niova.env
+
+ExecStart=/usr/libexec/niova/CTLPlane_proxy \
+    -r ${RAFT_UUID} \
+    -u ${CLIENT_UUID} \
+    -pa /var/lib/niova/configs/gossipNodes \
+    -n proxy-%H \
+    -l /var/log/niova/proxy.log \
+    -ll Info
+
+# Allow the pmdb server time to elect a leader before the proxy starts
+ExecStartPre=/bin/sleep 5
+
+Restart=on-failure
+RestartSec=5s
+TimeoutStopSec=15s
+
+StandardOutput=append:/var/log/niova/proxy_stdout.log
+StandardError=append:/var/log/niova/proxy_stderr.log
+
+[Install]
+WantedBy=multi-user.target

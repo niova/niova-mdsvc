@@ -77,3 +77,37 @@ help:
 .PHONY: install_all install_only compile pmdbserver proxyserver ncpcclient \
         configapp testapp niova-ctl monitor ccManager install clean \
         fmt vet lint
+
+# ---------------------------------------------------------------------------
+# RPM packaging targets — build-in-place mode
+#
+# rpmbuild compiles directly inside this repo. No source tarball is needed.
+# The build machine must have git and repo access (for submodule init).
+#
+# Usage:
+#   make rpm-x86_64  VERSION=1.0.0
+#   make rpm-aarch64 VERSION=1.0.0
+#
+# Output RPMs are written to rpmbuild/RPMS/<arch>/
+# ---------------------------------------------------------------------------
+VERSION ?= 1.0.0
+
+rpm-x86_64:
+	mkdir -p rpmbuild/{BUILD,BUILDROOT,RPMS,SOURCES,SPECS,SRPMS}
+	git submodule update --init --recursive
+	rpmbuild -ba packaging/niova-mdsvc-x86_64.spec \
+	    --build-in-place \
+	    --define "_topdir $(CURDIR)/rpmbuild" \
+	    --define "_builddir $(CURDIR)" \
+	    --define "version $(VERSION)"
+	@echo "RPM built: rpmbuild/RPMS/x86_64/"
+
+rpm-aarch64:
+	mkdir -p rpmbuild/{BUILD,BUILDROOT,RPMS,SOURCES,SPECS,SRPMS}
+	git submodule update --init --recursive
+	rpmbuild -ba packaging/niova-mdsvc-aarch64.spec \
+	    --build-in-place \
+	    --define "_topdir $(CURDIR)/rpmbuild" \
+	    --define "_builddir $(CURDIR)" \
+	    --define "version $(VERSION)"
+	@echo "RPM built: rpmbuild/RPMS/aarch64/"
