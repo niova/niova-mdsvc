@@ -1,5 +1,5 @@
 %global pkg_name     niova-mdsvc
-%global niova_libdir %{_libdir}/niova-mdsvc
+%global niova_libdir /var/niova/lib
 %global niova_build  %{_builddir}/niova-mdsvc-build
 %{!?niova_core: %global niova_core /var/niova}
 
@@ -54,9 +54,7 @@ Provides the following binaries:
   CTLPlane_pmdbServer  - Raft/PMDB consensus server
   CTLPlane_proxy       - HTTP API gateway (service discovery via Serf gossip)
   cp-monitor           - Prometheus metrics exporter
-  niova-ctl            - TUI cluster management tool
   cc-manager           - NISD container configuration manager
-  cfgApp               - Port-range configuration utility
 
 Bundles the niova-raft and niova-pumicedb C shared libraries in
 %{niova_libdir}, registered with ldconfig. The base niova-core libraries
@@ -107,9 +105,7 @@ mkdir -p libexec
 go build -o libexec/CTLPlane_pmdbServer  ./controlplane/pmdbServer/
 go build -o libexec/CTLPlane_proxy       ./controlplane/proxy/
 go build -o libexec/cp-monitor           ./controlplane/monitor/
-go build -o libexec/niova-ctl            ./controlplane/niova-ctl/
 go build -o libexec/cc-manager           ./controlplane/containerConfigManager/
-go build -o libexec/cfgApp               ./controlplane/configApplication/
 
 # ---------------------------------------------------------------------------
 # install
@@ -121,9 +117,7 @@ install -d %{buildroot}/usr/local/bin/niova
 install -m 0755 libexec/CTLPlane_pmdbServer  %{buildroot}/usr/local/bin/niova/
 install -m 0755 libexec/CTLPlane_proxy       %{buildroot}/usr/local/bin/niova/
 install -m 0755 libexec/cp-monitor           %{buildroot}/usr/local/bin/niova/
-install -m 0755 libexec/niova-ctl            %{buildroot}/usr/local/bin/niova/
 install -m 0755 libexec/cc-manager           %{buildroot}/usr/local/bin/niova/
-install -m 0755 libexec/cfgApp               %{buildroot}/usr/local/bin/niova/
 
 # ── Bundled C shared libraries (niova-raft + niova-pumicedb only) ────────────
 # Installed to a private directory to avoid conflicts with system libraries.
@@ -155,12 +149,11 @@ install -m 0644 packaging/niova-mdsvc.conf \
 
 # ── Scripts ─────────────────────────────────────────────────────────────────
 install -d %{buildroot}/usr/share/niova-mdsvc/scripts
-install -m 0755 scripts/deploy/start_pumice.sh \
-    %{buildroot}/usr/share/niova-mdsvc/scripts/
-install -m 0755 scripts/deploy/gen_raft_cfgs.sh \
-    %{buildroot}/usr/share/niova-mdsvc/scripts/
 install -m 0755 scripts/deploy/deploy.sh \
     %{buildroot}/usr/share/niova-mdsvc/scripts/
+install -m 0755 scripts/deploy/serf_gossip_interface.sh \
+    %{buildroot}/usr/share/niova-mdsvc/scripts/
+   
 
 # ── Config example ──────────────────────────────────────────────────────────
 install -m 0644 scripts/deploy/config.yaml \
@@ -250,9 +243,7 @@ echo ""
 /usr/local/bin/niova/CTLPlane_pmdbServer
 /usr/local/bin/niova/CTLPlane_proxy
 /usr/local/bin/niova/cp-monitor
-/usr/local/bin/niova/niova-ctl
 /usr/local/bin/niova/cc-manager
-/usr/local/bin/niova/cfgApp
 
 # Bundled C libraries — niova-raft + niova-pumicedb only
 %dir %{niova_libdir}
