@@ -1,5 +1,5 @@
 %global pkg_name     niova-core
-%global niova_prefix /var/niova
+%global niova_prefix /usr/local
 %global niova_build  %{_builddir}/niova-core-build
 
 Name:           %{pkg_name}

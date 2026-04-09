@@ -1,7 +1,7 @@
 %global pkg_name     niova-mdsvc
-%global niova_libdir /var/niova/lib
+%global niova_libdir /usr/local/lib
 %global niova_build  %{_builddir}/niova-mdsvc-build
-%{!?niova_core: %global niova_core /var/niova}
+%{!?niova_core: %global niova_core /usr/local}
 
 Name:           %{pkg_name}
 Version:        %{version}
@@ -163,7 +163,7 @@ fi
 %systemd_post niova-pmdbserver.service niova-proxy.service niova-monitor.service
 
 echo ""
-echo "==> niova-mdsvc installed."
+echo "==> niova-mdsvc installed.(scripts in /usr/share/niova-mdsvc/scripts)"
 echo ""
 echo "Edit config.yaml (nodes, ports, output_dir, bin_dir, lib_dir), then run:"
 echo ""

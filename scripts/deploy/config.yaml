@@ -18,4 +18,4 @@ ports:
 # Paths
 output_dir: /var/niova/cp
 bin_dir: /usr/local/bin/niova
-lib_dir: /var/niova/lib
+lib_dir: /usr/local/lib

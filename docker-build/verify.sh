@@ -35,7 +35,7 @@ echo "==> Installing niova-mdsvc RPM..."
 docker exec "${CONTAINER_NAME}" dnf install -y /tmp/rpms/niova-mdsvc-*.rpm
 
 echo "==> Verifying installation paths..."
-docker exec "${CONTAINER_NAME}" ls -l /var/niova/lib/libniova.so
+docker exec "${CONTAINER_NAME}" ls -l /usr/local/lib/libniova.so
 docker exec "${CONTAINER_NAME}" ls -l /usr/local/bin/niova/CTLPlane_pmdbServer
 
 echo "==> Verifying systemd units..."
