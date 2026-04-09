@@ -17,28 +17,28 @@ compile: vet
 	go mod tidy
 
 pmdbserver:
-	go build -o libexec/CTLPlane_pmdbServer ./controlplane/pmdbServer/
+	go build -buildvcs=false -o libexec/CTLPlane_pmdbServer ./controlplane/pmdbServer/
 
 proxyserver:
-	go build -o libexec/CTLPlane_proxy ./controlplane/proxy/
+	go build -buildvcs=false -o libexec/CTLPlane_proxy ./controlplane/proxy/
 
 ncpcclient:
-	go build -o libexec/ncpc ./controlplane/ncpc/
+	go build -buildvcs=false -o libexec/ncpc ./controlplane/ncpc/
 
 configapp:
-	go build -o libexec/cfgApp ./controlplane/configApplication/
+	go build -buildvcs=false -o libexec/cfgApp ./controlplane/configApplication/
 
 testapp:
-	go build -o libexec/testApp ./controlplane/testApplication/
+	go build -buildvcs=false -o libexec/testApp ./controlplane/testApplication/
 
 niova-ctl:
-	go build -o libexec/niova-ctl ./controlplane/niova-ctl/
+	go build -buildvcs=false -o libexec/niova-ctl ./controlplane/niova-ctl/
 
 monitor: 
-	go build -o libexec/cp-monitor ./controlplane/monitor/
+	go build -buildvcs=false -o libexec/cp-monitor ./controlplane/monitor/
 
 ccManager: 
-	go build -o libexec/cc-manager ./controlplane/containerConfigManager/
+	go build -buildvcs=false -o libexec/cc-manager ./controlplane/containerConfigManager/
 
 install:
 	cp libexec/CTLPlane_pmdbServer $(DIR)/libexec/niova/CTLPlane_pmdbServer
@@ -97,7 +97,6 @@ VERSION ?= 1.0.0
 # ---------------------------------------------------------------------------
 rpm-core-x86_64:
 	mkdir -p rpmbuild/{BUILD,BUILDROOT,RPMS,SOURCES,SPECS,SRPMS}
-	git submodule update --init --recursive
 	rpmbuild -ba packaging/niova-core-x86_64.spec \
 	    --build-in-place \
 	    --define "_topdir $(CURDIR)/rpmbuild" \
@@ -107,7 +106,6 @@ rpm-core-x86_64:
 
 rpm-core-aarch64:
 	mkdir -p rpmbuild/{BUILD,BUILDROOT,RPMS,SOURCES,SPECS,SRPMS}
-	git submodule update --init --recursive
 	rpmbuild -ba packaging/niova-core-aarch64.spec \
 	    --build-in-place \
 	    --define "_topdir $(CURDIR)/rpmbuild" \
@@ -120,7 +118,6 @@ rpm-core-aarch64:
 # ---------------------------------------------------------------------------
 rpm-x86_64:
 	mkdir -p rpmbuild/{BUILD,BUILDROOT,RPMS,SOURCES,SPECS,SRPMS}
-	git submodule update --init --recursive
 	rpmbuild -ba packaging/niova-mdsvc-x86_64.spec \
 	    --build-in-place \
 	    --define "_topdir $(CURDIR)/rpmbuild" \
@@ -131,7 +128,6 @@ rpm-x86_64:
 
 rpm-aarch64:
 	mkdir -p rpmbuild/{BUILD,BUILDROOT,RPMS,SOURCES,SPECS,SRPMS}
-	git submodule update --init --recursive
 	rpmbuild -ba packaging/niova-mdsvc-aarch64.spec \
 	    --build-in-place \
 	    --define "_topdir $(CURDIR)/rpmbuild" \

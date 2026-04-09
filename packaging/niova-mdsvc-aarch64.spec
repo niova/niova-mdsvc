@@ -66,10 +66,10 @@ export LD_LIBRARY_PATH="%{niova_build}/lib:%{niova_core}/lib"
 
 mkdir -p %{niova_build}/libexec
 
-go build -o %{niova_build}/libexec/CTLPlane_pmdbServer  ./controlplane/pmdbServer/
-go build -o %{niova_build}/libexec/CTLPlane_proxy       ./controlplane/proxy/
-go build -o %{niova_build}/libexec/cp-monitor           ./controlplane/monitor/
-go build -o %{niova_build}/libexec/cc-manager           ./controlplane/containerConfigManager/
+go build -buildvcs=false -o %{niova_build}/libexec/CTLPlane_pmdbServer  ./controlplane/pmdbServer/
+go build -buildvcs=false -o %{niova_build}/libexec/CTLPlane_proxy       ./controlplane/proxy/
+go build -buildvcs=false -o %{niova_build}/libexec/cp-monitor           ./controlplane/monitor/
+go build -buildvcs=false -o %{niova_build}/libexec/cc-manager           ./controlplane/containerConfigManager/
 
 # ---------------------------------------------------------------------------
 # install

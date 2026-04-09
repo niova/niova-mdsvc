@@ -4,9 +4,6 @@ nodes:
   - 127.0.0.1
   - 127.0.0.1
   - 127.0.0.1  
-# Deployment mode: standalone or distributed
-mode: standalone
-
 # Gossip configuration
 gossip:
   port_range:
