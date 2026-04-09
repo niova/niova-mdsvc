@@ -171,7 +171,7 @@ if [ "$TYPE" = "localhost" ]; then
 
         "${BIN_DIR}/CTLPlane_pmdbServer" -r "$RAFT_UUID" -u "$uuid" \
             -g "${RAFT_CONFIG_DIR}/gossipNodes" \
-            -l "${LOG_DIR}/server_${uuid}.log" -ll Trace > "${LOG_DIR}/pmdb_${uuid}_stdout.log" 2>&1 &
+            -l "${LOG_DIR}/pmdb_server_${uuid}.log" -ll Trace > "${LOG_DIR}/pmdb_server_${uuid}_stdout.log" 2>&1 &
 
     done
 
@@ -231,7 +231,7 @@ log_remote "Found identity: \$PEER_UUID"
 log_remote "Starting pmdbServer..."
 nohup "${BIN_DIR}/CTLPlane_pmdbServer" -r "${RAFT_UUID}" -u "\$PEER_UUID" \
     -g "${RAFT_CONFIG_DIR}/gossipNodes" \
-    -l "${LOG_DIR}/server_\${PEER_UUID}.log" -ll Trace > "${LOG_DIR}/pmdb_\${PEER_UUID}_stdout.log" 2>&1 &
+    -l "${LOG_DIR}/pmdb_server_\${PEER_UUID}.log" -ll Trace > "${LOG_DIR}/pmdb_server_\${PEER_UUID}_stdout.log" 2>&1 &
 
 sleep 2
 
