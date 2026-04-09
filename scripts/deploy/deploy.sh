@@ -1,7 +1,7 @@
 #!/bin/bash
-# deploy.sh - CTLPlane CP deployment script (post-RPM install)
+# deploy.sh - CTLPlane CP deployment script (FINAL FIXED)
 
-set -e
+set -euo pipefail
 
 # ---- Defaults ----
 MODE="restart"
@@ -26,14 +26,14 @@ done
 shift $((OPTIND - 1))
 
 CFG_FILE="${1:-}"
-[ -n "$CFG_FILE" ] || { echo "Config file required."; usage; }
+[ -n "$CFG_FILE" ] || usage
 CFG_FILE="$(readlink -f "$CFG_FILE")"
-[ -f "$CFG_FILE" ] || { echo "Config file not found: $1"; exit 1; }
+[ -f "$CFG_FILE" ] || { echo "Config not found: $CFG_FILE"; exit 1; }
 
-case "$MODE" in init|restart) ;; *) echo "Invalid mode: $MODE"; usage ;; esac
-case "$TYPE" in localhost|multinode) ;; *) echo "Invalid type: $TYPE"; usage ;; esac
+case "$MODE" in init|restart) ;; *) usage ;; esac
+case "$TYPE" in localhost|multinode) ;; *) usage ;; esac
 
-log "mode=${MODE}  type=${TYPE}  config=${CFG_FILE}"
+log "mode=$MODE type=$TYPE config=$CFG_FILE"
 
 # ---- Parse config ----
 mapfile -t NODES < <(awk '
@@ -51,32 +51,29 @@ OUTPUT_DIR=$(awk '/output_dir:/ {print $2}' "$CFG_FILE")
 LIB_DIR=$(awk '/lib_dir:/ {print $2}' "$CFG_FILE")
 BIN_DIR=$(awk '/bin_dir:/ {print $2}' "$CFG_FILE")
 
-# ---- Validations ----
-[ "${#NODES[@]}" -gt 0 ] || { echo "No nodes found in config"; exit 1; }
-[ -n "$PEER_PORT" ]         || { echo "peer port missing in config"; exit 1; }
-[ -n "$CLIENT_PORT" ]       || { echo "client port missing in config"; exit 1; }
-[ -n "$START_GOSSIP_PORT" ] || { echo "gossip start port missing in config"; exit 1; }
-[ -n "$END_GOSSIP_PORT" ]   || { echo "gossip end port missing in config"; exit 1; }
-[ -n "$OUTPUT_DIR" ]        || { echo "output_dir missing in config"; exit 1; }
-[ -n "$LIB_DIR" ]           || { echo "lib_dir missing in config"; exit 1; }
-[ -n "$BIN_DIR" ]           || { echo "bin_dir missing in config"; exit 1; }
+# ---- Validate ----
+[ "${#NODES[@]}" -gt 0 ] || exit 1
+[ -n "$PEER_PORT" ] || exit 1
+[ -n "$CLIENT_PORT" ] || exit 1
+[ -n "$OUTPUT_DIR" ] || exit 1
+[ -n "$LIB_DIR" ] || exit 1
+[ -n "$BIN_DIR" ] || exit 1
 
-# ---- Derived paths ----
+# ---- Paths ----
 RAFT_CONFIG_DIR="${OUTPUT_DIR}/config"
-LIBEXEC_DIR="${BIN_DIR}"
 LOG_DIR="${OUTPUT_DIR}/log"
 DB_DIR="${OUTPUT_DIR}/db"
 
-# ---- Env defaults ----
-: "${LD_LIBRARY_PATH:=${LIB_DIR}}"
-: "${NIOVA_INOTIFY_BASE_PATH:=${OUTPUT_DIR}/ctl-interface}"
-NIOVA_APPLY_HANDLER_VERSION=0
-USER_ENCRYPTION_KEY="81gavMyXh9dEMT7kM7gR+gS79ovzPwyjWmV1VA/TUII"
+mkdir -p "$RAFT_CONFIG_DIR" "$LOG_DIR" "$DB_DIR" "${OUTPUT_DIR}/ctl-interface"
 
-export LD_LIBRARY_PATH
-export NIOVA_INOTIFY_BASE_PATH
-export NIOVA_APPLY_HANDLER_VERSION
-export USER_ENCRYPTION_KEY
+# ---- Env ----
+export LD_LIBRARY_PATH="${LIB_DIR}:${LD_LIBRARY_PATH:-}"
+export NIOVA_INOTIFY_BASE_PATH="${OUTPUT_DIR}/ctl-interface"
+export NIOVA_APPLY_HANDLER_VERSION=0
+export USER_ENCRYPTION_KEY="81gavMyXh9dEMT7kM7gR+gS79ovzPwyjWmV1VA/TUII"
+
+
+
 
 # ============================================================
 # FUNCTION: update STORE paths (restart mode)
@@ -112,17 +109,50 @@ update_store_paths() {
 }
 
 # ============================================================
-# INIT MODE: cleanup + recreate directories
+# INIT
 # ============================================================
 if [ "$MODE" = "init" ]; then
-    log "Init mode: cleaning old state under ${OUTPUT_DIR}"
+    log "Initializing..."
 
-    rm -rf "${RAFT_CONFIG_DIR}" "${LOG_DIR}" "${DB_DIR}" "${OUTPUT_DIR}/ctl-interface"
+    rm -rf "$RAFT_CONFIG_DIR" "$LOG_DIR" "$DB_DIR" "${OUTPUT_DIR}/ctl-interface"
+    mkdir -p "$RAFT_CONFIG_DIR" "$LOG_DIR" "$DB_DIR" "${OUTPUT_DIR}/ctl-interface"
 
-    mkdir -p "${RAFT_CONFIG_DIR}" "${LOG_DIR}" "${DB_DIR}" "${OUTPUT_DIR}/ctl-interface"
-else
-    mkdir -p "${RAFT_CONFIG_DIR}" "${LOG_DIR}" "${DB_DIR}" "${OUTPUT_DIR}/ctl-interface"
+    RAFT_UUID=$(uuidgen)
+    echo "RAFT $RAFT_UUID" > "${RAFT_CONFIG_DIR}/${RAFT_UUID}.raft"
+
+    idx=0
+    for node in "${NODES[@]}"; do
+        PEER_UUID=$(uuidgen)
+
+        if [ "$TYPE" = "localhost" ]; then
+            IP="127.0.0.1"
+            PPORT=$((PEER_PORT + idx))
+            CPORT=$((CLIENT_PORT + idx))
+        else
+            IP="$node"
+            PPORT="$PEER_PORT"
+            CPORT="$CLIENT_PORT"
+        fi
+
+        cat > "${RAFT_CONFIG_DIR}/${PEER_UUID}.peer" <<EOF
+RAFT         ${RAFT_UUID}
+IPADDR       ${IP}
+PORT         ${PPORT}
+CLIENT_PORT  ${CPORT}
+STORE        ${DB_DIR}/${PEER_UUID}.raftdb
+EOF
+
+        idx=$((idx + 1))
+    done
+
+    echo "${NODES[*]}" > "${RAFT_CONFIG_DIR}/gossipNodes"
+    echo "${START_GOSSIP_PORT} ${END_GOSSIP_PORT}" >> "${RAFT_CONFIG_DIR}/gossipNodes"
 fi
+
+RAFT_FILE=$(ls "${RAFT_CONFIG_DIR}"/*.raft | head -n1)
+RAFT_UUID=$(basename "$RAFT_FILE" .raft)
+
+log "RAFT_UUID=$RAFT_UUID"
 
 # ============================================================
 # RESTART MODE: fix STORE paths
@@ -131,133 +161,96 @@ if [ "$MODE" = "restart" ]; then
     update_store_paths "${RAFT_CONFIG_DIR}" "${DB_DIR}"
 fi
 
-# ============================================================
-# INIT MODE: generate Raft configs
-# ============================================================
-if [ "$MODE" = "init" ]; then
-    log "Generating Raft configs in ${RAFT_CONFIG_DIR}"
-
-    RAFT_UUID=$(uuidgen)
-    RAFT_FILE="${RAFT_CONFIG_DIR}/${RAFT_UUID}.raft"
-    echo "RAFT ${RAFT_UUID}" > "$RAFT_FILE"
-
-    idx=0
-    for node in "${NODES[@]}"; do
-        PEER_UUID=$(uuidgen)
-        echo "PEER ${PEER_UUID}" >> "$RAFT_FILE"
-
-        if [ "$TYPE" = "localhost" ]; then
-            PEER_IP="127.0.0.1"
-            NODE_PEER_PORT=$((PEER_PORT + idx))
-            NODE_CLIENT_PORT=$((CLIENT_PORT + idx))
-        else
-            PEER_IP="$node"
-            NODE_PEER_PORT="$PEER_PORT"
-            NODE_CLIENT_PORT="$CLIENT_PORT"
-        fi
-
-        cat > "${RAFT_CONFIG_DIR}/${PEER_UUID}.peer" <<EOF
-RAFT         ${RAFT_UUID}
-IPADDR       ${PEER_IP}
-PORT         ${NODE_PEER_PORT}
-CLIENT_PORT  ${NODE_CLIENT_PORT}
-STORE        ${DB_DIR}/${PEER_UUID}.raftdb
-EOF
-
-        log "peer ${PEER_UUID} ip=${PEER_IP} port=${NODE_PEER_PORT}"
-        idx=$((idx + 1))
-    done
-
-    if [ "$TYPE" = "localhost" ]; then
-        GOSSIP_IPS=""
-        for (( i=0; i<${#NODES[@]}; i++ )); do
-            [ -z "${GOSSIP_IPS}" ] && GOSSIP_IPS="127.0.0.1" || GOSSIP_IPS="${GOSSIP_IPS} 127.0.0.1"
-        done
-        echo "${GOSSIP_IPS}" > "${RAFT_CONFIG_DIR}/gossipNodes"
-    else
-        echo "${NODES[*]}" > "${RAFT_CONFIG_DIR}/gossipNodes"
-    fi
-    echo "${START_GOSSIP_PORT} ${END_GOSSIP_PORT}" >> "${RAFT_CONFIG_DIR}/gossipNodes"
-fi
-
-# ---- Locate RAFT UUID ----
-RAFT_FILE=$(ls -1 "${RAFT_CONFIG_DIR}"/*.raft 2>/dev/null | head -n1)
-[ -n "$RAFT_FILE" ] || { echo "No .raft file found. Run with -m init"; exit 1; }
-
-RAFT_UUID=$(basename "$RAFT_FILE" .raft)
-log "Using RAFT_UUID=${RAFT_UUID}"
-
-: "${NIOVA_LOCAL_CTL_SVC_DIR:=${RAFT_CONFIG_DIR}}"
-export NIOVA_LOCAL_CTL_SVC_DIR
 
 # ============================================================
-# LOCALHOST MODE
+# LOCAL MODE
 # ============================================================
 if [ "$TYPE" = "localhost" ]; then
-    for peer_file in "${RAFT_CONFIG_DIR}"/*.peer; do
-        peer_uuid=$(basename "$peer_file" .peer)
+    for peer in "${RAFT_CONFIG_DIR}"/*.peer; do
+        uuid=$(basename "$peer" .peer)
 
-        "${LIBEXEC_DIR}/CTLPlane_pmdbServer" \
-            -r "${RAFT_UUID}" \
-            -u "${peer_uuid}" \
+        "${BIN_DIR}/CTLPlane_pmdbServer" -r "$RAFT_UUID" -u "$uuid" \
             -g "${RAFT_CONFIG_DIR}/gossipNodes" \
-            -l "${LOG_DIR}/pmdb_server_${peer_uuid}.log" \
-            -ll "Trace" \
-            -p 1 \
-            > "${LOG_DIR}/pmdb_server_${peer_uuid}_stdouterr" 2>&1 &
+            -l "${LOG_DIR}/server_${uuid}.log" -ll Trace > "${LOG_DIR}/pmdb_${uuid}_stdout.log" 2>&1 &
+
     done
 
     sleep 5
 
-    CUUID=$(uuidgen)
-    "${LIBEXEC_DIR}/CTLPlane_proxy" \
-        -r "${RAFT_UUID}" \
-        -u "${CUUID}" \
+    PROXY_UUID=$(uuidgen)
+    "${BIN_DIR}/CTLPlane_proxy" -r "$RAFT_UUID" \
+        -u "$PROXY_UUID" \
         -pa "${RAFT_CONFIG_DIR}/gossipNodes" \
-        -n "Node_${CUUID}" \
-        -l "${LOG_DIR}/pmdb_client_${CUUID}.log" \
-        -ll "Trace" \
-        > "${LOG_DIR}/pmdb_client_${CUUID}_stdouterr" 2>&1 &
+        -n "Node" \
+        -l "${LOG_DIR}/proxy_${PROXY_UUID}.log" -ll Trace > "${LOG_DIR}/proxy_${PROXY_UUID}_stdout.log" 2>&1 &
+fi
 
 # ============================================================
-# MULTINODE MODE
+# MULTINODE MODE (NFS-BASED)
 # ============================================================
-else
-    PDSH_HOSTS=$(IFS=','; echo "${NODES[*]}")
+if [ "$TYPE" = "multinode" ]; then
 
-    for node in "${NODES[@]}"; do
-        rsync -az "${RAFT_CONFIG_DIR}/" "${node}:${RAFT_CONFIG_DIR}/"
-    done
+    export PDSH_SSH_ARGS="-o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=no"
+    PDSH_HOST_LIST=$(IFS=','; echo "${NODES[*]}")
 
-    pdsh -w "${PDSH_HOSTS}" bash <<PDSH_CMD
-export NIOVA_LOCAL_CTL_SVC_DIR='${NIOVA_LOCAL_CTL_SVC_DIR}'
-export LD_LIBRARY_PATH='${LD_LIBRARY_PATH}'
-export NIOVA_INOTIFY_BASE_PATH='${NIOVA_INOTIFY_BASE_PATH}'
+    log "Preparing shared deployment script..."
 
-RAFT_CONFIG_DIR='${RAFT_CONFIG_DIR}'
-LIBEXEC_DIR='${LIBEXEC_DIR}'
-LOG_DIR='${LOG_DIR}'
-RAFT_UUID='${RAFT_UUID}'
+    # Generate the shared remote start script on NFS
+    REMOTE_SCRIPT="${OUTPUT_DIR}/remote_start.sh"
+    cat > "$REMOTE_SCRIPT" <<EOF
+#!/usr/bin/bash
+set -euo pipefail
 
-IPS=\$(hostname -I | tr ' ' '\n')
-PEER_FILE=\$(for ip in \$IPS; do grep -il "IPADDR[[:space:]]\+\$ip" "\$RAFT_CONFIG_DIR"/*.peer && break; done)
+# Environment - using shared paths on NFS
+export LD_LIBRARY_PATH="${LIB_DIR}:/usr/lib64:/usr/lib:\${LD_LIBRARY_PATH:-}"
+export NIOVA_INOTIFY_BASE_PATH="${OUTPUT_DIR}/ctl-interface"
+export NIOVA_APPLY_HANDLER_VERSION=0
+export USER_ENCRYPTION_KEY="81gavMyXh9dEMT7kM7gR+gS79ovzPwyjWmV1VA/TUII"
+
+log_remote() { echo "[remote][\$(hostname)][\$(date '+%Y-%m-%d %H:%M:%S')] \$*"; }
+
+log_remote "Detecting identity..."
+
+PEER_FILE=""
+for IP in \$(hostname -I); do
+    MATCH=\$(grep -il "IPADDR[[:space:]][[:space:]]*\$IP" "${RAFT_CONFIG_DIR}"/*.peer | head -n1 || true)
+    if [ -n "\$MATCH" ]; then
+        PEER_FILE="\$MATCH"
+        break
+    fi
+done
+
+if [ -z "\$PEER_FILE" ]; then
+    log_remote "ERROR: No matching peer found for IPs: \$(hostname -I)"
+    exit 1
+fi
 
 PEER_UUID=\$(basename "\$PEER_FILE" .peer)
+log_remote "Found identity: \$PEER_UUID"
 
-"\$LIBEXEC_DIR/CTLPlane_pmdbServer" -r "\$RAFT_UUID" -u "\$PEER_UUID" \
--g "\$RAFT_CONFIG_DIR/gossipNodes" \
--l "\$LOG_DIR/pmdb_server_\$PEER_UUID.log" \
--ll Trace -p 1 > "\$LOG_DIR/out" 2>&1 &
+log_remote "Starting pmdbServer..."
+nohup "${BIN_DIR}/CTLPlane_pmdbServer" -r "${RAFT_UUID}" -u "\$PEER_UUID" \
+    -g "${RAFT_CONFIG_DIR}/gossipNodes" \
+    -l "${LOG_DIR}/server_\${PEER_UUID}.log" -ll Trace > "${LOG_DIR}/pmdb_\${PEER_UUID}_stdout.log" 2>&1 &
 
-sleep 5
+sleep 2
 
-CUUID=\$(uuidgen)
-"\$LIBEXEC_DIR/CTLPlane_proxy" -r "\$RAFT_UUID" -u "\$CUUID" \
--pa "\$RAFT_CONFIG_DIR/gossipNodes" \
--n "Node_\$CUUID" \
--l "\$LOG_DIR/pmdb_client_\$CUUID.log" \
--ll Trace > "\$LOG_DIR/out2" 2>&1 &
-PDSH_CMD
+log_remote "Starting proxy..."
+PROXY_UUID=\$(uuidgen)
+nohup "${BIN_DIR}/CTLPlane_proxy" -r "${RAFT_UUID}" -u "\$PROXY_UUID" \
+    -pa "${RAFT_CONFIG_DIR}/gossipNodes" \
+    -n "Node" \
+    -l "${LOG_DIR}/proxy_\${PROXY_UUID}.log" -ll Trace > "${LOG_DIR}/proxy_\${PROXY_UUID}_stdout.log" 2>&1 &
+
+log_remote "Startup sequence complete."
+EOF
+    chmod +x "$REMOTE_SCRIPT"
+
+    # In NFS mode, we assume directories and files are already visible to all nodes.
+    # We just need to trigger the execution via pdsh.
+
+    log "Starting cluster via pdsh (shared NFS paths)..."
+    pdsh -t 5 -R ssh -w "$PDSH_HOST_LIST" "$REMOTE_SCRIPT"
 
 fi
 
