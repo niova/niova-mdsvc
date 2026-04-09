@@ -163,12 +163,22 @@ fi
 %systemd_post niova-pmdbserver.service niova-proxy.service niova-monitor.service
 
 echo ""
-echo "==> niova-mdsvc installed. Before starting services:"
-echo "    1. Run gen_raft_cfgs.sh to create configs:"
-echo "         /usr/share/niova-mdsvc/scripts/gen_raft_cfgs.sh <config.yaml>"
-echo "    2. Copy generated files to /var/lib/niova/configs/"
-echo "    3. Edit /etc/niova/niova.env — set RAFT_UUID, PEER_UUID, CLIENT_UUID"
-echo "    4. systemctl enable --now niova-pmdbserver niova-proxy niova-monitor"
+echo "==> niova-mdsvc installed."
+echo ""
+echo "Edit config.yaml (nodes, ports, output_dir, bin_dir, lib_dir), then run:"
+echo ""
+echo " deploy.sh -m init -t localhost <config.yaml> # first-time setup (cleans + generates configs)"
+echo " deploy.sh -m restart -t localhost <config.yaml> # reuse configs and start services"
+echo ""
+echo "Modes:"
+echo " init - fresh setup (wipes old state, creates configs)"
+echo " restart - reuse existing configs (updates STORE paths)"
+echo ""
+echo "Types:"
+echo " localhost - run everything on one node"
+echo " distributed - deploy across nodes using pdsh"
+echo ""
+echo "Logs: <output_dir>/log/"
 echo ""
 
 # ---------------------------------------------------------------------------
