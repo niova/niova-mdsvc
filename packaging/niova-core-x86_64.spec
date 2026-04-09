@@ -11,20 +11,6 @@ URL:            https://github.com/00pauln00/niova-mdsvc
 ExclusiveArch:  x86_64
 
 # ---------------------------------------------------------------------------
-# Build-time requirements
-# ---------------------------------------------------------------------------
-BuildRequires:  gcc
-BuildRequires:  gcc-c++
-BuildRequires:  make
-BuildRequires:  autoconf
-BuildRequires:  automake
-BuildRequires:  libtool
-BuildRequires:  git
-BuildRequires:  openssl-devel
-BuildRequires:  libuuid-devel
-BuildRequires:  libgcrypt-devel
-
-# ---------------------------------------------------------------------------
 # Runtime requirements
 # ---------------------------------------------------------------------------
 Requires:       openssl-libs

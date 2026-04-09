@@ -11,28 +11,6 @@ License:        Apache-2.0
 URL:            https://github.com/00pauln00/niova-mdsvc
 ExclusiveArch:  x86_64
 
-# ---------------------------------------------------------------------------
-# Build-time requirements
-# ---------------------------------------------------------------------------
-# C build chain
-BuildRequires:  gcc
-BuildRequires:  gcc-c++
-BuildRequires:  make
-BuildRequires:  autoconf
-BuildRequires:  automake
-BuildRequires:  libtool
-BuildRequires:  git
-BuildRequires:  openssl-devel
-BuildRequires:  libuuid-devel
-BuildRequires:  libgcrypt-devel
-BuildRequires:  rocksdb-devel
-
-# niova-core provides libniova*.so and headers under /opt/niova-core
-BuildRequires:  niova-core
-
-# Go toolchain — must be >= 1.24; install from upstream if not in repos.
-# Verify with: go version
-BuildRequires:  golang >= 1.24
 
 # ---------------------------------------------------------------------------
 # Runtime requirements
@@ -99,13 +77,13 @@ export CGO_LDFLAGS="-L%{niova_build}/lib -L%{niova_core}/lib"
 export CGO_CFLAGS="-I%{niova_build}/include -I%{niova_core}/include"
 export LD_LIBRARY_PATH="%{niova_build}/lib:%{niova_core}/lib"
 
-mkdir -p libexec
+mkdir -p %{niova_build}/libexec
 
 # Production CP binaries only — testApp and ncpc are intentionally excluded.
-go build -o libexec/CTLPlane_pmdbServer  ./controlplane/pmdbServer/
-go build -o libexec/CTLPlane_proxy       ./controlplane/proxy/
-go build -o libexec/cp-monitor           ./controlplane/monitor/
-go build -o libexec/cc-manager           ./controlplane/containerConfigManager/
+go build -o %{niova_build}/libexec/CTLPlane_pmdbServer  ./controlplane/pmdbServer/
+go build -o %{niova_build}/libexec/CTLPlane_proxy       ./controlplane/proxy/
+go build -o %{niova_build}/libexec/cp-monitor           ./controlplane/monitor/
+go build -o %{niova_build}/libexec/cc-manager           ./controlplane/containerConfigManager/
 
 # ---------------------------------------------------------------------------
 # install
@@ -114,10 +92,10 @@ go build -o libexec/cc-manager           ./controlplane/containerConfigManager/
 
 # ── Go binaries ─────────────────────────────────────────────────────────────
 install -d %{buildroot}/usr/local/bin/niova
-install -m 0755 libexec/CTLPlane_pmdbServer  %{buildroot}/usr/local/bin/niova/
-install -m 0755 libexec/CTLPlane_proxy       %{buildroot}/usr/local/bin/niova/
-install -m 0755 libexec/cp-monitor           %{buildroot}/usr/local/bin/niova/
-install -m 0755 libexec/cc-manager           %{buildroot}/usr/local/bin/niova/
+install -m 0755 %{niova_build}/libexec/CTLPlane_pmdbServer  %{buildroot}/usr/local/bin/niova/
+install -m 0755 %{niova_build}/libexec/CTLPlane_proxy       %{buildroot}/usr/local/bin/niova/
+install -m 0755 %{niova_build}/libexec/cp-monitor           %{buildroot}/usr/local/bin/niova/
+install -m 0755 %{niova_build}/libexec/cc-manager           %{buildroot}/usr/local/bin/niova/
 
 # ── Bundled C shared libraries (niova-raft + niova-pumicedb only) ────────────
 # Installed to a private directory to avoid conflicts with system libraries.
@@ -138,7 +116,7 @@ find %{buildroot}%{niova_libdir} -name '*.so*' -type f \
 # Copy RocksDB from build environment to niova-mdsvc lib dir
 cp -a /usr/lib64/librocksdb.so.9* %{buildroot}%{niova_libdir}/
 # Also bundle common dependencies from EPEL that might be missing
-for lib in libgflags libsnappy; do
+for lib in libgflags libsnappy libbacktrace; do
     find /usr/lib64 -name "${lib}.so*" -exec cp -a {} %{buildroot}%{niova_libdir}/ \;
 done
 
@@ -265,8 +243,7 @@ echo ""
 # Scripts and example config
 %dir /usr/share/niova-mdsvc
 %dir /usr/share/niova-mdsvc/scripts
-/usr/share/niova-mdsvc/scripts/start_pumice.sh
-/usr/share/niova-mdsvc/scripts/gen_raft_cfgs.sh
+/usr/share/niova-mdsvc/scripts/serf_gossip_interface.sh
 /usr/share/niova-mdsvc/scripts/deploy.sh
 /usr/share/niova-mdsvc/scripts/config.yaml.example
 

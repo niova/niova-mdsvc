@@ -64,12 +64,12 @@ export CGO_LDFLAGS="-L%{niova_build}/lib -L%{niova_core}/lib"
 export CGO_CFLAGS="-I%{niova_build}/include -I%{niova_core}/include"
 export LD_LIBRARY_PATH="%{niova_build}/lib:%{niova_core}/lib"
 
-mkdir -p libexec
+mkdir -p %{niova_build}/libexec
 
-go build -o libexec/CTLPlane_pmdbServer  ./controlplane/pmdbServer/
-go build -o libexec/CTLPlane_proxy       ./controlplane/proxy/
-go build -o libexec/cp-monitor           ./controlplane/monitor/
-go build -o libexec/cc-manager           ./controlplane/containerConfigManager/
+go build -o %{niova_build}/libexec/CTLPlane_pmdbServer  ./controlplane/pmdbServer/
+go build -o %{niova_build}/libexec/CTLPlane_proxy       ./controlplane/proxy/
+go build -o %{niova_build}/libexec/cp-monitor           ./controlplane/monitor/
+go build -o %{niova_build}/libexec/cc-manager           ./controlplane/containerConfigManager/
 
 # ---------------------------------------------------------------------------
 # install
@@ -77,10 +77,10 @@ go build -o libexec/cc-manager           ./controlplane/containerConfigManager/
 %install
 
 install -d %{buildroot}/usr/local/bin/niova
-install -m 0755 libexec/CTLPlane_pmdbServer  %{buildroot}/usr/local/bin/niova/
-install -m 0755 libexec/CTLPlane_proxy       %{buildroot}/usr/local/bin/niova/
-install -m 0755 libexec/cp-monitor           %{buildroot}/usr/local/bin/niova/
-install -m 0755 libexec/cc-manager           %{buildroot}/usr/local/bin/niova/
+install -m 0755 %{niova_build}/libexec/CTLPlane_pmdbServer  %{buildroot}/usr/local/bin/niova/
+install -m 0755 %{niova_build}/libexec/CTLPlane_proxy       %{buildroot}/usr/local/bin/niova/
+install -m 0755 %{niova_build}/libexec/cp-monitor           %{buildroot}/usr/local/bin/niova/
+install -m 0755 %{niova_build}/libexec/cc-manager           %{buildroot}/usr/local/bin/niova/
 
 install -d %{buildroot}%{niova_libdir}
 
@@ -98,7 +98,7 @@ find %{buildroot}%{niova_libdir} -name '*.so*' -type f \
 # Copy RocksDB from build environment to niova-mdsvc lib dir
 cp -a /usr/lib64/librocksdb.so.9* %{buildroot}%{niova_libdir}/
 # Also bundle common dependencies from EPEL that might be missing
-for lib in libgflags libsnappy; do
+for lib in libgflags libsnappy libbacktrace; do
     find /usr/lib64 -name "${lib}.so*" -exec cp -a {} %{buildroot}%{niova_libdir}/ \;
 done
 
