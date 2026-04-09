@@ -67,13 +67,11 @@ DB_DIR="${OUTPUT_DIR}/db"
 mkdir -p "$RAFT_CONFIG_DIR" "$LOG_DIR" "$DB_DIR" "${OUTPUT_DIR}/ctl-interface"
 
 # ---- Env ----
-export LD_LIBRARY_PATH="${LIB_DIR}:${LD_LIBRARY_PATH:-}"
+export LD_LIBRARY_PATH="${LIB_DIR}:/usr/lib64:/usr/lib:${LD_LIBRARY_PATH:-}"
 export NIOVA_INOTIFY_BASE_PATH="${OUTPUT_DIR}/ctl-interface"
+export NIOVA_LOCAL_CTL_SVC_DIR="${RAFT_CONFIG_DIR}"
 export NIOVA_APPLY_HANDLER_VERSION=0
 export USER_ENCRYPTION_KEY="81gavMyXh9dEMT7kM7gR+gS79ovzPwyjWmV1VA/TUII"
-
-
-
 
 # ============================================================
 # FUNCTION: update STORE paths (restart mode)
@@ -118,11 +116,13 @@ if [ "$MODE" = "init" ]; then
     mkdir -p "$RAFT_CONFIG_DIR" "$LOG_DIR" "$DB_DIR" "${OUTPUT_DIR}/ctl-interface"
 
     RAFT_UUID=$(uuidgen)
-    echo "RAFT $RAFT_UUID" > "${RAFT_CONFIG_DIR}/${RAFT_UUID}.raft"
+    RAFT_FILE="${RAFT_CONFIG_DIR}/${RAFT_UUID}.raft"
+    echo "RAFT $RAFT_UUID" > "$RAFT_FILE"
 
     idx=0
     for node in "${NODES[@]}"; do
         PEER_UUID=$(uuidgen)
+        echo "PEER ${PEER_UUID}" >> "$RAFT_FILE"
 
         if [ "$TYPE" = "localhost" ]; then
             IP="127.0.0.1"
@@ -149,7 +149,8 @@ EOF
     echo "${START_GOSSIP_PORT} ${END_GOSSIP_PORT}" >> "${RAFT_CONFIG_DIR}/gossipNodes"
 fi
 
-RAFT_FILE=$(ls "${RAFT_CONFIG_DIR}"/*.raft | head -n1)
+RAFT_FILE=$(ls "${RAFT_CONFIG_DIR}"/*.raft 2>/dev/null | head -n1)
+[ -n "$RAFT_FILE" ] || { echo "No .raft file found. Run with -m init"; exit 1; }
 RAFT_UUID=$(basename "$RAFT_FILE" .raft)
 
 log "RAFT_UUID=$RAFT_UUID"
@@ -204,43 +205,36 @@ set -euo pipefail
 # Environment - using shared paths on NFS
 export LD_LIBRARY_PATH="${LIB_DIR}:/usr/lib64:/usr/lib:\${LD_LIBRARY_PATH:-}"
 export NIOVA_INOTIFY_BASE_PATH="${OUTPUT_DIR}/ctl-interface"
+export NIOVA_LOCAL_CTL_SVC_DIR="${RAFT_CONFIG_DIR}"
 export NIOVA_APPLY_HANDLER_VERSION=0
 export USER_ENCRYPTION_KEY="81gavMyXh9dEMT7kM7gR+gS79ovzPwyjWmV1VA/TUII"
 
-log_remote() { echo "[remote][\$(hostname)][\$(date '+%Y-%m-%d %H:%M:%S')] \$*"; }
-
 log_remote "Detecting identity..."
 
-PEER_FILE=""
-for IP in \$(hostname -I); do
-    MATCH=\$(grep -il "IPADDR[[:space:]][[:space:]]*\$IP" "${RAFT_CONFIG_DIR}"/*.peer | head -n1 || true)
-    if [ -n "\$MATCH" ]; then
-        PEER_FILE="\$MATCH"
-        break
-    fi
-done
+IPS=$(hostname -I | tr ' ' '\n')
+PEER_FILE=$(for ip in $IPS; do grep -il "IPADDR[[:space:]]\+$ip" "$RAFT_CONFIG_DIR"/*.peer && break; done)
 
-if [ -z "\$PEER_FILE" ]; then
-    log_remote "ERROR: No matching peer found for IPs: \$(hostname -I)"
+if [ -z "$PEER_FILE" ]; then
+    log_remote "ERROR: No matching peer found for IPs: $(hostname -I)"
     exit 1
 fi
 
-PEER_UUID=\$(basename "\$PEER_FILE" .peer)
-log_remote "Found identity: \$PEER_UUID"
+PEER_UUID=$(basename "$PEER_FILE" .peer)
+log_remote "Found identity: $PEER_UUID"
 
 log_remote "Starting pmdbServer..."
-nohup "${BIN_DIR}/CTLPlane_pmdbServer" -r "${RAFT_UUID}" -u "\$PEER_UUID" \
+nohup "${BIN_DIR}/CTLPlane_pmdbServer" -r "${RAFT_UUID}" -u "$PEER_UUID" \
     -g "${RAFT_CONFIG_DIR}/gossipNodes" \
-    -l "${LOG_DIR}/pmdb_server_\${PEER_UUID}.log" -ll Trace > "${LOG_DIR}/pmdb_server_\${PEER_UUID}_stdout.log" 2>&1 &
+    -l "${LOG_DIR}/pmdb_server_${PEER_UUID}.log" -ll Trace > "${LOG_DIR}/pmdb_server_${PEER_UUID}_stdout.log" 2>&1 &
 
 sleep 2
 
 log_remote "Starting proxy..."
-PROXY_UUID=\$(uuidgen)
-nohup "${BIN_DIR}/CTLPlane_proxy" -r "${RAFT_UUID}" -u "\$PROXY_UUID" \
+PROXY_UUID=$(uuidgen)
+nohup "${BIN_DIR}/CTLPlane_proxy" -r "${RAFT_UUID}" -u "$PROXY_UUID" \
     -pa "${RAFT_CONFIG_DIR}/gossipNodes" \
     -n "Node" \
-    -l "${LOG_DIR}/proxy_\${PROXY_UUID}.log" -ll Trace > "${LOG_DIR}/proxy_\${PROXY_UUID}_stdout.log" 2>&1 &
+    -l "${LOG_DIR}/proxy_${PROXY_UUID}.log" -ll Trace > "${LOG_DIR}/proxy_${PROXY_UUID}_stdout.log" 2>&1 &
 
 log_remote "Startup sequence complete."
 EOF
