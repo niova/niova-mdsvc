@@ -97,7 +97,7 @@ find %{buildroot}%{niova_libdir} -name '*.so*' -type f \
 # Copy RocksDB from build environment to niova-mdsvc lib dir
 cp -a /usr/lib64/librocksdb.so.9* %{buildroot}%{niova_libdir}/
 # Also bundle common dependencies from EPEL that might be missing
-for lib in libgflags libsnappy libbacktrace; do
+for lib in libgflags libsnappy; do
     find /usr/lib64 -name "${lib}.so*" -exec cp -a {} %{buildroot}%{niova_libdir}/ \;
 done
 
