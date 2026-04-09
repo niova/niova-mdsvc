@@ -6,7 +6,6 @@ Name:           %{pkg_name}
 Version:        %{version}
 Release:        1%{?dist}
 Summary:        Niova core C libraries (libbacktrace + niova-core)
-License:        Apache-2.0
 URL:            https://github.com/00pauln00/niova-mdsvc
 ExclusiveArch:  x86_64
 
