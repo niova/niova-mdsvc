@@ -41,9 +41,9 @@ Recommends:     serf >= 0.8.2
 # Weak / optional dependencies
 # ---------------------------------------------------------------------------
 # pdsh is used by deploy.sh
-Recommends:     pdsh
-Recommends:     clush
-Recommends:     bssh
+Recommends: pdsh
+Recommends: clustershell
+Recommends: openssh-clients
 
 %description
 Control plane for the Niova distributed metadata service (aarch64).
@@ -174,15 +174,6 @@ getent passwd niova > /dev/null || \
 # ---------------------------------------------------------------------------
 %post
 /sbin/ldconfig
-
-chown -R niova:niova /var/log/niova /var/lib/niova
-
-if grep -q '^USER_ENCRYPTION_KEY=$' /etc/niova/niova.env 2>/dev/null; then
-    GENERATED_KEY="$(openssl rand -base64 32)"
-    sed -i "s|^USER_ENCRYPTION_KEY=$|USER_ENCRYPTION_KEY=${GENERATED_KEY}|" \
-        /etc/niova/niova.env
-    chown root:niova /etc/niova/niova.env
-fi
 
 %systemd_post niova-pmdbserver.service niova-proxy.service niova-monitor.service
 

@@ -45,9 +45,9 @@ Recommends:     serf >= 0.8.2
 # Weak / optional dependencies
 # ---------------------------------------------------------------------------
 # pdsh is used by deploy.sh
-Recommends:     pdsh
-Recommends:     clush
-Recommends:     bssh
+Recommends: pdsh
+Recommends: clustershell
+Recommends: openssh-clients
 
 %description
 Control plane for the Niova distributed metadata service (x86_64).
@@ -198,8 +198,6 @@ getent passwd niova > /dev/null || \
 # ---------------------------------------------------------------------------
 %post
 /sbin/ldconfig
-
-chown -R niova:niova /var/log/niova /var/lib/niova
 
 %systemd_post niova-pmdbserver.service niova-proxy.service niova-monitor.service
 
