@@ -54,14 +54,15 @@ func TestCreateHierarchyforUserAuthentication(t *testing.T) {
                pdus[0],
                racks[0],
                hvs[0],
-               "/auth_nisd.device",
-               "/auth_nisd.device",
+               "/s3DV_nisd.device",
+               "/s3DV_nisd.device",
            },
            TotalSize:     10 * 1024 * 1024 * 1024,
            AvailableSize: 10 * 1024 * 1024 * 1024,
            NetInfo: cpLib.NetInfoList{
                cpLib.NetworkInfo{
-                   IPAddr: "127.0.0.1",
+                //    IPAddr: "172.31.24.182",
+                   IPAddr: "127.0.0.1"
                    Port:   13001,
                },
            },
