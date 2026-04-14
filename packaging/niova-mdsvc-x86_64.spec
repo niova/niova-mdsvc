@@ -34,14 +34,6 @@ Requires:       util-linux
 Recommends:     serf >= 0.8.2
 
 # ---------------------------------------------------------------------------
-# NOTE: Do NOT use Provides/Obsoletes for snappy here.
-# niova-mdsvc bundles libsnappy in /usr/local/lib but is NOT ABI-compatible
-# with the system snappy package.  Obsoleting snappy would cascade-remove
-# crash, kdump-utils, makedumpfile.  Build-id collisions are handled by
-# the _build_id_links none setting above.
-# ---------------------------------------------------------------------------
-
-# ---------------------------------------------------------------------------
 # Weak / optional dependencies
 # ---------------------------------------------------------------------------
 # pdsh is used by deploy.sh
