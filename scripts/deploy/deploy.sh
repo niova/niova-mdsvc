@@ -191,41 +191,64 @@ fi
 # ============================================================
 if [ "$TYPE" = "multinode" ]; then
 
-    export PDSH_SSH_ARGS="-o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=no"
-    PDSH_HOST_LIST=$(IFS=','; echo "${NODES[*]}")
-
     log "Preparing shared deployment script..."
 
-    # Generate the shared remote start script on NFS
+    # Generate the shared remote start script on NFS.
+    # NOTE: The heredoc delimiter is QUOTED ('REMOTE_EOF') so that shell
+    # variables inside the remote script are NOT expanded at generation time.
+    # The handful of deploy-time values we need are injected via sed afterwards.
     REMOTE_SCRIPT="${OUTPUT_DIR}/remote_start.sh"
-    cat > "$REMOTE_SCRIPT" <<EOF
+    cat > "$REMOTE_SCRIPT" <<'REMOTE_EOF'
 #!/usr/bin/bash
 set -euo pipefail
 
-# Environment - using shared paths on NFS
-export LD_LIBRARY_PATH="${LIB_DIR}:/usr/lib64:/usr/lib:\${LD_LIBRARY_PATH:-}"
-export NIOVA_INOTIFY_BASE_PATH="${OUTPUT_DIR}/ctl-interface"
-export NIOVA_LOCAL_CTL_SVC_DIR="${RAFT_CONFIG_DIR}"
+log_remote() { echo "[remote][$(date '+%Y-%m-%d %H:%M:%S')] $*"; }
+
+# ---- Environment (placeholders replaced by deploy.sh) ----
+export LD_LIBRARY_PATH="__LIB_DIR__:/usr/lib64:/usr/lib:${LD_LIBRARY_PATH:-}"
+export NIOVA_INOTIFY_BASE_PATH="__OUTPUT_DIR__/ctl-interface"
+export NIOVA_LOCAL_CTL_SVC_DIR="__RAFT_CONFIG_DIR__"
 export NIOVA_APPLY_HANDLER_VERSION=0
 export USER_ENCRYPTION_KEY="81gavMyXh9dEMT7kM7gR+gS79ovzPwyjWmV1VA/TUII"
 
-log_remote "Detecting identity..."
+RAFT_CONFIG_DIR="__RAFT_CONFIG_DIR__"
+BIN_DIR="__BIN_DIR__"
+LOG_DIR="__LOG_DIR__"
+DB_DIR="__DB_DIR__"
+RAFT_UUID="__RAFT_UUID__"
 
-IPS=$(hostname -I | tr ' ' '\n')
-PEER_FILE=$(for ip in $IPS; do grep -il "IPADDR[[:space:]]\+$ip" "$RAFT_CONFIG_DIR"/*.peer && break; done)
+# ---- Detect local IP addresses (works on both Ubuntu and Rocky) ----
+log_remote "Detecting identity..."
+if command -v hostname &>/dev/null && hostname -I &>/dev/null; then
+    IPS=$(hostname -I | tr ' ' '\n' | grep -v '^$')
+else
+    # Fallback: parse 'ip addr' output (works on minimal Rocky installs)
+    IPS=$(ip -4 addr show scope global | awk '/inet / {split($2,a,"/"); print a[1]}')
+fi
+
+# ---- Match local IP to a .peer file ----
+PEER_FILE=""
+for ip in $IPS; do
+    match=$(grep -rl "IPADDR[[:space:]]\+${ip}$" "${RAFT_CONFIG_DIR}"/*.peer 2>/dev/null | head -n1) || true
+    if [ -n "$match" ]; then
+        PEER_FILE="$match"
+        break
+    fi
+done
 
 if [ -z "$PEER_FILE" ]; then
-    log_remote "ERROR: No matching peer found for IPs: $(hostname -I)"
+    log_remote "ERROR: No matching peer found for IPs: $IPS"
     exit 1
 fi
 
 PEER_UUID=$(basename "$PEER_FILE" .peer)
-log_remote "Found identity: $PEER_UUID"
+log_remote "Found identity: $PEER_UUID (IP matched)"
 
 log_remote "Starting pmdbServer..."
 nohup "${BIN_DIR}/CTLPlane_pmdbServer" -r "${RAFT_UUID}" -u "$PEER_UUID" \
     -g "${RAFT_CONFIG_DIR}/gossipNodes" \
-    -l "${LOG_DIR}/pmdb_server_${PEER_UUID}.log" -ll Trace > "${LOG_DIR}/pmdb_server_${PEER_UUID}_stdout.log" 2>&1 &
+    -l "${LOG_DIR}/pmdb_server_${PEER_UUID}.log" -ll Trace \
+    > "${LOG_DIR}/pmdb_server_${PEER_UUID}_stdout.log" 2>&1 &
 
 sleep 2
 
@@ -234,17 +257,55 @@ PROXY_UUID=$(uuidgen)
 nohup "${BIN_DIR}/CTLPlane_proxy" -r "${RAFT_UUID}" -u "$PROXY_UUID" \
     -pa "${RAFT_CONFIG_DIR}/gossipNodes" \
     -n "Node" \
-    -l "${LOG_DIR}/proxy_${PROXY_UUID}.log" -ll Trace > "${LOG_DIR}/proxy_${PROXY_UUID}_stdout.log" 2>&1 &
+    -l "${LOG_DIR}/proxy_${PROXY_UUID}.log" -ll Trace \
+    > "${LOG_DIR}/proxy_${PROXY_UUID}_stdout.log" 2>&1 &
 
 log_remote "Startup sequence complete."
-EOF
+REMOTE_EOF
+
+    # Inject deploy-time values into the remote script
+    sed -i \
+        -e "s|__LIB_DIR__|${LIB_DIR}|g" \
+        -e "s|__OUTPUT_DIR__|${OUTPUT_DIR}|g" \
+        -e "s|__RAFT_CONFIG_DIR__|${RAFT_CONFIG_DIR}|g" \
+        -e "s|__BIN_DIR__|${BIN_DIR}|g" \
+        -e "s|__LOG_DIR__|${LOG_DIR}|g" \
+        -e "s|__DB_DIR__|${DB_DIR}|g" \
+        -e "s|__RAFT_UUID__|${RAFT_UUID}|g" \
+        "$REMOTE_SCRIPT"
     chmod +x "$REMOTE_SCRIPT"
 
-    # In NFS mode, we assume directories and files are already visible to all nodes.
-    # We just need to trigger the execution via pdsh.
+    # ---- Detect available parallel SSH tool ----
+    # Ubuntu/Debian typically have pdsh; Rocky/RHEL have pssh (from python3-pssh).
+    # Fall back to a plain SSH loop if neither is available.
+    SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=no"
 
-    log "Starting cluster via pdsh (shared NFS paths)..."
-    pdsh -t 5 -R ssh -w "$PDSH_HOST_LIST" "$REMOTE_SCRIPT"
+    if command -v pdsh &>/dev/null; then
+        log "Starting cluster via pdsh..."
+        export PDSH_SSH_ARGS="$SSH_OPTS"
+        PDSH_HOST_LIST=$(IFS=','; echo "${NODES[*]}")
+        pdsh -t 5 -R ssh -w "$PDSH_HOST_LIST" "$REMOTE_SCRIPT"
+
+    elif command -v pssh &>/dev/null; then
+        log "Starting cluster via pssh..."
+        HOST_FILE=$(mktemp)
+        printf '%s\n' "${NODES[@]}" > "$HOST_FILE"
+        pssh -i -t 30 -O "$SSH_OPTS" -h "$HOST_FILE" "$REMOTE_SCRIPT"
+        rm -f "$HOST_FILE"
+
+    elif command -v clush &>/dev/null; then
+        log "Starting cluster via clush..."
+        CLUSH_HOST_LIST=$(IFS=','; echo "${NODES[*]}")
+        clush -w "$CLUSH_HOST_LIST" -b "$REMOTE_SCRIPT"
+
+    else
+        log "No parallel SSH tool found (pdsh/pssh/clush). Using sequential SSH..."
+        for node in "${NODES[@]}"; do
+            log "  -> $node"
+            ssh $SSH_OPTS "$node" "$REMOTE_SCRIPT" &
+        done
+        wait
+    fi
 
 fi
 

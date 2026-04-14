@@ -3,6 +3,12 @@
 %global niova_build  %{_builddir}/niova-mdsvc-build
 %{!?niova_core: %global niova_core /usr/local}
 
+# ---------------------------------------------------------------------------
+# Prevent .build-id collisions with system packages (e.g. snappy)
+# ---------------------------------------------------------------------------
+%global _build_id_links none
+%define debug_package %{nil}
+
 Name:           %{pkg_name}
 Version:        %{version}
 Release:        1%{?dist}
@@ -15,10 +21,29 @@ ExclusiveArch:  aarch64
 # Runtime requirements
 # ---------------------------------------------------------------------------
 Requires:       niova-core
+# rocksdb-libs — bundled in /usr/local/lib (EPEL may not be configured).
 # Requires:       rocksdb-libs
 Requires:       openssl-libs
 Requires:       libuuid
 Requires:       util-linux
+# Serf gossip agent used by CTLPlane_proxy for service discovery.
+Recommends:     serf >= 0.8.2
+
+# ---------------------------------------------------------------------------
+# NOTE: Do NOT use Provides/Obsoletes for snappy here.
+# niova-mdsvc bundles libsnappy in /usr/local/lib but is NOT ABI-compatible
+# with the system snappy package.  Obsoleting snappy would cascade-remove
+# crash, kdump-utils, makedumpfile.  Build-id collisions are handled by
+# the _build_id_links none setting above.
+# ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# Weak / optional dependencies
+# ---------------------------------------------------------------------------
+# pdsh is used by deploy.sh
+Recommends:     pdsh
+Recommends:     clush
+Recommends:     bssh
 
 %description
 Control plane for the Niova distributed metadata service (aarch64).
@@ -157,7 +182,6 @@ if grep -q '^USER_ENCRYPTION_KEY=$' /etc/niova/niova.env 2>/dev/null; then
     sed -i "s|^USER_ENCRYPTION_KEY=$|USER_ENCRYPTION_KEY=${GENERATED_KEY}|" \
         /etc/niova/niova.env
     chown root:niova /etc/niova/niova.env
-    echo "niova-mdsvc: generated USER_ENCRYPTION_KEY in /etc/niova/niova.env"
 fi
 
 %systemd_post niova-pmdbserver.service niova-proxy.service niova-monitor.service
@@ -235,7 +259,13 @@ echo ""
 # %changelog
 # ---------------------------------------------------------------------------
 %changelog
-* Wed Apr 08 2026 Niova Build System <build@niova.io> - 1.0.0-1
+* Tue Apr 14 2026 Niova Build System - %{version}-1
+- Add Requires: serf >= 0.8.2 (gossip agent for CTLPlane_proxy)
+- Add Requires: rocksdb-libs
+- Fix snappy file conflict via _build_id_links none (no Obsoletes)
+- Add Recommends: pdsh clush bssh (multinode deploy helpers)
+
+* Wed Apr 08 2026 Niova Build System- 1.0.0-1
 - Initial RPM release
 - Bundles niova-raft and niova-pumicedb C libraries (niova-core is separate)
 - Requires niova-core RPM for base C libraries

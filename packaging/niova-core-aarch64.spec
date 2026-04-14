@@ -112,7 +112,7 @@ install -m 0644 packaging/niova-core.conf \
 # %changelog
 # ---------------------------------------------------------------------------
 %changelog
-* Wed Apr 08 2026 Niova Build System <build@niova.io> - 1.0.0-1
+* Wed Apr 08 2026 Niova Build System - 1.0.0-1
 - Initial RPM release
 - Bundles libbacktrace and niova-core C libraries
 - aarch64 build
