@@ -14,8 +14,8 @@ if [[ "$(docker images -q niova-mdsvc-deps:latest 2> /dev/null)" == "" ]] || [[ 
 fi
 
 # Build the docker image
-echo "==> Building Niova RPMs in Docker..."
-docker build -t niova-rpm-builder -f "${DIR}/Dockerfile" "${REPO_ROOT}"
+echo "==> Building Niova RPMs in Docker (Version: ${VERSION:-1.1.0})..."
+docker build --build-arg VERSION="${VERSION:-1.1.0}" -t niova-rpm-builder -f "${DIR}/Dockerfile" "${REPO_ROOT}"
 
 # Extract the RPMs
 echo "==> Extracting RPMs to host..."
