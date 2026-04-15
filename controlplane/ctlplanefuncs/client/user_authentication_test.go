@@ -62,7 +62,7 @@ func TestCreateHierarchyforUserAuthentication(t *testing.T) {
            NetInfo: cpLib.NetInfoList{
                cpLib.NetworkInfo{
                 //    IPAddr: "172.31.24.182",
-                   IPAddr: "127.0.0.1"
+                   IPAddr: "127.0.0.1",
                    Port:   13001,
                },
            },
