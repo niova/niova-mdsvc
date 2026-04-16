@@ -87,6 +87,8 @@ go build -buildvcs=false -o %{niova_build}/libexec/CTLPlane_pmdbServer  ./contro
 go build -buildvcs=false -o %{niova_build}/libexec/CTLPlane_proxy       ./controlplane/proxy/
 go build -buildvcs=false -o %{niova_build}/libexec/cp-monitor           ./controlplane/monitor/
 go build -buildvcs=false -o %{niova_build}/libexec/cc-manager           ./controlplane/containerConfigManager/
+go build -buildvcs=false -o %{niova_build}/libexec/niova-ctl            ./controlplane/niova-ctl
+
 
 # ---------------------------------------------------------------------------
 # install
@@ -98,6 +100,7 @@ install -m 0755 %{niova_build}/libexec/CTLPlane_pmdbServer  %{buildroot}/usr/loc
 install -m 0755 %{niova_build}/libexec/CTLPlane_proxy       %{buildroot}/usr/local/bin/niova/
 install -m 0755 %{niova_build}/libexec/cp-monitor           %{buildroot}/usr/local/bin/niova/
 install -m 0755 %{niova_build}/libexec/cc-manager           %{buildroot}/usr/local/bin/niova/
+install -m 0755 %{niova_build}/libexec/niova-ctl            %{buildroot}/usr/local/bin/niova/
 
 install -d %{buildroot}%{niova_libdir}
 
@@ -213,6 +216,7 @@ echo ""
 /usr/local/bin/niova/CTLPlane_proxy
 /usr/local/bin/niova/cp-monitor
 /usr/local/bin/niova/cc-manager
+/usr/local/bin/niova/niova-ctl
 
 %dir %{niova_libdir}
 %{niova_libdir}/*.so*

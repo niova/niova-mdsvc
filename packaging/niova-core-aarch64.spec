@@ -62,7 +62,14 @@ find %{niova_build}/lib -maxdepth 1 -name '*.so*' -type l \
 
 # ── libbacktrace (copy from system to bundle in standard path) ──────────────
 install -d %{buildroot}%{_libdir}
-cp -a /usr/lib64/libbacktrace.so* %{buildroot}%{_libdir}/
+if [ -f /usr/lib64/libbacktrace.so ]; then
+    cp -a /usr/lib64/libbacktrace.so* %{buildroot}%{_libdir}/
+elif [ -f /usr/lib/libbacktrace.so ]; then
+    cp -a /usr/lib/libbacktrace.so* %{buildroot}%{_libdir}/
+else
+    echo "ERROR: libbacktrace.so not found in /usr/lib64 or /usr/lib" >&2
+    exit 1
+fi
 
 # ── Headers (needed for building downstream packages) ────────────────────────
 install -d %{buildroot}%{niova_prefix}/include

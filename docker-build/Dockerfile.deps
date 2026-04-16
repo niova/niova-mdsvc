@@ -18,6 +18,7 @@ RUN dnf -y install dnf-plugins-core && \
         cjson-devel \
         liburing-devel \
         rocksdb-devel \
+        libedit-devel \
         rpm-build rpmdevtools \
         chrpath \
         git tar which pkgconfig && \
@@ -48,10 +49,16 @@ RUN curl -LO https://curl.se/download/curl-8.6.0.tar.gz && \
 # Required for niova-core stack traces.
 RUN git clone https://github.com/ianlancetaylor/libbacktrace.git && \
     cd libbacktrace && \
-    CFLAGS="-fPIC" ./configure --prefix=/usr --enable-shared && \
+    CFLAGS="-fPIC" ./configure --prefix=/usr --libdir=/usr/lib64 --enable-shared && \
     make -j$(nproc) && \
     make install && \
     ldconfig && \
     cd .. && rm -rf libbacktrace
+
+# ── Step 5: Install Serf (Gossip Agent) ───────────────────────────────────────
+RUN curl -LO https://releases.hashicorp.com/serf/0.10.1/serf_0.10.1_linux_$(if [ "$(uname -m)" = "x86_64" ]; then echo "amd64"; else echo "arm64"; fi).zip && \
+    unzip serf_0.10.1_linux_*.zip && \
+    mv serf /usr/local/bin/ && \
+    rm serf_0.10.1_linux_*.zip
 
 WORKDIR /
