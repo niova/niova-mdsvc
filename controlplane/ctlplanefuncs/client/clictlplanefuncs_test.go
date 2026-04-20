@@ -40,6 +40,17 @@ var authEnabled bool
 // Shared admin secret used across all tests.
 const testAdminSecret = "test-admin-secret-123"
 
+// Global maps to store test results for reuse between tests
+var (
+	PDUs  = make(map[string]cpLib.PDU)
+	Racks = make(map[string]cpLib.Rack)
+	Hypervisors = make(map[string]cpLib.Hypervisor)
+	Devices = make(map[string]cpLib.Device)
+	Nisds = make(map[string]cpLib.Nisd)
+	TestNisds = make(map[string]cpLib.Nisd)
+	TestNisdsAfter = make(map[string]cpLib.Nisd)
+)
+
 func TestMain(m *testing.M) {
 	testClusterID = os.Getenv("RAFT_ID")
 	if testClusterID == "" {
@@ -613,18 +624,6 @@ func TestVdevLifecycle(t *testing.T) {
 		},
 		TotalSize:     15_000_000_000_000, // 1 TB
 		AvailableSize: 15_000_000_000_000, // 750 GB
-		SocketPath:    "/path/sockets1",
-		NetInfo: cpLib.NetInfoList{
-			 	cpLib.NetworkInfo{
-					IPAddr: "192.168.0.0.1",
-					Port:   5444,
-				},
-				cpLib.NetworkInfo{
-					IPAddr: "192.168.0.0.2",
-					Port:   6444,
-				},
-		    },
-		NetInfoCnt: 2,
 	}
 	resp, err := c.PutNisd(&n)
 	assert.NoError(t, err)
@@ -782,8 +781,6 @@ func TestPutAndGetSinglePartition(t *testing.T) {
 		PartitionPath: "some path",
 		NISDUUID:      "b962cea8-ab42-11f0-a0ad-1bd216770b60",
 	}
-
-	// Put partition
 	resp, err := c.PutPartition(pt)
 	log.Info("created partition: ", resp)
 	assert.NoError(t, err)
@@ -836,18 +833,6 @@ func TestVdevNisdChunk(t *testing.T) {
 		},
 		TotalSize:     1_000_000_000_000, // 1 TB
 		AvailableSize: 750_000_000_000,   // 750 GB
-		SocketPath:    "/path/sockets1",
-		NetInfo: cpLib.NetInfoList{
-			 	cpLib.NetworkInfo{
-					IPAddr: "192.168.0.0.1",
-					Port:   5444,
-				},
-				cpLib.NetworkInfo{
-					IPAddr: "192.168.0.0.2",
-					Port:   6444,
-				},
-		},
-		NetInfoCnt: 2,
 	}
 	resp, err := c.PutNisd(&mockNisd)
 	if assert.NoError(t, err) {
@@ -1218,13 +1203,13 @@ func TestCreateSmallHierarchy(t *testing.T) {
 		"e5bdb838-df76-11f0-9d60-d3a87e703a42",
 	}
 
-	// 2 RACKS
+	// 10 RACKS
 	racks := []string{
 		"3f082930-df29-11f0-ab7b-4bd430991101",
 		"3f082930-df29-11f0-ab7b-4bd430991102",
 	}
 
-	// 5 HVs
+	// 20 HVs
 	hvs := []string{
 		"bde1f08a-df63-11f0-88ef-430ddec19901",
 		"bde1f08a-df63-11f0-88ef-430ddec19902",
@@ -1233,7 +1218,7 @@ func TestCreateSmallHierarchy(t *testing.T) {
 		"bde1f08a-df63-11f0-88ef-430ddec19905",
 	}
 
-	// 6 Devices
+	// 40 Devices
 	devices := []string{
 		"nvme-fb6358163001",
 		"nvme-fb6358163002",
@@ -1323,7 +1308,6 @@ func TestCreateSmallHierarchy(t *testing.T) {
 			AvailableSize: 1073741824000,
 		},
 	}
-
 	for _, n := range mockNisd {
 		resp, err := c.PutNisd(&n)
 		if assert.NoError(t, err) {
