@@ -16,9 +16,17 @@ type CPError struct {
 	Code    CPErrCode `xml:"Code"`
 }
 
-// Pagination holds cursor-based pagination parameters for read requests.
+// Pagination holds cursor-based pagination parameters for read requests and responses.
+//
+// In a request, SeqNo is the zero-based start offset and PageSize is the maximum
+// number of top-level items to return (0 means return everything).
+//
+// In a response, SeqNo is the start offset for the next page and HasMore reports
+// whether additional pages remain.
 type Pagination struct {
-	SeqNo      uint64 `xml:"SeqNo"`      // Seq number of the last read record
+	SeqNo      uint64 `xml:"SeqNo"`      // Request: start offset; Response: next-page offset
+	PageSize   uint64 `xml:"PageSize"`   // Max items per page (0 = no pagination)
+	HasMore    bool   `xml:"HasMore"`    // Response only: true when more pages follow
 	Consistent bool   `xml:"Consistent"` // If true, the read is consistent with the last read
 }
 

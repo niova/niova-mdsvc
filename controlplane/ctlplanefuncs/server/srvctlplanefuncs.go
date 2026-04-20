@@ -3,8 +3,10 @@ package srvctlplanefuncs
 import (
 	"C"
 	"fmt"
+	"maps"
 	"math/rand"
 	"path"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -22,6 +24,7 @@ import (
 	funclib "github.com/00pauln00/niova-pumicedb/go/pkg/pumicefunc/common"
 	PumiceDBServer "github.com/00pauln00/niova-pumicedb/go/pkg/pumiceserver"
 	storageiface "github.com/00pauln00/niova-pumicedb/go/pkg/utils/storage/interface"
+	"golang.org/x/sync/errgroup"
 )
 
 var colmfamily string
@@ -1898,4 +1901,202 @@ func ReadPFSCfg(args ...interface{}) (interface{}, error) {
 		pfsList = append(pfsList, *p)
 	}
 	return ctlplfl.EncodeResponse(pfsList)
+}
+
+func ReadAllRange(cbArgs *PumiceDBServer.PmdbCbArgs, key string) (map[string][]byte, error) {
+	resultMap := make(map[string][]byte)
+	currentKey := key
+	for {
+		rrArgs := storageiface.RangeReadArgs{
+			Selector: colmfamily,
+			Key:      currentKey,
+			BufSize:  cbArgs.ReplySize,
+			Prefix:   key,
+		}
+
+		rrOps, err := cbArgs.Store.RangeRead(rrArgs)
+		if err != nil {
+			return nil, err
+		}
+
+		maps.Copy(resultMap, rrOps.ResultMap)
+		if rrOps.LastKey == "" {
+			break
+		}
+		currentKey = rrOps.LastKey
+	}
+	return resultMap, nil
+}
+
+func ReadHierarchy(args ...interface{}) (interface{}, error) {
+	cbArgs := args[0].(*PumiceDBServer.PmdbCbArgs)
+	cpReq := args[1].(ctlplfl.CPReq)
+
+	// Authorization
+	if _, err := validateAndAuthorizeRBAC(cpReq.Token, authz.ReadHierarchy); err != nil {
+		log.Errorf("ReadHierarchy: auth failure: %v", err)
+		return ctlplfl.AuthError(err)
+	}
+
+	// Fetch PDU hierarchy data (racks, hypervisors, devices)
+	rawData, err := fetchHierarchyPDUData(cbArgs)
+	if err != nil {
+		log.Error("Range read failure in hierarchy: ", err)
+		return ctlplfl.FuncError(err)
+	}
+
+	// Parse base entities
+	pdus := ParseEntities[ctlplfl.PDU](rawData[pduKey], pduParser{})
+	racks := ParseEntities[ctlplfl.Rack](rawData[rackKey], rackParser{})
+	hvs := ParseEntities[ctlplfl.Hypervisor](rawData[hvKey], hvParser{})
+	devs := ParseEntities[ctlplfl.Device](rawData[deviceCfgKey], deviceWithPartitionParser{})
+
+	// Assemble and link the hierarchy (PDUs -> Racks -> Hypervisors -> Devices)
+	assembleHierarchyPDUs(pdus, racks, hvs, devs)
+
+	// Sort the hierarchy for deterministic output
+	sortHierarchyPDUs(pdus)
+
+	// Apply pagination if requested
+	var respPage *ctlplfl.Pagination
+	if cpReq.Page != nil && cpReq.Page.PageSize > 0 {
+		total := uint64(len(pdus))
+		start := min(cpReq.Page.SeqNo, total)
+
+		end := start + cpReq.Page.PageSize
+		hasMore := end < total
+
+		if end > total {
+			end = total
+		}
+
+		pdus = pdus[start:end]
+		respPage = &ctlplfl.Pagination{
+			SeqNo:   end, // caller uses this as SeqNo on the next request
+			HasMore: hasMore,
+		}
+	}
+
+	log.Debugf("ReadHierarchy: returning %d PDUs in hierarchy (hasMore=%v)", len(pdus), respPage != nil && respPage.HasMore)
+
+	if respPage != nil {
+		return ctlplfl.EncodePagedResponse(pdus, respPage)
+	}
+	return ctlplfl.EncodeResponse(pdus)
+}
+
+// fetchHierarchyPDUData fetches only the data needed to build
+func fetchHierarchyPDUData(cbArgs *PumiceDBServer.PmdbCbArgs) (map[string]map[string][]byte, error) {
+	var pduResult, rackResult, hvResult, devResult map[string][]byte
+	var eg errgroup.Group
+
+	for key, dst := range map[string]*map[string][]byte{
+		pduKey:       &pduResult,
+		rackKey:      &rackResult,
+		hvKey:        &hvResult,
+		deviceCfgKey: &devResult,
+	} {
+		key, dst := key, dst
+		eg.Go(func() error {
+			data, err := ReadAllRange(cbArgs, key)
+			if err != nil {
+				return err
+			}
+			*dst = data
+			return nil
+		})
+	}
+
+	if err := eg.Wait(); err != nil {
+		return nil, err
+	}
+
+	return map[string]map[string][]byte{
+		pduKey:       pduResult,
+		rackKey:      rackResult,
+		hvKey:        hvResult,
+		deviceCfgKey: devResult,
+	}, nil
+}
+
+// assembleHierarchyPDUs links Devices -> Hypervisors -> Racks -> PDUs.
+// Each level is sorted before being copied into the level above so that the
+// sort order is preserved in the final nested structure.
+func assembleHierarchyPDUs(pdus []ctlplfl.PDU, racks []ctlplfl.Rack,
+	hvs []ctlplfl.Hypervisor, devs []ctlplfl.Device) {
+
+	hvMap := make(map[string]*ctlplfl.Hypervisor, len(hvs))
+	for i := range hvs {
+		hvMap[hvs[i].ID] = &hvs[i]
+	}
+
+	rackMap := make(map[string]*ctlplfl.Rack, len(racks))
+	for i := range racks {
+		rackMap[racks[i].ID] = &racks[i]
+	}
+
+	pduMap := make(map[string]*ctlplfl.PDU, len(pdus))
+	for i := range pdus {
+		pduMap[pdus[i].ID] = &pdus[i]
+	}
+
+	// Sort partitions within each device before linking upward.
+	for i := range devs {
+		sort.Slice(devs[i].Partitions, func(a, b int) bool {
+			return devs[i].Partitions[a].PartitionID < devs[i].Partitions[b].PartitionID
+		})
+	}
+
+	// Link Devices to Hypervisors (copies device values including sorted partitions).
+	for _, d := range devs {
+		if hv, ok := hvMap[d.HypervisorID]; ok {
+			hv.Dev = append(hv.Dev, d)
+		}
+	}
+
+	// Sort devices within each hypervisor before linking upward.
+	for i := range hvs {
+		sort.Slice(hvs[i].Dev, func(a, b int) bool {
+			return hvs[i].Dev[a].ID < hvs[i].Dev[b].ID
+		})
+	}
+
+	// Link Hypervisors to Racks (copies hypervisor values including sorted devices).
+	for _, hv := range hvs {
+		if rack, ok := rackMap[hv.RackID]; ok {
+			rack.Hypervisors = append(rack.Hypervisors, hv)
+		}
+	}
+
+	// Sort hypervisors within each rack before linking upward.
+	for i := range racks {
+		sort.Slice(racks[i].Hypervisors, func(a, b int) bool {
+			return racks[i].Hypervisors[a].ID < racks[i].Hypervisors[b].ID
+		})
+	}
+
+	// Link Racks to PDUs (copies rack values including sorted hypervisors).
+	for _, rack := range racks {
+		if pdu, ok := pduMap[rack.PDUID]; ok {
+			pdu.Racks = append(pdu.Racks, rack)
+		}
+	}
+}
+
+// sortHierarchyPDUs sorts the top two levels of the already-assembled hierarchy.
+// Inner levels (hypervisors, devices, partitions) are sorted inside
+// assembleHierarchyPDUs before each copy, so only the levels that live directly
+// on the pdus slice need sorting here.
+func sortHierarchyPDUs(pdus []ctlplfl.PDU) {
+	// Racks within each PDU
+	for i := range pdus {
+		sort.Slice(pdus[i].Racks, func(a, b int) bool {
+			return pdus[i].Racks[a].ID < pdus[i].Racks[b].ID
+		})
+	}
+
+	// Top-level PDUs (for deterministic pagination)
+	sort.Slice(pdus, func(i, j int) bool {
+		return pdus[i].ID < pdus[j].ID
+	})
 }

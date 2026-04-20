@@ -2,6 +2,7 @@ package clictlplanefuncs
 
 import (
 	"fmt"
+	"math/rand"
 	"os"
 	"path"
 	"sync"
@@ -680,7 +681,7 @@ func TestPutAndGetNisdArgs(t *testing.T) {
 }
 
 func TestParallelVdevCreation(t *testing.T) {
-	c := newClient(t)
+	// c := newClient(t)
 
 	pdus := []string{
 		"9bc244bc-df29-11f0-a93b-277aec17e401",
@@ -826,25 +827,28 @@ func TestParallelVdevCreation(t *testing.T) {
 
 	var wg sync.WaitGroup
 	wg.Add(2)
+	c := newClient(t)
+	resp, err := c.PutNisd(&mockNisd[0])
+
+	if assert.NoError(t, err) {
+		assert.True(t, resp.Success)
+		// log.Info("successfully created nisd: ", resp)
+	}
 
 	go func() {
 		defer wg.Done()
-		for _, n := range mockNisd {
-			resp, err := c.PutNisd(&n)
-			if err != nil {
-				log.Warnf("PutNisd failed for %s: %v", n.ID, err)
-				continue
+		nisdClient := newClient(t)
+		for _, n := range mockNisd[1:] {
+			resp, err := nisdClient.PutNisd(&n)
+			if assert.NoError(t, err) {
+				assert.True(t, resp.Success)
+				// log.Info("successfully created nisd: ", resp)
 			}
-			if resp == nil {
-				log.Warnf("PutNisd returned nil response for %s (server overloaded)", n.ID)
-				continue
-			}
-			assert.True(t, resp.Success)
-			time.Sleep(10 * time.Millisecond)
 		}
 	}()
 	go func() {
 		defer wg.Done()
+		nisdClient := newClient(t)
 		for i := 0; i < 150; i++ {
 			vdev := &cpLib.VdevReq{
 				Vdev: &cpLib.VdevCfg{
@@ -852,19 +856,11 @@ func TestParallelVdevCreation(t *testing.T) {
 					NumReplica: 1,
 				},
 			}
-			resp, err := c.CreateVdev(vdev)
-			if err != nil {
-				log.Warnf("CreateVdev %d failed: %v", i, err)
-				time.Sleep(30 * time.Millisecond)
-				continue
+			resp, err := nisdClient.CreateVdev(vdev)
+			if assert.NoError(t, err) {
+				assert.True(t, resp.Success)
+				// log.Info("successfully created vdev: ", resp)
 			}
-			if resp == nil {
-				log.Warnf("CreateVdev %d returned nil response (server overloaded)", i)
-				time.Sleep(30 * time.Millisecond)
-				continue
-			}
-			log.Info("successfully created vdev: ", resp)
-			time.Sleep(30 * time.Millisecond)
 		}
 	}()
 
@@ -1992,4 +1988,463 @@ func TestVdevWithPFS(t *testing.T) {
 		assert.True(t, resp.Success)
 
 	}
+}
+
+func TestGetHierarchy(t *testing.T) {
+	c := newClient(t)
+
+	pduID := uuid.NewString()
+	rackID := uuid.NewString()
+	hvID := uuid.NewString()
+	deviceID := uuid.NewString()
+	partitionID := uuid.NewString()
+
+	_, err := c.PutPDU(&cpLib.PDU{
+		ID:       pduID,
+		Name:     "HierTest-PDU-" + pduID[:8],
+		Location: "DC-Zone-1",
+	})
+	require.NoError(t, err)
+
+	_, err = c.PutRack(&cpLib.Rack{
+		ID:    rackID,
+		PDUID: pduID,
+		Name:  "HierTest-Rack",
+	})
+	require.NoError(t, err)
+
+	_, err = c.PutHypervisor(&cpLib.Hypervisor{
+		ID:      hvID,
+		RackID:  rackID,
+		Name:    "HierTest-HV",
+		IPAddrs: []string{"127.0.0.1"},
+	})
+	require.NoError(t, err)
+
+	_, err = c.PutDevice(&cpLib.Device{
+		ID:           deviceID,
+		HypervisorID: hvID,
+		SerialNumber: "SN-" + deviceID[:8],
+		Partitions: []cpLib.DevicePartition{
+			{
+				PartitionID: partitionID,
+				DevID:       deviceID,
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	// Fetch the hierarchy (NISDs are excluded from this endpoint)
+	pdus, err := c.GetHierarchy()
+	require.NoError(t, err)
+	require.NotEmpty(t, pdus)
+
+	// Deep verification: PDU → Rack → Hypervisor → Device → Partition
+	var foundPDU *cpLib.PDU
+	for i := range pdus {
+		if pdus[i].ID == pduID {
+			foundPDU = &pdus[i]
+			break
+		}
+	}
+	require.NotNil(t, foundPDU, "PDU not found in hierarchy")
+	require.NotEmpty(t, foundPDU.Racks)
+
+	var foundRack *cpLib.Rack
+	for i := range foundPDU.Racks {
+		if foundPDU.Racks[i].ID == rackID {
+			foundRack = &foundPDU.Racks[i]
+			break
+		}
+	}
+	require.NotNil(t, foundRack, "Rack not found under PDU")
+	require.NotEmpty(t, foundRack.Hypervisors)
+
+	var foundHV *cpLib.Hypervisor
+	for i := range foundRack.Hypervisors {
+		if foundRack.Hypervisors[i].ID == hvID {
+			foundHV = &foundRack.Hypervisors[i]
+			break
+		}
+	}
+	require.NotNil(t, foundHV, "HV not found under Rack")
+	require.NotEmpty(t, foundHV.Dev)
+
+	var foundDev *cpLib.Device
+	for i := range foundHV.Dev {
+		if foundHV.Dev[i].ID == deviceID {
+			foundDev = &foundHV.Dev[i]
+			break
+		}
+	}
+	require.NotNil(t, foundDev, "Device not found under HV")
+	require.NotEmpty(t, foundDev.Partitions)
+
+	var foundPart *cpLib.DevicePartition
+	for i := range foundDev.Partitions {
+		if foundDev.Partitions[i].PartitionID == partitionID {
+			foundPart = &foundDev.Partitions[i]
+			break
+		}
+	}
+	require.NotNil(t, foundPart, "Partition not found under Device")
+}
+
+func TestGetHierarchyRandomizedMulti(t *testing.T) {
+	c := newClient(t)
+	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
+	const maxEntities = 6
+
+	numPDUs := rng.Intn(maxEntities + 1)
+	if numPDUs == 0 {
+		numPDUs = 1 // ensure at least one PDU
+	}
+
+	t.Logf("Generating random hierarchy: %d PDUs (max %d per level)", numPDUs, maxEntities)
+
+	// Data structures to keep track of what we created
+	type createdPartition struct {
+		ID    string
+		NISDs []string
+	}
+	type createdDevice struct {
+		ID         string
+		Partitions []createdPartition
+	}
+	type createdHV struct {
+		ID      string
+		Devices []createdDevice
+	}
+	type createdRack struct {
+		ID          string
+		Hypervisors []createdHV
+	}
+	type createdPDU struct {
+		ID    string
+		Racks []createdRack
+	}
+
+	var created []createdPDU
+
+	// CREATE RANDOM HIERARCHY
+	for p := 0; p < numPDUs; p++ {
+		pduID := uuid.NewString()
+		_, err := c.PutPDU(&cpLib.PDU{
+			ID:            pduID,
+			Name:          fmt.Sprintf("PDU-%s", pduID[:6]),
+			Location:      fmt.Sprintf("DC-Zone-%d", rng.Intn(10)),
+			PowerCapacity: "10kW",
+			Specification: "Dell-R640",
+		})
+		require.NoError(t, err)
+
+		pduEntry := createdPDU{ID: pduID}
+
+		numRacks := rng.Intn(maxEntities + 1)
+		if numRacks == 0 {
+			numRacks = 1
+		}
+		for r := 0; r < numRacks; r++ {
+			rackID := uuid.NewString()
+			_, err = c.PutRack(&cpLib.Rack{
+				ID:            rackID,
+				PDUID:         pduID,
+				Name:          fmt.Sprintf("Rack-%s", rackID[:6]),
+				Location:      "Row-5",
+				Specification: "42U",
+			})
+			require.NoError(t, err)
+
+			rackEntry := createdRack{ID: rackID}
+
+			numHVs := rng.Intn(maxEntities + 1)
+			if numHVs == 0 {
+				numHVs = 1
+			}
+			for h := 0; h < numHVs; h++ {
+				hvID := uuid.NewString()
+				_, err = c.PutHypervisor(&cpLib.Hypervisor{
+					ID:          hvID,
+					RackID:      rackID,
+					Name:        fmt.Sprintf("HV-%s", hvID[:6]),
+					IPAddrs:     []string{fmt.Sprintf("192.168.%d.10", rng.Intn(100))},
+					PortRange:   "9000-9100",
+					SSHPort:     "22",
+					RDMAEnabled: true,
+				})
+				require.NoError(t, err)
+
+				hvEntry := createdHV{ID: hvID}
+
+				numDevices := rng.Intn(maxEntities + 1)
+				if numDevices == 0 {
+					numDevices = 1
+				}
+				for d := 0; d < numDevices; d++ {
+					deviceID := uuid.NewString()
+					_, err = c.PutDevice(&cpLib.Device{
+						ID:           deviceID,
+						Name:         fmt.Sprintf("Dev-%s", deviceID[:6]),
+						HypervisorID: hvID,
+						SerialNumber: "SN-" + deviceID[:8],
+						State:        2,
+						Size:         16 * 1024 * 1024 * 1024,
+					})
+					require.NoError(t, err)
+
+					deviceEntry := createdDevice{ID: deviceID}
+
+					numPartitions := rng.Intn(maxEntities + 1)
+					if numPartitions == 0 {
+						numPartitions = 1
+					}
+					for pt := 0; pt < numPartitions; pt++ {
+						partitionID := uuid.NewString()
+
+						_, err = c.PutPartition(&cpLib.DevicePartition{
+							PartitionID:   partitionID,
+							DevID:         deviceID,
+							PartitionPath: fmt.Sprintf("/dev/nvme0n1p%d", pt),
+							Size:          8 * 1024 * 1024 * 1024,
+						})
+						require.NoError(t, err)
+
+						deviceEntry.Partitions = append(deviceEntry.Partitions, createdPartition{
+							ID: partitionID,
+						})
+					}
+					hvEntry.Devices = append(hvEntry.Devices, deviceEntry)
+				}
+				rackEntry.Hypervisors = append(rackEntry.Hypervisors, hvEntry)
+			}
+			pduEntry.Racks = append(pduEntry.Racks, rackEntry)
+		}
+		created = append(created, pduEntry)
+	}
+
+	//  FETCH & VALIDATE HIERARCHY
+	pdus, err := c.GetHierarchy()
+	require.NoError(t, err)
+	require.NotEmpty(t, pdus)
+
+	foundPDUCount := 0
+
+	for _, expectedPDU := range created {
+		var actualPDU *cpLib.PDU
+		for i := range pdus {
+			if pdus[i].ID == expectedPDU.ID {
+				actualPDU = &pdus[i]
+				break
+			}
+		}
+		require.NotNil(t, actualPDU, "PDU %s missing from hierarchy", expectedPDU.ID)
+		foundPDUCount++
+
+		require.Len(t, actualPDU.Racks, len(expectedPDU.Racks))
+
+		for _, expRack := range expectedPDU.Racks {
+			var actRack *cpLib.Rack
+			for i := range actualPDU.Racks {
+				if actualPDU.Racks[i].ID == expRack.ID {
+					actRack = &actualPDU.Racks[i]
+					break
+				}
+			}
+			require.NotNil(t, actRack)
+
+			require.Len(t, actRack.Hypervisors, len(expRack.Hypervisors))
+
+			for _, expHV := range expRack.Hypervisors {
+				var actHV *cpLib.Hypervisor
+				for i := range actRack.Hypervisors {
+					if actRack.Hypervisors[i].ID == expHV.ID {
+						actHV = &actRack.Hypervisors[i]
+						break
+					}
+				}
+				require.NotNil(t, actHV)
+
+				require.Len(t, actHV.Dev, len(expHV.Devices))
+
+				for _, expDev := range expHV.Devices {
+					var actDev *cpLib.Device
+					for i := range actHV.Dev {
+						if actHV.Dev[i].ID == expDev.ID {
+							actDev = &actHV.Dev[i]
+							break
+						}
+					}
+					require.NotNil(t, actDev)
+
+					require.Len(t, actDev.Partitions, len(expDev.Partitions))
+
+					for _, expPart := range expDev.Partitions {
+						var actPart *cpLib.DevicePartition
+						for i := range actDev.Partitions {
+							if actDev.Partitions[i].PartitionID == expPart.ID {
+								actPart = &actDev.Partitions[i]
+								break
+							}
+						}
+						require.NotNil(t, actPart)
+					}
+				}
+			}
+		}
+	}
+
+	require.Equal(t, len(created), foundPDUCount)
+
+	t.Logf("Randomized hierarchy test passed! PDUs=%d", len(created))
+}
+
+// TestGetHierarchyPaginationMatchesFull verifies that iterating through all pages
+// one PDU at a time produces the same complete set as calling GetHierarchy().
+func TestGetHierarchyPaginationMatchesFull(t *testing.T) {
+	c := newClient(t)
+
+	// Seed at least 3 PDUs so there is something to page through.
+	const seedCount = 3
+	seededIDs := make([]string, seedCount)
+	for i := range seedCount {
+		id := uuid.NewString()
+		seededIDs[i] = id
+		_, err := c.PutPDU(&cpLib.PDU{
+			ID:       id,
+			Name:     fmt.Sprintf("PaginTest-PDU-%d-%s", i, id[:8]),
+			Location: "DC-Pagin-Test",
+		})
+		require.NoError(t, err)
+	}
+
+	// GetHierarchy fetches every page internally — this is the reference set.
+	allPDUs, err := c.GetHierarchy()
+	require.NoError(t, err)
+	require.NotEmpty(t, allPDUs)
+
+	totalPDUs := uint64(len(allPDUs))
+
+	// Walk through the list one PDU per page.
+	var pagedIDs []string
+	seen := make(map[string]struct{})
+	var offset uint64
+	for {
+		page, pdus, err := c.GetHierarchyPage(offset, 1)
+		require.NoError(t, err)
+
+		for _, p := range pdus {
+			_, dup := seen[p.ID]
+			require.False(t, dup, "duplicate PDU %s on page starting at offset %d", p.ID, offset)
+			seen[p.ID] = struct{}{}
+			pagedIDs = append(pagedIDs, p.ID)
+		}
+
+		if page == nil || !page.HasMore {
+			break
+		}
+		require.Equal(t, uint64(len(pagedIDs)), page.SeqNo,
+			"SeqNo should equal number of PDUs consumed so far")
+		offset = page.SeqNo
+	}
+
+	// Every PDU returned by GetHierarchy must appear exactly once across all pages.
+	require.Len(t, pagedIDs, int(totalPDUs),
+		"page-by-page total (%d) must equal GetHierarchy total (%d)", len(pagedIDs), totalPDUs)
+
+	// All seeded PDUs must be present.
+	for _, id := range seededIDs {
+		_, ok := seen[id]
+		require.True(t, ok, "seeded PDU %s missing from paginated results", id)
+	}
+
+	t.Logf("pagination correctness verified: %d PDUs, iterated 1 at a time", totalPDUs)
+}
+
+// TestGetHierarchyPaginationSortOrder verifies that every page is sorted by
+// PDU ID and that the concatenated pages preserve a global sort order.
+func TestGetHierarchyPaginationSortOrder(t *testing.T) {
+	c := newClient(t)
+
+	// Seed 4 PDUs to have enough for multi-page reads.
+	for i := range 4 {
+		id := uuid.NewString()
+		_, err := c.PutPDU(&cpLib.PDU{
+			ID:       id,
+			Name:     fmt.Sprintf("SortTest-PDU-%d-%s", i, id[:8]),
+			Location: "DC-Sort-Test",
+		})
+		require.NoError(t, err)
+	}
+
+	const pageSize uint64 = 2
+	var prev string
+	var offset uint64
+
+	for {
+		page, pdus, err := c.GetHierarchyPage(offset, pageSize)
+		require.NoError(t, err)
+		require.LessOrEqual(t, uint64(len(pdus)), pageSize,
+			"page must not exceed requested page size")
+
+		for _, p := range pdus {
+			if prev != "" {
+				require.True(t, prev < p.ID,
+					"PDUs must be in ascending ID order: %q >= %q", prev, p.ID)
+			}
+			prev = p.ID
+		}
+
+		if page == nil || !page.HasMore {
+			break
+		}
+		offset = page.SeqNo
+	}
+
+	t.Log("sort-order across all pages verified")
+}
+
+// TestGetHierarchyPageSizeZeroReturnsAll verifies that pageSize=0 skips
+// pagination and returns the complete set in one response (Page is nil).
+func TestGetHierarchyPageSizeZeroReturnsAll(t *testing.T) {
+	c := newClient(t)
+
+	// Seed a couple of PDUs so the result is non-empty.
+	for i := range 2 {
+		id := uuid.NewString()
+		_, err := c.PutPDU(&cpLib.PDU{
+			ID:       id,
+			Name:     fmt.Sprintf("NoPageTest-PDU-%d-%s", i, id[:8]),
+			Location: "DC-NoPage-Test",
+		})
+		require.NoError(t, err)
+	}
+
+	page, pdus, err := c.GetHierarchyPage(0, 0)
+	require.NoError(t, err)
+	require.Nil(t, page, "pageSize=0 must not return pagination metadata")
+	require.NotEmpty(t, pdus)
+
+	// The result must equal GetHierarchy() which also fetches everything.
+	allPDUs, err := c.GetHierarchy()
+	require.NoError(t, err)
+	require.Len(t, allPDUs, len(pdus),
+		"pageSize=0 result count (%d) must match GetHierarchy count (%d)", len(pdus), len(allPDUs))
+}
+
+// TestGetHierarchyOffsetBeyondTotal verifies that requesting a page starting
+// beyond the last PDU returns an empty list with HasMore=false.
+func TestGetHierarchyOffsetBeyondTotal(t *testing.T) {
+	c := newClient(t)
+
+	// Find out the current total PDU count.
+	allPDUs, err := c.GetHierarchy()
+	require.NoError(t, err)
+
+	beyondOffset := uint64(len(allPDUs)) + 1000
+
+	page, pdus, err := c.GetHierarchyPage(beyondOffset, 10)
+	require.NoError(t, err)
+	require.Empty(t, pdus, "offset beyond total must yield no PDUs")
+	require.NotNil(t, page)
+	require.False(t, page.HasMore, "HasMore must be false when offset is beyond total")
 }

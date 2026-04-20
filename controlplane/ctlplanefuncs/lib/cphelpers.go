@@ -10,6 +10,12 @@ func EncodeResponse(payload any) (any, error) {
 	return pmCmn.Encoder(pmCmn.GOB, CPResp{Payload: payload})
 }
 
+// EncodePagedResponse encodes a successful CPResp with a payload and pagination metadata.
+// page must not be nil; it carries the next-page offset and HasMore flag back to the client.
+func EncodePagedResponse(payload any, page *Pagination) (any, error) {
+	return pmCmn.Encoder(pmCmn.GOB, CPResp{Payload: payload, Page: page})
+}
+
 func encodeErrorResp(code CPErrCode, msg string) (any, error) {
 	return pmCmn.Encoder(pmCmn.GOB, CPResp{
 		Error: &CPError{

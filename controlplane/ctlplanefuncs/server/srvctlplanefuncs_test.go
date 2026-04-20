@@ -834,3 +834,236 @@ func TestAPDeleteVdev(t *testing.T) {
 		})
 	}
 }
+
+// seedHierarchyStore writes the minimal set of keys for a single
+// PDU -> Rack -> HV -> Device (with one partition) into ds.
+// Key formats follow the element-key constants used by the parsers:
+//
+
+func seedHierarchyStore(ds storageiface.DataStore, pduID, rackID, hvID, devID, ptID string) {
+	// PDU
+	ds.Write(fmt.Sprintf("p/%s/nm", pduID), "test-pdu", "")
+	ds.Write(fmt.Sprintf("p/%s/l", pduID), "DC-Test", "")
+
+	// Rack  ("p" stores the PDU UUID it belongs to)
+	ds.Write(fmt.Sprintf("r/%s/nm", rackID), "test-rack", "")
+	ds.Write(fmt.Sprintf("r/%s/p", rackID), pduID, "")
+
+	// Hypervisor  ("r" stores the rack UUID)
+	ds.Write(fmt.Sprintf("hv/%s/nm", hvID), "test-hv", "")
+	ds.Write(fmt.Sprintf("hv/%s/r", hvID), rackID, "")
+	ds.Write(fmt.Sprintf("hv/%s/ip/192.168.1.10", hvID), "9000", "")
+
+	// Device  ("hv" stores the hypervisor UUID)
+	ds.Write(fmt.Sprintf("d_cfg/%s/hv", devID), hvID, "")
+	ds.Write(fmt.Sprintf("d_cfg/%s/sn", devID), "SN-TEST-001", "")
+
+	// Partition under the device
+	ds.Write(fmt.Sprintf("d_cfg/%s/pt/%s/dev_id", devID, ptID), devID, "")
+	ds.Write(fmt.Sprintf("d_cfg/%s/pt/%s/pt_path", devID, ptID), "/dev/nvme0n1p1", "")
+}
+
+func TestReadHierarchy(t *testing.T) {
+	// ReadHierarchy calls validateAndAuthorizeRBAC for authz.ReadHierarchy.
+	authorizer = authz.NewAuthorizerWithConfig(authz.Config{
+		authz.ReadHierarchy: authz.FunctionPolicy{
+			RBAC: []string{"admin", "user"},
+		},
+	})
+	defer func() { authorizer = nil }()
+
+	const (
+		hierPDU  = "11111111-1111-1111-1111-111111111111"
+		hierRack = "22222222-2222-2222-2222-222222222222"
+		hierHV   = "33333333-3333-3333-3333-333333333333"
+		hierDev  = "nvme-hier-001"
+		hierPT   = "nvme-hier-001-p1"
+	)
+
+	testCases := []struct {
+		name            string
+		setupData       func(storageiface.DataStore)
+		setupToken      func() string
+		page            *ctlplfl.Pagination
+		expectError     bool
+		errorContains   string
+		expectedErrCode ctlplfl.CPErrCode
+		validate        func(t *testing.T, pdus []ctlplfl.PDU)
+	}{
+		{
+			// Missing token must be rejected before touching the store.
+			name:      "AuthFailure_MissingToken",
+			setupData: func(_ storageiface.DataStore) {},
+			setupToken: func() string {
+				return ""
+			},
+			expectError:     true,
+			errorContains:   "user token is required",
+			expectedErrCode: ctlplfl.ErrAuth,
+		},
+		{
+			// Role not listed in the policy must be denied.
+			name:      "AuthFailure_UnauthorizedRole",
+			setupData: func(_ storageiface.DataStore) {},
+			setupToken: func() string {
+				tok, _ := createTestToken(testUserID1, "viewer", testSecret)
+				return tok
+			},
+			expectError:     true,
+			errorContains:   "authorization failed",
+			expectedErrCode: ctlplfl.ErrAuth,
+		},
+		{
+			// Valid token, empty store -> response is an empty PDU slice.
+			name:      "EmptyStore_ReturnsEmptyList",
+			setupData: func(_ storageiface.DataStore) {},
+			setupToken: func() string {
+				tok, _ := createTestToken(testUserID1, "user", testSecret)
+				return tok
+			},
+			validate: func(t *testing.T, pdus []ctlplfl.PDU) {
+				if len(pdus) != 0 {
+					t.Errorf("expected 0 PDUs for empty store, got %d", len(pdus))
+				}
+			},
+		},
+		{
+			// Full hierarchy: verifies PDU->Rack->HV->Device->Partition linking
+			// and that NISDs are absent (excluded by ReadHierarchy).
+			name: "FullHierarchy_LinkedCorrectly",
+			setupData: func(ds storageiface.DataStore) {
+				seedHierarchyStore(ds, hierPDU, hierRack, hierHV, hierDev, hierPT)
+			},
+			setupToken: func() string {
+				tok, _ := createTestToken(testAdminID, "admin", testSecret)
+				return tok
+			},
+			validate: func(t *testing.T, pdus []ctlplfl.PDU) {
+				var found *ctlplfl.PDU
+				for i := range pdus {
+					if pdus[i].ID == hierPDU {
+						found = &pdus[i]
+						break
+					}
+				}
+				if found == nil {
+					t.Fatalf("PDU %s not found in hierarchy response", hierPDU)
+				}
+
+				// Rack linked under PDU
+				if len(found.Racks) != 1 || found.Racks[0].ID != hierRack {
+					t.Errorf("expected rack %s under PDU, got %+v", hierRack, found.Racks)
+				}
+				rack := found.Racks[0]
+				if rack.PDUID != hierPDU {
+					t.Errorf("rack.PDUID: want %s, got %s", hierPDU, rack.PDUID)
+				}
+
+				// Hypervisor linked under Rack
+				if len(rack.Hypervisors) != 1 || rack.Hypervisors[0].ID != hierHV {
+					t.Errorf("expected HV %s under Rack, got %+v", hierHV, rack.Hypervisors)
+				}
+				hv := rack.Hypervisors[0]
+				if hv.RackID != hierRack {
+					t.Errorf("hv.RackID: want %s, got %s", hierRack, hv.RackID)
+				}
+
+				// Device linked under Hypervisor
+				if len(hv.Dev) != 1 || hv.Dev[0].ID != hierDev {
+					t.Errorf("expected device %s under HV, got %+v", hierDev, hv.Dev)
+				}
+				dev := hv.Dev[0]
+				if dev.HypervisorID != hierHV {
+					t.Errorf("dev.HypervisorID: want %s, got %s", hierHV, dev.HypervisorID)
+				}
+
+				// Partition present under Device
+				if len(dev.Partitions) != 1 || dev.Partitions[0].PartitionID != hierPT {
+					t.Errorf("expected partition %s under Device, got %+v", hierPT, dev.Partitions)
+				}
+			},
+		},
+		{
+			// Pagination: page-size=1 with one PDU seeded.
+			// Result must contain exactly 1 PDU.
+			name: "Pagination_PageSizeOne",
+			setupData: func(ds storageiface.DataStore) {
+				seedHierarchyStore(ds, hierPDU, hierRack, hierHV, hierDev, hierPT)
+			},
+			setupToken: func() string {
+				tok, _ := createTestToken(testAdminID, "admin", testSecret)
+				return tok
+			},
+			page: &ctlplfl.Pagination{SeqNo: 0, PageSize: 1},
+			validate: func(t *testing.T, pdus []ctlplfl.PDU) {
+				if len(pdus) != 1 {
+					t.Errorf("expected 1 PDU on first page (size=1), got %d", len(pdus))
+				}
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			ds := memstore.NewMemStore()
+			colmfamily = ""
+			if tc.setupData != nil {
+				tc.setupData(ds)
+			}
+
+			cbArgs := &PumiceDBServer.PmdbCbArgs{
+				Store:     ds,
+				ReplySize: 4 * 1024 * 1024,
+			}
+			cpReq := ctlplfl.CPReq{
+				Token: tc.setupToken(),
+				Page:  tc.page,
+			}
+
+			result, err := ReadHierarchy(cbArgs, cpReq)
+
+			if tc.expectError {
+				if result == nil {
+					t.Fatal("expected encoded error response, got nil")
+				}
+				var cpResp ctlplfl.CPResp
+				if decErr := pmCmn.Decoder(pmCmn.GOB, result.([]byte), &cpResp); decErr != nil {
+					t.Fatalf("failed to decode CPResp: %v", decErr)
+				}
+				if cpResp.Error == nil {
+					t.Fatalf("expected CPResp.Error, got success (payload %T)", cpResp.Payload)
+				}
+				if tc.errorContains != "" && !strings.Contains(cpResp.Error.Message, tc.errorContains) {
+					t.Errorf("error message: want %q, got %q", tc.errorContains, cpResp.Error.Message)
+				}
+				if tc.expectedErrCode != "" && cpResp.Error.Code != tc.expectedErrCode {
+					t.Errorf("error code: want %q, got %q", tc.expectedErrCode, cpResp.Error.Code)
+				}
+				return
+			}
+
+			if err != nil {
+				t.Fatalf("unexpected Go error: %v", err)
+			}
+			if result == nil {
+				t.Fatal("expected non-nil result")
+			}
+
+			var cpResp ctlplfl.CPResp
+			if decErr := pmCmn.Decoder(pmCmn.GOB, result.([]byte), &cpResp); decErr != nil {
+				t.Fatalf("failed to decode CPResp: %v", decErr)
+			}
+			if cpResp.Error != nil {
+				t.Fatalf("expected success, got CPResp error: %s", cpResp.Err())
+			}
+
+			pdus, ok := cpResp.Payload.([]ctlplfl.PDU)
+			if !ok {
+				t.Fatalf("expected payload []ctlplfl.PDU, got %T", cpResp.Payload)
+			}
+			if tc.validate != nil {
+				tc.validate(t, pdus)
+			}
+		})
+	}
+}

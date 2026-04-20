@@ -49,6 +49,7 @@ const (
 	GET_ALL_VDEV        = "get_all_vdev"
 	GET_CHUNK_NISD      = "get_chunk_nisd"
 	GET_NISD_INFO       = "get_nisd_info"
+	GET_HIERARCHY       = "GetHierarchy"
 
 	PUT_NISD_ARGS  = "PutNisdArgs"
 	GET_NISD_ARGS  = "GetNisdArgs"

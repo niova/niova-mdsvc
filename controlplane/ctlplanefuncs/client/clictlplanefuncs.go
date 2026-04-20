@@ -639,3 +639,50 @@ func (ccf *CliCFuncs) DeleteVdev(req *ctlplfl.DeleteVdevReq) (*ctlplfl.ResponseX
 
 	return resp, nil
 }
+
+// GetHierarchy fetches the complete infrastructure hierarchy by iterating all
+// pages automatically. Use GetHierarchyPage when you need direct page control.
+func (ccf *CliCFuncs) GetHierarchy() ([]ctlplfl.PDU, error) {
+	const defaultPageSize uint64 = 20
+
+	var (
+		allPDUs []ctlplfl.PDU
+		offset  uint64
+	)
+	for {
+		page, pdus, err := ccf.GetHierarchyPage(offset, defaultPageSize)
+		if err != nil {
+			return nil, err
+		}
+		allPDUs = append(allPDUs, pdus...)
+		if page == nil || !page.HasMore {
+			break
+		}
+		offset = page.SeqNo
+	}
+	return allPDUs, nil
+}
+
+// GetHierarchyPage fetches a single page of the infrastructure hierarchy.
+// offset is the zero-based start index and pageSize is the maximum number of
+// PDUs to return (0 requests everything in one shot, no pagination).
+// The returned *Pagination is nil when the server did not paginate the response.
+func (ccf *CliCFuncs) GetHierarchyPage(offset, pageSize uint64) (*ctlplfl.Pagination, []ctlplfl.PDU, error) {
+	cpReq := &ctlplfl.CPReq{
+		Token: ccf.token,
+		Page: &ctlplfl.Pagination{
+			SeqNo:    offset,
+			PageSize: pageSize,
+		},
+	}
+	pdus := make([]ctlplfl.PDU, 0)
+	cpResp, err := ccf.get(cpReq, ctlplfl.GET_HIERARCHY, &pdus)
+	if err != nil {
+		log.Error("GetHierarchyPage failed: ", err)
+		return nil, nil, err
+	}
+	if err := cpResp.Err(); err != nil {
+		return nil, nil, err
+	}
+	return cpResp.Page, pdus, nil
+}
