@@ -112,8 +112,9 @@ jobs:
       run: |
         export PATH=$PATH:/home/runner/work/go/go/bin
         cd /home/runner/work/niova-mdsvc/niova-mdsvc/controlplane/ctlplanefuncs/client
-        go test -c 
-        cp client.test /home/runner/work/niovad/niovad/build_dir/ctlplane_test
+        go test -c -o client.test
+        mkdir -p /home/runner/work/niovad/niovad/build_dir/ctlplane_test
+        cp client.test /home/runner/work/niovad/niovad/build_dir/ctlplane_test/
 
       env:
         LD_LIBRARY_PATH: /home/runner/work/niovad/niovad/build_dir/lib
