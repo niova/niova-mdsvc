@@ -605,7 +605,7 @@ func TestPutAndGetMultipleHypervisors(t *testing.T) {
 	resp, err := c.GetHypervisor(&cpLib.GetReq{GetAll: true})
 	assert.NoError(t, err)
 	// all testcases use same data store, so including currently added hypervisors we check the result
-	assert.GreaterOrEqual(t, len(resp), len(hypervisors))
+	assert.GreaterOrEqual(t, len(res), len(Nisds))
 }
 
 func TestVdevLifecycle(t *testing.T) {
