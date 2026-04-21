@@ -10,6 +10,8 @@ import (
 
 	log "github.com/00pauln00/niova-lookout/pkg/xlog"
 
+	"github.com/google/uuid"
+
 	auth "github.com/00pauln00/niova-mdsvc/controlplane/auth/jwt"
 	authz "github.com/00pauln00/niova-mdsvc/controlplane/authorizer"
 	ctlplfl "github.com/00pauln00/niova-mdsvc/controlplane/ctlplanefuncs/lib"
@@ -226,6 +228,7 @@ func TestWPCreateVdev(t *testing.T) {
 				Token: tc.setupToken(),
 				Payload: ctlplfl.VdevReq{
 					Vdev: &ctlplfl.VdevCfg{
+						Name:       "wpvdev" + uuid.NewString()[:8],
 						Size:       tc.vdevSize,
 						NumChunks:  uint32(tc.numChunks),
 						NumReplica: uint8(tc.numReplica),

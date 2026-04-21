@@ -439,7 +439,7 @@ func TestVdevLifecycle(t *testing.T) {
 	// Step 1: Create first Vdev
 	req1 := &cpLib.VdevReq{
 		Vdev: &cpLib.VdevCfg{
-			Name:       "vdevtest1",
+			Name:       "vdevtest1" + uuid.NewString()[:8],
 			ID:         uuid.NewString(),
 			Size:       500 * 1024 * 1024 * 1024,
 			NumReplica: 1,
@@ -453,7 +453,7 @@ func TestVdevLifecycle(t *testing.T) {
 	// Step 2: Create second Vdev
 	req2 := &cpLib.VdevReq{
 		Vdev: &cpLib.VdevCfg{
-			Name:       "vdevtest2",
+			Name:       "vdevtest2" + uuid.NewString()[:8],
 			ID:         uuid.NewString(),
 			Size:       500 * 1024 * 1024 * 1024,
 			NumReplica: 1,
@@ -518,7 +518,7 @@ func TestVdevLifecycleByName(t *testing.T) {
 	assert.Equal(t, true, resp.Success)
 
 	// Step 1: Create first Vdev
-	vdev1Name := "vdevtest3"
+	vdev1Name := "vdevtest3" + uuid.NewString()[:8]
 
 	req1 := &cpLib.VdevReq{
 		Vdev: &cpLib.VdevCfg{
@@ -535,7 +535,7 @@ func TestVdevLifecycleByName(t *testing.T) {
 	assert.NotEmpty(t, resp.ID)
 
 	// Step 2: Create second Vdev
-	vdev2Name := "vdevtest4"
+	vdev2Name := "vdevtest4" + uuid.NewString()[:8]
 
 	req2 := &cpLib.VdevReq{
 		Vdev: &cpLib.VdevCfg{
@@ -648,6 +648,7 @@ func TestVdevNisdChunk(t *testing.T) {
 	// create vdev
 	vdev := &cpLib.VdevReq{
 		Vdev: &cpLib.VdevCfg{
+			Name:       "vdevnisdchunk" + uuid.NewString()[:8],
 			Size:       500 * 1024 * 1024 * 1024,
 			NumReplica: 1,
 		},
@@ -810,7 +811,7 @@ func TestParallelVdevCreation(t *testing.T) {
 								rack,
 								hv,
 								dev,
-								fmt.Sprintf("pt-%s-%d", dev, n),
+								fmt.Sprintf("%s-%d", dev, n),
 							},
 							TotalSize:     1_000_000_000_000,
 							AvailableSize: 1_000_000_000_000,
@@ -848,6 +849,7 @@ func TestParallelVdevCreation(t *testing.T) {
 		for i := 0; i < 150; i++ {
 			vdev := &cpLib.VdevReq{
 				Vdev: &cpLib.VdevCfg{
+					Name:       fmt.Sprintf("pvdev%d%s", i, uuid.NewString()[:6]),
 					Size:       100 * 1024 * 1024 * 1024,
 					NumReplica: 1,
 				},
@@ -991,7 +993,12 @@ func TestCreateSmallHierarchy(t *testing.T) {
 			assert.True(t, resp.Success)
 		}
 	}
-
+	req := cpLib.GetReq{
+		GetAll: true,
+	}
+	resp, err := c.GetNisdList(&req)
+	assert.NoError(t, err)
+	log.Info("Returned nisdList with Available size", resp)
 }
 
 func TestCreateVdev(t *testing.T) {
@@ -999,6 +1006,7 @@ func TestCreateVdev(t *testing.T) {
 
 	vdev := &cpLib.VdevReq{
 		Vdev: &cpLib.VdevCfg{
+			Name:       "createvdev" + uuid.NewString()[:8],
 			Size:       500 * 1024 * 1024 * 1024,
 			NumReplica: 2,
 		},
@@ -1051,6 +1059,7 @@ func TestDeleteVdev(t *testing.T) {
 
 	vdev := &cpLib.VdevReq{
 		Vdev: &cpLib.VdevCfg{
+			Name:       "deletevdev" + uuid.NewString()[:8],
 			Size:       8 * 1024 * 1024 * 1024,
 			NumReplica: 1,
 		},
@@ -1157,7 +1166,7 @@ func TestVdevAuthorizationWithUsers(t *testing.T) {
 		user1Client := newClientWithToken(t, user1AccessToken)
 
 		// User1 creates vdev1
-		vdevResp, err := user1Client.CreateVdev(&cpLib.VdevReq{Vdev: &cpLib.VdevCfg{Size: 500 * 1024 * 1024 * 1024, NumReplica: 1}})
+		vdevResp, err := user1Client.CreateVdev(&cpLib.VdevReq{Vdev: &cpLib.VdevCfg{Name: "authvdev1" + uuid.NewString()[:8], Size: 500 * 1024 * 1024 * 1024, NumReplica: 1}})
 		assert.NoError(t, err, "user1 should be able to create vdev")
 		require.NotNil(t, vdevResp)
 		assert.True(t, vdevResp.Success)
@@ -1187,7 +1196,7 @@ func TestVdevAuthorizationWithUsers(t *testing.T) {
 		t.Log("User2 correctly denied access to user1's vdev")
 
 		// User2 creates own vdev
-		vdev2Resp, err := user2Client.CreateVdev(&cpLib.VdevReq{Vdev: &cpLib.VdevCfg{Size: 300 * 1024 * 1024 * 1024, NumReplica: 1}})
+		vdev2Resp, err := user2Client.CreateVdev(&cpLib.VdevReq{Vdev: &cpLib.VdevCfg{Name: "authvdev2" + uuid.NewString()[:8], Size: 300 * 1024 * 1024 * 1024, NumReplica: 1}})
 		assert.NoError(t, err, "user2 should be able to create their own vdev")
 		require.NotNil(t, vdev2Resp)
 		assert.True(t, vdev2Resp.Success)
@@ -1208,7 +1217,7 @@ func TestVdevAuthorizationWithUsers(t *testing.T) {
 		noTokenClient := newClientWithToken(t, "")
 		_, err = noTokenClient.GetVdevCfg(&cpLib.GetReq{ID: vdevID})
 		assert.EqualError(t, err, "Invalid Token")
-		_, err = noTokenClient.CreateVdev(&cpLib.VdevReq{Vdev: &cpLib.VdevCfg{Size: 100 * 1024 * 1024 * 1024, NumReplica: 1}})
+		_, err = noTokenClient.CreateVdev(&cpLib.VdevReq{Vdev: &cpLib.VdevCfg{Name: "notokenvdev" + uuid.NewString()[:8], Size: 100 * 1024 * 1024 * 1024, NumReplica: 1}})
 		assert.EqualError(t, err, "user token is required")
 		t.Log("No-token requests correctly rejected")
 	} else {
@@ -1217,12 +1226,12 @@ func TestVdevAuthorizationWithUsers(t *testing.T) {
 		_, err := ctlClient.PutNisd(&nisd)
 		assert.NoError(t, err, "PutNisd should succeed when auth is disabled")
 
-		vdev1Resp, err := ctlClient.CreateVdev(&cpLib.VdevReq{Vdev: &cpLib.VdevCfg{Size: 500 * 1024 * 1024 * 1024, NumReplica: 1}})
+		vdev1Resp, err := ctlClient.CreateVdev(&cpLib.VdevReq{Vdev: &cpLib.VdevCfg{Name: "disabledvdev1" + uuid.NewString()[:8], Size: 500 * 1024 * 1024 * 1024, NumReplica: 1}})
 		require.NoError(t, err, "CreateVdev should succeed when auth is disabled")
 		assert.True(t, vdev1Resp.Success)
 		vdev1ID := vdev1Resp.ID
 
-		vdev2Resp, err := ctlClient.CreateVdev(&cpLib.VdevReq{Vdev: &cpLib.VdevCfg{Size: 300 * 1024 * 1024 * 1024, NumReplica: 1}})
+		vdev2Resp, err := ctlClient.CreateVdev(&cpLib.VdevReq{Vdev: &cpLib.VdevCfg{Name: "disabledvdev2" + uuid.NewString()[:8], Size: 300 * 1024 * 1024 * 1024, NumReplica: 1}})
 		require.NoError(t, err, "CreateVdev should succeed when auth is disabled")
 		assert.True(t, vdev2Resp.Success)
 		vdev2ID := vdev2Resp.ID
@@ -1908,7 +1917,7 @@ func TestABACVdevOwnership(t *testing.T) {
 
 	// User1 creates vdev
 	vdev1Resp, err := user1Client.CreateVdev(&cpLib.VdevReq{
-		Vdev: &cpLib.VdevCfg{Size: 500 * 1024 * 1024 * 1024, NumReplica: 1},
+		Vdev: &cpLib.VdevCfg{Name: "abacvdev1" + uuid.NewString()[:8], Size: 500 * 1024 * 1024 * 1024, NumReplica: 1},
 	})
 	require.NoError(t, err, "user1 should be able to create vdev")
 	require.NotNil(t, vdev1Resp)
@@ -1917,7 +1926,7 @@ func TestABACVdevOwnership(t *testing.T) {
 
 	// User2 creates vdev
 	vdev2Resp, err := user2Client.CreateVdev(&cpLib.VdevReq{
-		Vdev: &cpLib.VdevCfg{Size: 300 * 1024 * 1024 * 1024, NumReplica: 1},
+		Vdev: &cpLib.VdevCfg{Name: "abacvdev2" + uuid.NewString()[:8], Size: 300 * 1024 * 1024 * 1024, NumReplica: 1},
 	})
 	require.NoError(t, err, "user2 should be able to create vdev")
 	require.NotNil(t, vdev2Resp)
@@ -1992,4 +2001,194 @@ func TestVdevWithPFS(t *testing.T) {
 		assert.True(t, resp.Success)
 
 	}
+}
+
+// TestE2EInfraHierarchy
+// 1 PDU -> 1 Rack -> 1 Hypervisor -> 1 Device -> 10 Partitions + 10 NISDs.
+// go test -v -run ^TestE2EInfraHierarchy$ ./controlplane/ctlplanefuncs/client/
+func TestE2EInfraHierarchy(t *testing.T) {
+	c := newClient(t)
+
+	pduID := uuid.NewString()
+	rackID := uuid.NewString()
+	hvID := uuid.NewString()
+	deviceID := uuid.NewString()
+	const deviceName = "nvme4n1"
+
+	// PDU
+	pduResp, err := c.PutPDU(&cpLib.PDU{
+		ID:            pduID,
+		Name:          "PDU-1",
+		Location:      "e2e",
+		Specification: "e2e",
+		PowerCapacity: "n/a",
+	})
+	require.NoError(t, err, "PutPDU should succeed")
+	require.True(t, pduResp.Success)
+	t.Logf("PDU created: %s", pduID)
+
+	// Rack
+	rackResp, err := c.PutRack(&cpLib.Rack{
+		ID:            rackID,
+		PDUID:         pduID,
+		Name:          "Rack-1",
+		Location:      "e2e",
+		Specification: "42U",
+	})
+	require.NoError(t, err, "PutRack should succeed")
+	require.True(t, rackResp.Success)
+	t.Logf("Rack created: %s under PDU %s", rackID, pduID)
+
+	// Hypervisor
+	hvResp, err := c.PutHypervisor(&cpLib.Hypervisor{
+		ID:          hvID,
+		RackID:      rackID,
+		Name:        "HV-1",
+		IPAddrs:     []string{"127.0.0.1"},
+		PortRange:   "17667-17757",
+		SSHPort:     "22",
+		RDMAEnabled: false,
+	})
+	require.NoError(t, err, "PutHypervisor should succeed")
+	require.True(t, hvResp.Success)
+	t.Logf("Hypervisor created: %s under Rack %s", hvID, rackID)
+
+	// Device
+	devResp, err := c.PutDevice(&cpLib.Device{
+		ID:            deviceID,
+		Name:          deviceName,
+		DevicePath:    "/dev/nvme4n1",
+		SerialNumber:  "e2e",
+		State:         2,
+		Size:          1200243695616,
+		HypervisorID:  hvID,
+		FailureDomain: deviceName,
+	})
+	require.NoError(t, err, "PutDevice should succeed")
+	require.True(t, devResp.Success)
+	t.Logf("Device created: %s (%s) under HV %s", deviceID, deviceName, hvID)
+
+	// 10 Partitions + NISDs
+	type partitionEntry struct {
+		path     string
+		size     int64
+		nisdID   string
+		peerPort uint16
+	}
+
+	partitions := []partitionEntry{
+		{"/dev/nvme4n1p1", 120023154688, "c7f7ea89-9f57-4c02-a359-f390e5934e8a", 17667},
+		{"/dev/nvme4n1p2", 120024203264, "7fb3c81f-a112-4531-b7fd-ff7bd9c8161b", 17677},
+		{"/dev/nvme4n1p3", 120024203264, "9c4a1c77-19fe-44ff-b094-811295cf7642", 17687},
+		{"/dev/nvme4n1p4", 120025251840, "3585beb5-d27d-44b6-bb9e-080b4802e03e", 17697},
+		{"/dev/nvme4n1p5", 120024203264, "0e21d958-57dd-46ed-9a32-ba87e3f8db39", 17707},
+		{"/dev/nvme4n1p6", 120024203264, "9704c503-b3a2-46c2-8542-9aaced75ae12", 17717},
+		{"/dev/nvme4n1p7", 120024203264, "80c29653-10f0-41d9-ac1e-467bcfcc1fc5", 17727},
+		{"/dev/nvme4n1p8", 120024203264, "0485383d-6beb-44b5-bf5d-5fe17e367f02", 17737},
+		{"/dev/nvme4n1p9", 120024203264, "8fa053a9-6f0e-4cef-a3a5-92690598569d", 17747},
+		{"/dev/nvme4n1p10", 120024203264, "fc91f79a-4d1e-4262-8aea-3a234f7289c2", 17757},
+	}
+
+	for _, p := range partitions {
+		ptResp, err := c.PutPartition(&cpLib.DevicePartition{
+			PartitionID:   p.path,
+			PartitionPath: p.path,
+			NISDUUID:      p.nisdID,
+			DevID:         deviceID,
+			Size:          p.size,
+		})
+		require.NoError(t, err, "PutPartition should succeed for %s", p.path)
+		require.True(t, ptResp.Success)
+
+		nisdResp, err := c.PutNisd(&cpLib.Nisd{
+			ID:       p.nisdID,
+			PeerPort: p.peerPort,
+			FailureDomain: []string{
+				pduID,
+				rackID,
+				hvID,
+				deviceName,
+				p.path,
+			},
+			TotalSize:     p.size,
+			AvailableSize: p.size,
+			SocketPath:    "/var/run/nisd.sock",
+			NetInfo:       cpLib.NetInfoList{{IPAddr: "127.0.0.1", Port: p.peerPort}},
+			NetInfoCnt:    1,
+		})
+		require.NoError(t, err, "PutNisd should succeed for NISD %s", p.nisdID)
+		require.True(t, nisdResp.Success)
+		t.Logf("Partition+NISD created: %s / %s (port %d)", p.path, p.nisdID, p.peerPort)
+	}
+
+	// Verify: read back each resource type and confirm our entries are present
+	pdus, err := c.GetPDUs(&cpLib.GetReq{GetAll: true})
+	require.NoError(t, err)
+	assert.True(t, func() bool {
+		for _, p := range pdus {
+			if p.ID == pduID {
+				return true
+			}
+		}
+		return false
+	}(), "PDU %s should be readable", pduID)
+
+	racks, err := c.GetRacks(&cpLib.GetReq{GetAll: true})
+	require.NoError(t, err)
+	assert.True(t, func() bool {
+		for _, r := range racks {
+			if r.ID == rackID {
+				return true
+			}
+		}
+		return false
+	}(), "Rack %s should be readable", rackID)
+
+	hvs, err := c.GetHypervisor(&cpLib.GetReq{GetAll: true})
+	require.NoError(t, err)
+	assert.True(t, func() bool {
+		for _, h := range hvs {
+			if h.ID == hvID {
+				return true
+			}
+		}
+		return false
+	}(), "Hypervisor %s should be readable", hvID)
+
+	nisds, err := c.GetNisds(cpLib.GetReq{GetAll: true})
+	require.NoError(t, err)
+	nisdFound := make(map[string]bool)
+	for _, n := range nisds {
+		nisdFound[n.ID] = true
+	}
+	for _, p := range partitions {
+		assert.True(t, nisdFound[p.nisdID], "NISD %s should be readable", p.nisdID)
+	}
+
+	t.Logf("E2E hierarchy verified: 1 PDU -> 1 Rack -> 1 HV -> 1 Device -> %d NISDs", len(partitions))
+}
+
+// TestCreateVdevForBlockTest creates a vdev using NISDs already registered in the CP
+// (e.g. those from TestE2EInfraHierarchy). Run this after TestE2EInfraHierarchy so the
+// resulting vdev ID is usable with niova-block-test -c cp.
+//
+// Usage:
+//
+//	AUTH_ENABLED=false sudo -E go test -count=1 ./controlplane/ctlplanefuncs/client/... -run TestCreateVdevForBlockTest -v
+func TestCreateVdevForBlockTest(t *testing.T) {
+	c := newClient(t)
+
+	vdevResp, err := c.CreateVdev(&cpLib.VdevReq{
+		Vdev: &cpLib.VdevCfg{
+			Size:       107374182400, // 100 GiB
+			Name:       "blocktestVdev",
+			NumReplica: 1,
+		},
+	})
+	require.NoError(t, err, "CreateVdev should succeed — run TestE2EInfraHierarchy first to register NISDs")
+	require.NotNil(t, vdevResp)
+	assert.True(t, vdevResp.Success)
+	assert.NotEmpty(t, vdevResp.ID)
+
+	t.Logf("export VDEV_ID=%s", vdevResp.ID)
 }

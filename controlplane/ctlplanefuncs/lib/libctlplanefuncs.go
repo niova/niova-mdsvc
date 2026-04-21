@@ -23,32 +23,33 @@ import (
 )
 
 const (
-	PUT_DEVICE          = "PutDevice"
-	GET_DEVICE          = "GetDevice"
-	PUT_NISD            = "PutNisd"
-	GET_NISD            = "GetNisd"
-	GET_NISD_LIST       = "GetAllNisd"
-	CREATE_VDEV         = "CreateVdev"
-	DELETE_VDEV         = "DeleteVdev"
-	GET_VDEV_CHUNK_INFO = "GetVdevsWithChunkInfo"
-	GET_VDEV            = "GetVdevs"
-	CREATE_SNAP         = "CreateSnap"
-	READ_SNAP_NAME      = "ReadSnapByName"
-	READ_SNAP_VDEV      = "ReadSnapForVdev"
-	PUT_PDU             = "PutPDU"
-	GET_PDU             = "GetPDU"
-	GET_RACK            = "GetRack"
-	PUT_RACK            = "PutRack"
-	GET_HYPERVISOR      = "GetHypervisor"
-	PUT_HYPERVISOR      = "PutHypervisor"
-	PUT_PARTITION       = "PutPartition"
-	GET_PARTITION       = "GetPartition"
-	PUT_PFS             = "PutPFS"
-	GET_PFS             = "GetPFS"
-	GET_VDEV_INFO       = "get_vdev_info" // new
-	GET_ALL_VDEV        = "get_all_vdev"
-	GET_CHUNK_NISD      = "get_chunk_nisd"
-	GET_NISD_INFO       = "get_nisd_info"
+	PUT_DEVICE               = "PutDevice"
+	GET_DEVICE               = "GetDevice"
+	PUT_NISD                 = "PutNisd"
+	GET_NISD                 = "GetNisd"
+	GET_NISD_LIST            = "GetAllNisd"
+	CREATE_VDEV              = "CreateVdev"
+	DELETE_VDEV              = "DeleteVdev"
+	GET_VDEV_CHUNK_INFO      = "GetVdevsWithChunkInfo"
+	GET_VDEV                 = "GetVdevs"
+	CREATE_SNAP              = "CreateSnap"
+	READ_SNAP_NAME           = "ReadSnapByName"
+	READ_SNAP_VDEV           = "ReadSnapForVdev"
+	PUT_PDU                  = "PutPDU"
+	GET_PDU                  = "GetPDU"
+	GET_RACK                 = "GetRack"
+	PUT_RACK                 = "PutRack"
+	GET_HYPERVISOR           = "GetHypervisor"
+	PUT_HYPERVISOR           = "PutHypervisor"
+	PUT_PARTITION            = "PutPartition"
+	GET_PARTITION            = "GetPartition"
+	PUT_PFS                  = "PutPFS"
+	GET_PFS                  = "GetPFS"
+	GET_VDEV_INFO            = "get_vdev_info" // new
+	GET_ALL_VDEV             = "get_all_vdev"
+	GET_CHUNK_NISD           = "get_chunk_nisd"
+	GET_NISD_INFO            = "get_nisd_info"
+	GET_NISD_LIST_AVAIL_SIZE = "get_nisd_list_avail_size"
 
 	PUT_NISD_ARGS  = "PutNisdArgs"
 	GET_NISD_ARGS  = "GetNisdArgs"
@@ -287,6 +288,11 @@ type VdevReq struct {
 	Filter Filter
 }
 
+type NisdListAvalSize struct {
+	ID            string `json:"ID"`
+	AvailableSize int64  `json:"AvailableSize"`
+}
+
 // DeleteVdevReq is the request structure for deleting a Vdev.
 // UserToken is a JWT token used to authenticate and authorize the caller
 // before the delete operation is allowed to proceed.
@@ -399,6 +405,8 @@ func RegisterGOBStructs() {
 	gob.Register(VdevReq{})
 	gob.Register(PFS{})
 	gob.Register([]PFS{})
+	gob.Register(NisdListAvalSize{})
+	gob.Register([]NisdListAvalSize{})
 	gob.Register(DeleteVdevReq{})
 	gob.Register(CPReq{})
 	gob.Register(CPResp{})

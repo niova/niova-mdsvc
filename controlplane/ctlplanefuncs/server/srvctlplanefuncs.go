@@ -1649,6 +1649,35 @@ func RdNisdArgs(args ...interface{}) (interface{}, error) {
 
 }
 
+func BuildNisdAvailList(nisds []ctlplfl.Nisd) []ctlplfl.NisdListAvalSize {
+	result := make([]ctlplfl.NisdListAvalSize, 0, len(nisds)) // preallocate
+	for _, n := range nisds {
+		result = append(result, ctlplfl.NisdListAvalSize{
+			ID:            n.ID,
+			AvailableSize: n.AvailableSize,
+		})
+	}
+	return result
+}
+
+func ReadNisdListWithAvailSize(args ...interface{}) (interface{}, error) {
+	cbArgs := args[0].(*PumiceDBServer.PmdbCbArgs)
+	cpReq := args[1].(ctlplfl.CPReq)
+	_, err := ValidateToken(cpReq.Token)
+	if err != nil {
+		log.Errorf("ReadNisdListWithAvailSize: token validation failed: %v", err)
+		return ctlplfl.AuthError(err)
+	}
+	nList, err := getNisdList(cbArgs)
+	if err != nil {
+		log.Errorf("ReadNisdListWithAvailSize: RangeReadKV failed: %v", err)
+		return ctlplfl.AuthError(err)
+	}
+	nLas := BuildNisdAvailList(nList)
+	log.Debugf("ReadNisdListWithAvailSize: returning nisd List with available size")
+	return ctlplfl.EncodeResponse(nLas)
+}
+
 // Deletes a Vdev, archives its data and refunds allocated space to NISDs.
 // The caller must supply a valid JWT in req.UserToken; the WritePrep stage
 // validates the token and checks RBAC permissions before any data is modified.

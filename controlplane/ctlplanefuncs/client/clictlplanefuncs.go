@@ -602,6 +602,24 @@ func (ccf *CliCFuncs) PutDeviceInfo(device *ctlplfl.Device) (*ctlplfl.ResponseXM
 	return ccf.PutDevice(device)
 }
 
+func (ccf *CliCFuncs) GetNisdList(req *ctlplfl.GetReq) ([]ctlplfl.NisdListAvalSize, error) {
+	cpReq := &ctlplfl.CPReq{
+		Token:   ccf.token,
+		Payload: req,
+	}
+	nl := make([]ctlplfl.NisdListAvalSize, 0)
+	cpResp, err := ccf.get(cpReq, ctlplfl.GET_NISD_LIST_AVAIL_SIZE, &nl)
+	if err != nil {
+		log.Error("Read nisd list with available size failed: ", err)
+		return nil, err
+	}
+
+	if err := cpResp.Err(); err != nil {
+		return nil, err
+	}
+	return nl, nil
+}
+
 func (ccf *CliCFuncs) GetChunkNisd(req *ctlplfl.GetReq) (ctlplfl.ChunkNisd, error) {
 	cn := ctlplfl.ChunkNisd{}
 	log.Info("fetching chunk Info for:", req.ID)
