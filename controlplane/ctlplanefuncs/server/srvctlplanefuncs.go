@@ -1649,7 +1649,7 @@ func RdNisdArgs(args ...interface{}) (interface{}, error) {
 
 }
 
-func BuildNisdAvailList(nisds []ctlplfl.Nisd) []ctlplfl.NisdListAvalSize {
+func buildNisdAvailList(nisds []ctlplfl.Nisd) []ctlplfl.NisdListAvalSize {
 	result := make([]ctlplfl.NisdListAvalSize, 0, len(nisds)) // preallocate
 	for _, n := range nisds {
 		result = append(result, ctlplfl.NisdListAvalSize{
@@ -1673,7 +1673,7 @@ func ReadNisdListWithAvailSize(args ...interface{}) (interface{}, error) {
 		log.Errorf("ReadNisdListWithAvailSize: RangeReadKV failed: %v", err)
 		return ctlplfl.AuthError(err)
 	}
-	nLas := BuildNisdAvailList(nList)
+	nLas := buildNisdAvailList(nList)
 	log.Debugf("ReadNisdListWithAvailSize: returning nisd List with available size")
 	return ctlplfl.EncodeResponse(nLas)
 }
