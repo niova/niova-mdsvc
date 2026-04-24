@@ -47,7 +47,7 @@ func TestCreateHierarchyforUserAuthentication(t *testing.T) {
 	c.SetToken(adminToken)
 
 	mockNisd := []cpLib.Nisd{
-		cpLib.Nisd{
+		{
 			PeerPort: 13000,
 			ID:       "7467890a-2299-11f1-9fc3-ebb3b3f1fb90",
 			FailureDomain: []string{
@@ -267,7 +267,7 @@ func TestCreateHierarchyforMultipleBlockTest(t *testing.T) {
 	c.SetToken(adminToken)
 
 	Nisd := []cpLib.Nisd{
-		cpLib.Nisd{
+		{
 			PeerPort: 13000,
 			ID:       nisds[0],
 			FailureDomain: []string{
@@ -287,7 +287,7 @@ func TestCreateHierarchyforMultipleBlockTest(t *testing.T) {
 			},
 			NetInfoCnt: 1,
 		},
-		cpLib.Nisd{
+		{
 			PeerPort: 13002,
 			ID:       nisds[1],
 			FailureDomain: []string{
@@ -328,12 +328,6 @@ func TestCreateHierarchyforMultipleBlockTest(t *testing.T) {
 
 	// nisdList is your stored list
 	log.Infof("Total NISDs: %d", len(nisdList))
-
-	nisdIDs := make([]string, 0, len(nisdList))
-
-	for _, n := range nisdList {
-		nisdIDs = append(nisdIDs, n.ID)
-	}
 
 	for i, n := range nisdList {
 		log.Infof("Index: %d, Nisd ID: %s", i, n.ID)
