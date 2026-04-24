@@ -1222,6 +1222,92 @@ func ReadHyperVisorCfg(args ...interface{}) (interface{}, error) {
 	return ctlplfl.EncodeResponse(hvList)
 }
 
+func ReadAllResources(args ...any) (any, error) {
+	cbArgs := args[0].(*PumiceDBServer.PmdbCbArgs)
+	cpReq := args[1].(ctlplfl.CPReq)
+	req := cpReq.Payload.(ctlplfl.GetResourceReq)
+
+	if _, err := validateAndAuthorizeRBAC(cpReq.Token, authz.ReadAllResources); err != nil {
+		log.Errorf("ReadAllResources: auth failure: %v", err)
+		return ctlplfl.AuthError(err)
+	}
+
+	resp := ctlplfl.ResourceListResp{ResourceType: req.ResourceType}
+
+	rangeRead := func(rootKey string) (map[string][]byte, error) {
+		key := rootKey
+		if !req.GetAll {
+			key = getConfKey(rootKey, req.ID)
+		}
+		result, err := cbArgs.Store.RangeRead(storageiface.RangeReadArgs{
+			Selector: colmfamily,
+			Key:      key,
+			BufSize:  cbArgs.ReplySize,
+			Prefix:   key,
+		})
+		if err != nil {
+			return nil, err
+		}
+		return result.ResultMap, nil
+	}
+
+	switch req.ResourceType {
+	case ctlplfl.ResourceNisd:
+		rm, err := rangeRead(NisdCfgKey)
+		if err != nil {
+			log.Errorf("ReadAllResources: range read failed for nisd: %v", err)
+			return ctlplfl.FuncError(err)
+		}
+		resp.Nisds = ParseEntities[ctlplfl.Nisd](rm, NisdParser{})
+
+	case ctlplfl.ResourceRack:
+		rm, err := rangeRead(rackKey)
+		if err != nil {
+			log.Errorf("ReadAllResources: range read failed for rack: %v", err)
+			return ctlplfl.FuncError(err)
+		}
+		resp.Racks = ParseEntities[ctlplfl.Rack](rm, rackParser{})
+
+	case ctlplfl.ResourcePDU:
+		rm, err := rangeRead(pduKey)
+		if err != nil {
+			log.Errorf("ReadAllResources: range read failed for pdu: %v", err)
+			return ctlplfl.FuncError(err)
+		}
+		resp.PDUs = ParseEntities[ctlplfl.PDU](rm, pduParser{})
+
+	case ctlplfl.ResourceHypervisor:
+		rm, err := rangeRead(hvKey)
+		if err != nil {
+			log.Errorf("ReadAllResources: range read failed for hypervisor: %v", err)
+			return ctlplfl.FuncError(err)
+		}
+		resp.Hypervisors = ParseEntities[ctlplfl.Hypervisor](rm, hvParser{})
+
+	case ctlplfl.ResourceDevice:
+		rm, err := rangeRead(deviceCfgKey)
+		if err != nil {
+			log.Errorf("ReadAllResources: range read failed for device: %v", err)
+			return ctlplfl.FuncError(err)
+		}
+		resp.Devices = ParseEntities[ctlplfl.Device](rm, deviceWithPartitionParser{})
+
+	case ctlplfl.ResourcePartition:
+		rm, err := rangeRead(ptKey)
+		if err != nil {
+			log.Errorf("ReadAllResources: range read failed for partition: %v", err)
+			return ctlplfl.FuncError(err)
+		}
+		resp.Partitions = ParseEntities[ctlplfl.DevicePartition](rm, ptParser{})
+
+	default:
+		return ctlplfl.FuncError(fmt.Errorf("unknown resource type: %q", req.ResourceType))
+	}
+
+	log.Debugf("ReadAllResources: returning result for resource type %q", req.ResourceType)
+	return ctlplfl.EncodeResponse(resp)
+}
+
 func ReadVdevsInfoWithChunkMapping(args ...interface{}) (interface{}, error) {
 	cbArgs := args[0].(*PumiceDBServer.PmdbCbArgs)
 	cpReq := args[1].(ctlplfl.CPReq)
@@ -1649,10 +1735,10 @@ func RdNisdArgs(args ...interface{}) (interface{}, error) {
 
 }
 
-func buildNisdAvailList(nisds []ctlplfl.Nisd) []ctlplfl.NisdListAvalSize {
-	result := make([]ctlplfl.NisdListAvalSize, 0, len(nisds)) // preallocate
+func buildNisdAvailList(nisds []ctlplfl.Nisd) []ctlplfl.NisdListAvailSize {
+	result := make([]ctlplfl.NisdListAvailSize, 0, len(nisds)) // preallocate
 	for _, n := range nisds {
-		result = append(result, ctlplfl.NisdListAvalSize{
+		result = append(result, ctlplfl.NisdListAvailSize{
 			ID:            n.ID,
 			AvailableSize: n.AvailableSize,
 		})
@@ -1663,7 +1749,7 @@ func buildNisdAvailList(nisds []ctlplfl.Nisd) []ctlplfl.NisdListAvalSize {
 func ReadNisdListWithAvailSize(args ...interface{}) (interface{}, error) {
 	cbArgs := args[0].(*PumiceDBServer.PmdbCbArgs)
 	cpReq := args[1].(ctlplfl.CPReq)
-	_, err := ValidateToken(cpReq.Token)
+	_, err := validateAndAuthorizeRBAC(cpReq.Token, authz.ReadNisdListWithAvailSize)
 	if err != nil {
 		log.Errorf("ReadNisdListWithAvailSize: token validation failed: %v", err)
 		return ctlplfl.AuthError(err)
@@ -1671,7 +1757,7 @@ func ReadNisdListWithAvailSize(args ...interface{}) (interface{}, error) {
 	nList, err := getNisdList(cbArgs)
 	if err != nil {
 		log.Errorf("ReadNisdListWithAvailSize: RangeReadKV failed: %v", err)
-		return ctlplfl.AuthError(err)
+		return ctlplfl.FuncError(err)
 	}
 	nLas := buildNisdAvailList(nList)
 	log.Debugf("ReadNisdListWithAvailSize: returning nisd List with available size")

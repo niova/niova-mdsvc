@@ -27,6 +27,8 @@ func GetReqStruct(name string) any {
 	switch name {
 	case cpLib.GET_RACK, cpLib.GET_NISD, cpLib.GET_DEVICE, cpLib.GET_PDU, cpLib.GET_HYPERVISOR, cpLib.GET_PARTITION, cpLib.GET_VDEV, cpLib.GET_CHUNK_NISD, userlib.LoginAPI, cpLib.GET_VDEV_CHUNK_INFO, cpLib.GET_VDEV_INFO, cpLib.GET_PFS, cpLib.GET_NISD_LIST_AVAIL_SIZE:
 		return &cpLib.GetReq{}
+	case cpLib.GET_ALL_RESOURCES:
+		return &cpLib.GetResourceReq{}
 	case cpLib.PUT_RACK:
 		return &cpLib.Rack{}
 	case cpLib.PUT_DEVICE:
@@ -91,7 +93,9 @@ func GetRespStruct(name string) any {
 	case cpLib.GET_NISD_ARGS:
 		return &cpLib.NisdArgs{}
 	case cpLib.GET_NISD_LIST_AVAIL_SIZE:
-		return &[]cpLib.NisdListAvalSize{}
+		return &[]cpLib.NisdListAvailSize{}
+	case cpLib.GET_ALL_RESOURCES:
+		return &cpLib.ResourceListResp{}
 	case cpLib.PUT_RACK, cpLib.PUT_DEVICE, cpLib.PUT_HYPERVISOR, cpLib.PUT_NISD, cpLib.PUT_PDU, cpLib.PUT_PARTITION, cpLib.PUT_NISD_ARGS, cpLib.CREATE_VDEV, cpLib.PUT_PFS:
 		return &cpLib.ResponseXML{}
 	case userlib.PutUserAPI, userlib.AdminUserAPI:
@@ -163,6 +167,8 @@ func derefPtr(v any) any {
 	case *userlib.GetReq:
 		return *p
 	case *cpLib.DeleteVdevReq:
+		return *p
+	case *cpLib.GetResourceReq:
 		return *p
 	default:
 		return v

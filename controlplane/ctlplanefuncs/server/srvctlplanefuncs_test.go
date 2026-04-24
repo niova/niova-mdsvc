@@ -837,3 +837,477 @@ func TestAPDeleteVdev(t *testing.T) {
 		})
 	}
 }
+
+func TestReadNisdListWithAvailSize(t *testing.T) {
+	testNisdUUID := "59ee0460-1e01-11f1-9566-83949aa998ea"
+	testNisdUUID2 := "6aff1570-1e01-11f1-b677-94a5be37ab0f"
+
+	writeNisdToStore := func(ds storageiface.DataStore, nisdID string, availSize int64) {
+		ds.Write(fmt.Sprintf("%s/%s/d", NisdCfgKey, nisdID), testDev, "")
+		ds.Write(fmt.Sprintf("%s/%s/pp", NisdCfgKey, nisdID), "8160", "")
+		ds.Write(fmt.Sprintf("%s/%s/hv", NisdCfgKey, nisdID), testHV, "")
+		ds.Write(fmt.Sprintf("%s/%s/ts", NisdCfgKey, nisdID), "1000000000000", "")
+		ds.Write(fmt.Sprintf("%s/%s/as", NisdCfgKey, nisdID), strconv.FormatInt(availSize, 10), "")
+		ds.Write(fmt.Sprintf("%s/%s/p", NisdCfgKey, nisdID), testPDU, "")
+		ds.Write(fmt.Sprintf("%s/%s/r", NisdCfgKey, nisdID), testRack, "")
+		ds.Write(fmt.Sprintf("%s/%s/pt", NisdCfgKey, nisdID), testPT, "")
+		ds.Write(fmt.Sprintf("%s/%s/nic", NisdCfgKey, nisdID), "0", "")
+	}
+
+	testCases := []struct {
+		name            string
+		setupData       func(storageiface.DataStore)
+		token           string
+		expectError     bool
+		errorContains   string
+		expectedErrCode ctlplfl.CPErrCode
+		verifyPayload   func(t *testing.T, payload any)
+	}{
+		{
+			name: "Success_SingleNisd",
+			setupData: func(ds storageiface.DataStore) {
+				writeNisdToStore(ds, testNisdUUID, 1073741824)
+			},
+			expectError: false,
+			verifyPayload: func(t *testing.T, payload any) {
+				list, ok := payload.([]ctlplfl.NisdListAvailSize)
+				if !ok {
+					t.Fatalf("Expected []NisdListAvailSize payload, got %T", payload)
+				}
+				if len(list) != 1 {
+					t.Fatalf("Expected 1 entry, got %d", len(list))
+				}
+				if list[0].ID != testNisdUUID {
+					t.Errorf("Expected ID %q, got %q", testNisdUUID, list[0].ID)
+				}
+				if list[0].AvailableSize != 1073741824 {
+					t.Errorf("Expected AvailableSize 1073741824, got %d", list[0].AvailableSize)
+				}
+			},
+		},
+		{
+			name: "Success_MultipleNisds",
+			setupData: func(ds storageiface.DataStore) {
+				writeNisdToStore(ds, testNisdUUID, 2000000000)
+				writeNisdToStore(ds, testNisdUUID2, 5000000000)
+			},
+			expectError: false,
+			verifyPayload: func(t *testing.T, payload any) {
+				list, ok := payload.([]ctlplfl.NisdListAvailSize)
+				if !ok {
+					t.Fatalf("Expected []NisdListAvailSize payload, got %T", payload)
+				}
+				if len(list) != 2 {
+					t.Fatalf("Expected 2 entries, got %d", len(list))
+				}
+			},
+		},
+		{
+			name:        "Success_EmptyStore",
+			setupData:   func(_ storageiface.DataStore) {},
+			expectError: false,
+			verifyPayload: func(t *testing.T, payload any) {
+				list, ok := payload.([]ctlplfl.NisdListAvailSize)
+				if !ok {
+					t.Fatalf("Expected []NisdListAvailSize payload, got %T", payload)
+				}
+				if len(list) != 0 {
+					t.Errorf("Expected empty list, got %d entries", len(list))
+				}
+			},
+		},
+		{
+			name: "Error_MissingToken",
+			setupData: func(ds storageiface.DataStore) {
+				writeNisdToStore(ds, testNisdUUID, 1073741824)
+			},
+			token:           "",
+			expectError:     true,
+			errorContains:   "user token is required",
+			expectedErrCode: ctlplfl.ErrAuth,
+		},
+		{
+			name: "Error_UnauthorizedRole",
+			setupData: func(ds storageiface.DataStore) {
+				writeNisdToStore(ds, testNisdUUID, 1073741824)
+			},
+			token: func() string {
+				tk, _ := createTestToken(testUserID1, "user", testSecret)
+				return tk
+			}(),
+			expectError:     true,
+			errorContains:   "authorization failed",
+			expectedErrCode: ctlplfl.ErrAuth,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			authorizer = authz.NewAuthorizerWithConfig(authz.Config{
+				authz.ReadNisdListWithAvailSize: authz.FunctionPolicy{
+					RBAC: []string{"admin"},
+				},
+			})
+			defer func() { authorizer = nil }()
+
+			ds := memstore.NewMemStore()
+			colmfamily = ""
+			if tc.setupData != nil {
+				tc.setupData(ds)
+			}
+
+			cbArgs := &PumiceDBServer.PmdbCbArgs{
+				Store:     ds,
+				ReplySize: 4096,
+			}
+
+			token := tc.token
+			if token == "" && !tc.expectError {
+				token, _ = createTestToken(testAdminID, "admin", testSecret)
+			}
+
+			cpReq := ctlplfl.CPReq{Token: token}
+			result, err := ReadNisdListWithAvailSize(cbArgs, cpReq)
+			if err != nil {
+				t.Fatalf("Unexpected Go-level error: %v", err)
+			}
+			if result == nil {
+				t.Fatal("Expected non-nil result")
+			}
+
+			var cpResp ctlplfl.CPResp
+			if decErr := pmCmn.Decoder(pmCmn.GOB, result.([]byte), &cpResp); decErr != nil {
+				t.Fatalf("Failed to decode response: %v", decErr)
+			}
+
+			if tc.expectError {
+				if cpResp.Error == nil {
+					t.Errorf("Expected error response but got success")
+					return
+				}
+				if tc.errorContains != "" && !strings.Contains(cpResp.Error.Message, tc.errorContains) {
+					t.Errorf("Expected error containing %q, got %q", tc.errorContains, cpResp.Error.Message)
+				}
+				if tc.expectedErrCode != "" && cpResp.Error.Code != tc.expectedErrCode {
+					t.Errorf("Expected error code %q, got %q", tc.expectedErrCode, cpResp.Error.Code)
+				}
+				return
+			}
+
+			if cpResp.Error != nil {
+				t.Errorf("Expected success, got error: %s", cpResp.Err())
+				return
+			}
+
+			if tc.verifyPayload != nil {
+				tc.verifyPayload(t, cpResp.Payload)
+			}
+		})
+	}
+}
+
+func TestReadAllResources(t *testing.T) {
+	testNisdID := "59ee0460-1e01-11f1-9566-83949aa998ea"
+	testRackID := "rack-001"
+	testPDUID := "pdu-001"
+	testHVID := "hv-001"
+	testDevID := "dev-001"
+	testPTID := "pt-001"
+
+	writeNisd := func(ds storageiface.DataStore, id string) {
+		ds.Write(fmt.Sprintf("%s/%s/d", NisdCfgKey, id), testDev, "")
+		ds.Write(fmt.Sprintf("%s/%s/pp", NisdCfgKey, id), "8160", "")
+		ds.Write(fmt.Sprintf("%s/%s/hv", NisdCfgKey, id), testHV, "")
+		ds.Write(fmt.Sprintf("%s/%s/ts", NisdCfgKey, id), "2000000000", "")
+		ds.Write(fmt.Sprintf("%s/%s/as", NisdCfgKey, id), "1000000000", "")
+		ds.Write(fmt.Sprintf("%s/%s/p", NisdCfgKey, id), testPDU, "")
+		ds.Write(fmt.Sprintf("%s/%s/r", NisdCfgKey, id), testRack, "")
+		ds.Write(fmt.Sprintf("%s/%s/pt", NisdCfgKey, id), testPT, "")
+		ds.Write(fmt.Sprintf("%s/%s/nic", NisdCfgKey, id), "0", "")
+	}
+
+	writeRack := func(ds storageiface.DataStore, id string) {
+		ds.Write(fmt.Sprintf("r/%s/nm", id), "rack-name", "")
+		ds.Write(fmt.Sprintf("r/%s/l", id), "dc1", "")
+		ds.Write(fmt.Sprintf("r/%s/p", id), testPDUID, "")
+	}
+
+	writePDU := func(ds storageiface.DataStore, id string) {
+		ds.Write(fmt.Sprintf("p/%s/nm", id), "pdu-name", "")
+		ds.Write(fmt.Sprintf("p/%s/l", id), "dc1", "")
+		ds.Write(fmt.Sprintf("p/%s/pw", id), "10000", "")
+	}
+
+	writeHV := func(ds storageiface.DataStore, id string) {
+		ds.Write(fmt.Sprintf("hv/%s/nm", id), "hv-name", "")
+		ds.Write(fmt.Sprintf("hv/%s/r", id), testRackID, "")
+		ds.Write(fmt.Sprintf("hv/%s/rdma", id), "false", "")
+	}
+
+	writeDev := func(ds storageiface.DataStore, id string) {
+		ds.Write(fmt.Sprintf("d_cfg/%s/nm", id), "nvme-001", "")
+		ds.Write(fmt.Sprintf("d_cfg/%s/dp", id), "/dev/nvme0n1", "")
+		ds.Write(fmt.Sprintf("d_cfg/%s/sz", id), "4000000000000", "")
+	}
+
+	writePT := func(ds storageiface.DataStore, id string) {
+		ds.Write(fmt.Sprintf("pt/%s/ptp", id), "/dev/nvme0n1p1", "")
+		ds.Write(fmt.Sprintf("pt/%s/d", id), testDevID, "")
+		ds.Write(fmt.Sprintf("pt/%s/sz", id), "2000000000000", "")
+	}
+
+	adminToken := func() string {
+		tk, _ := createTestToken(testAdminID, "admin", testSecret)
+		return tk
+	}
+
+	testCases := []struct {
+		name            string
+		setupData       func(storageiface.DataStore)
+		token           string
+		req             ctlplfl.GetResourceReq
+		expectError     bool
+		errorContains   string
+		expectedErrCode ctlplfl.CPErrCode
+		verifyPayload   func(t *testing.T, payload any)
+	}{
+		{
+			name: "Success_Nisd_GetAll",
+			setupData: func(ds storageiface.DataStore) {
+				writeNisd(ds, testNisdID)
+			},
+			req:         ctlplfl.GetResourceReq{ResourceType: ctlplfl.ResourceNisd, GetAll: true},
+			expectError: false,
+			verifyPayload: func(t *testing.T, payload any) {
+				resp, ok := payload.(ctlplfl.ResourceListResp)
+				if !ok {
+					t.Fatalf("Expected ResourceListResp, got %T", payload)
+				}
+				if resp.ResourceType != ctlplfl.ResourceNisd {
+					t.Errorf("Expected resource type %q, got %q", ctlplfl.ResourceNisd, resp.ResourceType)
+				}
+				if len(resp.Nisds) != 1 {
+					t.Fatalf("Expected 1 NISD, got %d", len(resp.Nisds))
+				}
+				if resp.Nisds[0].ID != testNisdID {
+					t.Errorf("Expected NISD ID %q, got %q", testNisdID, resp.Nisds[0].ID)
+				}
+			},
+		},
+		{
+			name: "Success_Rack_GetAll",
+			setupData: func(ds storageiface.DataStore) {
+				writeRack(ds, testRackID)
+			},
+			req:         ctlplfl.GetResourceReq{ResourceType: ctlplfl.ResourceRack, GetAll: true},
+			expectError: false,
+			verifyPayload: func(t *testing.T, payload any) {
+				resp, ok := payload.(ctlplfl.ResourceListResp)
+				if !ok {
+					t.Fatalf("Expected ResourceListResp, got %T", payload)
+				}
+				if len(resp.Racks) != 1 {
+					t.Fatalf("Expected 1 Rack, got %d", len(resp.Racks))
+				}
+				if resp.Racks[0].ID != testRackID {
+					t.Errorf("Expected Rack ID %q, got %q", testRackID, resp.Racks[0].ID)
+				}
+			},
+		},
+		{
+			name: "Success_PDU_GetAll",
+			setupData: func(ds storageiface.DataStore) {
+				writePDU(ds, testPDUID)
+			},
+			req:         ctlplfl.GetResourceReq{ResourceType: ctlplfl.ResourcePDU, GetAll: true},
+			expectError: false,
+			verifyPayload: func(t *testing.T, payload any) {
+				resp, ok := payload.(ctlplfl.ResourceListResp)
+				if !ok {
+					t.Fatalf("Expected ResourceListResp, got %T", payload)
+				}
+				if len(resp.PDUs) != 1 {
+					t.Fatalf("Expected 1 PDU, got %d", len(resp.PDUs))
+				}
+				if resp.PDUs[0].ID != testPDUID {
+					t.Errorf("Expected PDU ID %q, got %q", testPDUID, resp.PDUs[0].ID)
+				}
+			},
+		},
+		{
+			name: "Success_Hypervisor_GetAll",
+			setupData: func(ds storageiface.DataStore) {
+				writeHV(ds, testHVID)
+			},
+			req:         ctlplfl.GetResourceReq{ResourceType: ctlplfl.ResourceHypervisor, GetAll: true},
+			expectError: false,
+			verifyPayload: func(t *testing.T, payload any) {
+				resp, ok := payload.(ctlplfl.ResourceListResp)
+				if !ok {
+					t.Fatalf("Expected ResourceListResp, got %T", payload)
+				}
+				if len(resp.Hypervisors) != 1 {
+					t.Fatalf("Expected 1 Hypervisor, got %d", len(resp.Hypervisors))
+				}
+				if resp.Hypervisors[0].ID != testHVID {
+					t.Errorf("Expected HV ID %q, got %q", testHVID, resp.Hypervisors[0].ID)
+				}
+			},
+		},
+		{
+			name: "Success_Device_GetAll",
+			setupData: func(ds storageiface.DataStore) {
+				writeDev(ds, testDevID)
+			},
+			req:         ctlplfl.GetResourceReq{ResourceType: ctlplfl.ResourceDevice, GetAll: true},
+			expectError: false,
+			verifyPayload: func(t *testing.T, payload any) {
+				resp, ok := payload.(ctlplfl.ResourceListResp)
+				if !ok {
+					t.Fatalf("Expected ResourceListResp, got %T", payload)
+				}
+				if len(resp.Devices) != 1 {
+					t.Fatalf("Expected 1 Device, got %d", len(resp.Devices))
+				}
+				if resp.Devices[0].ID != testDevID {
+					t.Errorf("Expected Device ID %q, got %q", testDevID, resp.Devices[0].ID)
+				}
+			},
+		},
+		{
+			name: "Success_Partition_GetAll",
+			setupData: func(ds storageiface.DataStore) {
+				writePT(ds, testPTID)
+			},
+			req:         ctlplfl.GetResourceReq{ResourceType: ctlplfl.ResourcePartition, GetAll: true},
+			expectError: false,
+			verifyPayload: func(t *testing.T, payload any) {
+				resp, ok := payload.(ctlplfl.ResourceListResp)
+				if !ok {
+					t.Fatalf("Expected ResourceListResp, got %T", payload)
+				}
+				if len(resp.Partitions) != 1 {
+					t.Fatalf("Expected 1 Partition, got %d", len(resp.Partitions))
+				}
+				if resp.Partitions[0].PartitionID != testPTID {
+					t.Errorf("Expected Partition ID %q, got %q", testPTID, resp.Partitions[0].PartitionID)
+				}
+			},
+		},
+		{
+			name: "Success_Nisd_GetByID",
+			setupData: func(ds storageiface.DataStore) {
+				writeNisd(ds, testNisdID)
+			},
+			req:         ctlplfl.GetResourceReq{ResourceType: ctlplfl.ResourceNisd, ID: testNisdID, GetAll: false},
+			expectError: false,
+			verifyPayload: func(t *testing.T, payload any) {
+				resp, ok := payload.(ctlplfl.ResourceListResp)
+				if !ok {
+					t.Fatalf("Expected ResourceListResp, got %T", payload)
+				}
+				if len(resp.Nisds) != 1 {
+					t.Fatalf("Expected 1 NISD, got %d", len(resp.Nisds))
+				}
+			},
+		},
+		{
+			name:            "Error_UnknownResourceType",
+			setupData:       func(_ storageiface.DataStore) {},
+			token:           adminToken(),
+			req:             ctlplfl.GetResourceReq{ResourceType: "unknown", GetAll: true},
+			expectError:     true,
+			errorContains:   "unknown resource type",
+			expectedErrCode: ctlplfl.ErrFunc,
+		},
+		{
+			name:            "Error_MissingToken",
+			setupData:       func(_ storageiface.DataStore) {},
+			token:           "",
+			req:             ctlplfl.GetResourceReq{ResourceType: ctlplfl.ResourceNisd, GetAll: true},
+			expectError:     true,
+			errorContains:   "user token is required",
+			expectedErrCode: ctlplfl.ErrAuth,
+		},
+		{
+			name:      "Error_UnauthorizedRole",
+			setupData: func(_ storageiface.DataStore) {},
+			token: func() string {
+				tk, _ := createTestToken(testUserID1, "user", testSecret)
+				return tk
+			}(),
+			req:             ctlplfl.GetResourceReq{ResourceType: ctlplfl.ResourceNisd, GetAll: true},
+			expectError:     true,
+			errorContains:   "authorization failed",
+			expectedErrCode: ctlplfl.ErrAuth,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			authorizer = authz.NewAuthorizerWithConfig(authz.Config{
+				authz.ReadAllResources: authz.FunctionPolicy{
+					RBAC: []string{"admin"},
+				},
+			})
+			defer func() { authorizer = nil }()
+
+			ds := memstore.NewMemStore()
+			colmfamily = ""
+			if tc.setupData != nil {
+				tc.setupData(ds)
+			}
+
+			cbArgs := &PumiceDBServer.PmdbCbArgs{
+				Store:     ds,
+				ReplySize: 4096,
+			}
+
+			token := tc.token
+			if token == "" && !tc.expectError {
+				token = adminToken()
+			}
+
+			cpReq := ctlplfl.CPReq{
+				Token:   token,
+				Payload: tc.req,
+			}
+
+			result, err := ReadAllResources(cbArgs, cpReq)
+			if err != nil {
+				t.Fatalf("Unexpected Go-level error: %v", err)
+			}
+			if result == nil {
+				t.Fatal("Expected non-nil result")
+			}
+
+			var cpResp ctlplfl.CPResp
+			if decErr := pmCmn.Decoder(pmCmn.GOB, result.([]byte), &cpResp); decErr != nil {
+				t.Fatalf("Failed to decode response: %v", decErr)
+			}
+
+			if tc.expectError {
+				if cpResp.Error == nil {
+					t.Errorf("Expected error response but got success")
+					return
+				}
+				if tc.errorContains != "" && !strings.Contains(cpResp.Error.Message, tc.errorContains) {
+					t.Errorf("Expected error containing %q, got %q", tc.errorContains, cpResp.Error.Message)
+				}
+				if tc.expectedErrCode != "" && cpResp.Error.Code != tc.expectedErrCode {
+					t.Errorf("Expected error code %q, got %q", tc.expectedErrCode, cpResp.Error.Code)
+				}
+				return
+			}
+
+			if cpResp.Error != nil {
+				t.Errorf("Expected success, got error: %s", cpResp.Err())
+				return
+			}
+
+			if tc.verifyPayload != nil {
+				tc.verifyPayload(t, cpResp.Payload)
+			}
+		})
+	}
+}
