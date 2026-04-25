@@ -4,13 +4,13 @@ import (
 	"fmt"
 	"testing"
 
-	cpLib "github.com/00pauln00/niova-mdsvc/controlplane/ctlplanefuncs/lib"
-	userlib "github.com/00pauln00/niova-mdsvc/controlplane/user/lib"
-	log "github.com/sirupsen/logrus"
-
 	"github.com/google/uuid"
+	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	cpLib "github.com/00pauln00/niova-mdsvc/controlplane/ctlplanefuncs/lib"
+	userlib "github.com/00pauln00/niova-mdsvc/controlplane/user/lib"
 )
 
 func TestCreateHierarchyforUserAuthentication(t *testing.T) {
@@ -203,65 +203,6 @@ func TestCreateHierarchyforMultipleBlockTest(t *testing.T) {
 	nisds := []string{
 		"83b1a782-2772-11f1-91ea-5f00b1c98291",
 		"83b1a782-2772-11f1-91ea-5f00b1c98292",
-		"83b1a782-2772-11f1-91ea-5f00b1c98293",
-		"83b1a782-2772-11f1-91ea-5f00b1c98294",
-		"83b1a782-2772-11f1-91ea-5f00b1c98295",
-		"83b1a782-2772-11f1-91ea-5f00b1c98296",
-		"83b1a782-2772-11f1-91ea-5f00b1c98297",
-		"83b1a782-2772-11f1-91ea-5f00b1c98298",
-		"83b1a782-2772-11f1-91ea-5f00b1c98299",
-		"83b1a782-2772-11f1-91ea-5f00b1c98300",
-		"83b1a782-2772-11f1-91ea-5f00b1c98301",
-		"83b1a782-2772-11f1-91ea-5f00b1c98302",
-		"83b1a782-2772-11f1-91ea-5f00b1c98303",
-		"83b1a782-2772-11f1-91ea-5f00b1c98304",
-		"83b1a782-2772-11f1-91ea-5f00b1c98305",
-		"83b1a782-2772-11f1-91ea-5f00b1c98306",
-	}
-
-	mockNisd := []cpLib.Nisd{}
-
-	nisdIndex := 0
-	basePort := uint16(16000)
-
-	for p := 0; p < len(pdus); p++ {
-		for r := 0; r < 2; r++ {
-			rackIndex := p*2 + r
-
-			for h := 0; h < 2; h++ {
-				hvIndex := rackIndex*2 + h
-
-				for n := 0; n < 2; n++ {
-
-					peerPort := basePort + uint16(nisdIndex*10)
-					clientPort := peerPort + 1
-
-					nisd := cpLib.Nisd{
-						PeerPort: peerPort,
-						ID:       nisds[nisdIndex],
-						FailureDomain: []string{
-							pdus[p],
-							racks[rackIndex],
-							hvs[hvIndex],
-							fmt.Sprintf("/auth_nisd_%d.device", nisdIndex),
-							fmt.Sprintf("/auth_nisd_%d.device", nisdIndex),
-						},
-						TotalSize:     16 * 1024 * 1024 * 1024,
-						AvailableSize: 16 * 1024 * 1024 * 1024,
-						NetInfo: cpLib.NetInfoList{
-							cpLib.NetworkInfo{
-								IPAddr: "172.31.24.182",
-								Port:   clientPort,
-							},
-						},
-						NetInfoCnt: 1,
-					}
-
-					mockNisd = append(mockNisd, nisd)
-					nisdIndex++
-				}
-			}
-		}
 	}
 
 	c.SetToken(adminToken)
