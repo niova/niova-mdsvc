@@ -64,8 +64,8 @@ func TestCreateVdevParallel(t *testing.T) {
 
 	// Device
 	device := cpLib.Device{
-		ID:            "nvme-5e6b9c7f1a33",   
-		SerialNumber:  "SN123456789",   
+		ID:            "nvme-5e6b9c7f1a33",
+		SerialNumber:  "SN123456789",
 		State:         1,
 		HypervisorID:  "b3d8f0a2-7c5e-4b9f-9a62-2d7e1f6c8a54",
 		FailureDomain: "fd-01",
@@ -93,8 +93,8 @@ func TestCreateVdevParallel(t *testing.T) {
 
 	nisds := []cpLib.Nisd{
 		cpLib.Nisd{
-			PeerPort:   8010,
-			ID:         "86adee3a-d5da-11f0-8250-5f1ad86a5661",
+			PeerPort: 8010,
+			ID:       "86adee3a-d5da-11f0-8250-5f1ad86a5661",
 			FailureDomain: []string{
 				"2f4c7c3a-9d2a-4e3e-b1b7-6a6f8d7b2f1a",
 				"6a9e1c44-3b9a-4d63-8f5c-0a2c1e8f4b77",
@@ -105,8 +105,8 @@ func TestCreateVdevParallel(t *testing.T) {
 			AvailableSize: nisdSize,
 		},
 		cpLib.Nisd{
-			PeerPort:   8011,
-			ID:         "86adee3a-d5da-11f0-8250-5f1ad86a5662",
+			PeerPort: 8011,
+			ID:       "86adee3a-d5da-11f0-8250-5f1ad86a5662",
 			FailureDomain: []string{
 				"2f4c7c3a-9d2a-4e3e-b1b7-6a6f8d7b2f1a",
 				"6a9e1c44-3b9a-4d63-8f5c-0a2c1e8f4b77",
@@ -304,8 +304,8 @@ func TestCreateVdevParallelFailure(t *testing.T) {
 
 	// Device
 	device := cpLib.Device{
-		ID:            "nvme-5e6b9c7f1a33",   
-		SerialNumber:  "SN123456789",   
+		ID:            "nvme-5e6b9c7f1a33",
+		SerialNumber:  "SN123456789",
 		State:         1,
 		HypervisorID:  "b3d8f0a2-7c5e-4b9f-9a62-2d7e1f6c8a54",
 		FailureDomain: "fd-02",
@@ -333,8 +333,8 @@ func TestCreateVdevParallelFailure(t *testing.T) {
 
 	nisds := []cpLib.Nisd{
 		cpLib.Nisd{
-			PeerPort:   8012,
-			ID:         "86adee3a-d5da-11f0-8250-5f1ad86a5661",
+			PeerPort: 8012,
+			ID:       "86adee3a-d5da-11f0-8250-5f1ad86a5661",
 			FailureDomain: []string{
 				"2f4c7c3a-9d2a-4e3e-b1b7-6a6f8d7b2f1a",
 				"6a9e1c44-3b9a-4d63-8f5c-0a2c1e8f4b77",
@@ -345,8 +345,8 @@ func TestCreateVdevParallelFailure(t *testing.T) {
 			AvailableSize: nisdSize,
 		},
 		cpLib.Nisd{
-			PeerPort:   8013,
-			ID:         "86adee3a-d5da-11f0-8250-5f1ad86a5662",
+			PeerPort: 8013,
+			ID:       "86adee3a-d5da-11f0-8250-5f1ad86a5662",
 			FailureDomain: []string{
 				"2f4c7c3a-9d2a-4e3e-b1b7-6a6f8d7b2f1a",
 				"6a9e1c44-3b9a-4d63-8f5c-0a2c1e8f4b77",
@@ -462,5 +462,5 @@ func TestCreateVdevParallelFailure(t *testing.T) {
 
 	// validation of created vdevs
 	assert.Equal(t, vdevCount, len(createdVdevs),
-		"unexpected number of VDEVs created")	
+		"unexpected number of VDEVs created")
 }

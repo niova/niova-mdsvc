@@ -61,13 +61,13 @@ func TestEqualVdevDistribution(t *testing.T) {
 	}
 
 	PDUs := []cpLib.PDU{
-		{	ID: 		   pdus[0],
+		{ID: pdus[0],
 			Name:          "pdu-1",
 			Location:      "us-east",
 			PowerCapacity: "15Kw",
 			Specification: "specification1",
 		},
-		{	ID: 		   pdus[1],
+		{ID: pdus[1],
 			Name:          "pdu-2",
 			Location:      "us-west",
 			PowerCapacity: "15Kw",
@@ -86,7 +86,7 @@ func TestEqualVdevDistribution(t *testing.T) {
 		{ID: racks[0], PDUID: pdus[0], Name: "rack-1", Location: "us-east", Specification: "rack1-spec"},
 		{ID: racks[1], PDUID: pdus[0], Name: "rack-2", Location: "us-east", Specification: "rack2-spec"},
 		{ID: racks[2], PDUID: pdus[1], Name: "rack-3", Location: "us-west", Specification: "rack3-spec"},
-    	{ID: racks[3], PDUID: pdus[1], Name: "rack-4", Location: "us-west", Specification: "rack4-spec"},
+		{ID: racks[3], PDUID: pdus[1], Name: "rack-4", Location: "us-west", Specification: "rack4-spec"},
 	}
 
 	// PUT multiple Racks
@@ -102,9 +102,9 @@ func TestEqualVdevDistribution(t *testing.T) {
 		{RackID: racks[1], ID: hvs[2], IPAddrs: []string{"127.0.0.1", "127.0.0.1"}, PortRange: "2000-3000", SSHPort: "7999", Name: "hv-3"},
 		{RackID: racks[1], ID: hvs[3], IPAddrs: []string{"127.0.0.1", "127.0.0.1"}, PortRange: "4000-5000", SSHPort: "8999", Name: "hv-4"},
 		{RackID: racks[2], ID: hvs[4], IPAddrs: []string{"127.0.0.1", "127.0.0.1"}, PortRange: "1000-2000", SSHPort: "5998", Name: "hv-5"},
-    	{RackID: racks[2], ID: hvs[5], IPAddrs: []string{"127.0.0.1", "127.0.0.1"}, PortRange: "3000-4000", SSHPort: "6998", Name: "hv-6"},
-    	{RackID: racks[3], ID: hvs[6], IPAddrs: []string{"127.0.0.1", "127.0.0.1"}, PortRange: "6000-7000", SSHPort: "7998", Name: "hv-7"},
-    	{RackID: racks[3], ID: hvs[7], IPAddrs: []string{"127.0.0.1", "127.0.0.1"}, PortRange: "7000-8000", SSHPort: "8998", Name: "hv-8"},
+		{RackID: racks[2], ID: hvs[5], IPAddrs: []string{"127.0.0.1", "127.0.0.1"}, PortRange: "3000-4000", SSHPort: "6998", Name: "hv-6"},
+		{RackID: racks[3], ID: hvs[6], IPAddrs: []string{"127.0.0.1", "127.0.0.1"}, PortRange: "6000-7000", SSHPort: "7998", Name: "hv-7"},
+		{RackID: racks[3], ID: hvs[7], IPAddrs: []string{"127.0.0.1", "127.0.0.1"}, PortRange: "7000-8000", SSHPort: "8998", Name: "hv-8"},
 	}
 
 	// PUT multiple hypervisor
@@ -259,7 +259,6 @@ func TestEqualVdevDistribution(t *testing.T) {
 			DevicePath:    "/temp/path16",
 			Name:          "dev-16",
 		},
-
 	}
 
 	// PUT multiple devices
@@ -279,8 +278,8 @@ func TestEqualVdevDistribution(t *testing.T) {
 				hvs[0],
 				devices[0],
 			},
-			TotalSize:     1024*1024*1024*1024,    // 1 TB
-			AvailableSize: 1024*1024*1024*1024,
+			TotalSize:     1024 * 1024 * 1024 * 1024, // 1 TB
+			AvailableSize: 1024 * 1024 * 1024 * 1024,
 		},
 		cpLib.Nisd{
 			PeerPort: 8001,
@@ -291,8 +290,8 @@ func TestEqualVdevDistribution(t *testing.T) {
 				hvs[0],
 				devices[1],
 			},
-			TotalSize:     1024*1024*1024*1024,
-			AvailableSize: 1024*1024*1024*1024,
+			TotalSize:     1024 * 1024 * 1024 * 1024,
+			AvailableSize: 1024 * 1024 * 1024 * 1024,
 		},
 		cpLib.Nisd{
 			PeerPort: 8002,
@@ -303,8 +302,8 @@ func TestEqualVdevDistribution(t *testing.T) {
 				hvs[1],
 				devices[2],
 			},
-			TotalSize:     1024*1024*1024*1024,
-			AvailableSize: 1024*1024*1024*1024,
+			TotalSize:     1024 * 1024 * 1024 * 1024,
+			AvailableSize: 1024 * 1024 * 1024 * 1024,
 		},
 		cpLib.Nisd{
 			PeerPort: 8003,
@@ -315,8 +314,8 @@ func TestEqualVdevDistribution(t *testing.T) {
 				hvs[1],
 				devices[3],
 			},
-			TotalSize:     1024*1024*1024*1024,
-			AvailableSize: 1024*1024*1024*1024,
+			TotalSize:     1024 * 1024 * 1024 * 1024,
+			AvailableSize: 1024 * 1024 * 1024 * 1024,
 		},
 		cpLib.Nisd{
 			PeerPort: 8004,
@@ -327,8 +326,8 @@ func TestEqualVdevDistribution(t *testing.T) {
 				hvs[2],
 				devices[4],
 			},
-			TotalSize:     1024*1024*1024*1024,
-			AvailableSize: 1024*1024*1024*1024,
+			TotalSize:     1024 * 1024 * 1024 * 1024,
+			AvailableSize: 1024 * 1024 * 1024 * 1024,
 		},
 		cpLib.Nisd{
 			PeerPort: 8005,
@@ -339,8 +338,8 @@ func TestEqualVdevDistribution(t *testing.T) {
 				hvs[2],
 				devices[5],
 			},
-			TotalSize:     1024*1024*1024*1024,
-			AvailableSize: 1024*1024*1024*1024,
+			TotalSize:     1024 * 1024 * 1024 * 1024,
+			AvailableSize: 1024 * 1024 * 1024 * 1024,
 		},
 		cpLib.Nisd{
 			PeerPort: 8006,
@@ -351,8 +350,8 @@ func TestEqualVdevDistribution(t *testing.T) {
 				hvs[3],
 				devices[6],
 			},
-			TotalSize:     1024*1024*1024*1024,
-			AvailableSize: 1024*1024*1024*1024,
+			TotalSize:     1024 * 1024 * 1024 * 1024,
+			AvailableSize: 1024 * 1024 * 1024 * 1024,
 		},
 		cpLib.Nisd{
 			PeerPort: 8007,
@@ -363,8 +362,8 @@ func TestEqualVdevDistribution(t *testing.T) {
 				hvs[3],
 				devices[7],
 			},
-			TotalSize:     1024*1024*1024*1024,
-			AvailableSize: 1024*1024*1024*1024,
+			TotalSize:     1024 * 1024 * 1024 * 1024,
+			AvailableSize: 1024 * 1024 * 1024 * 1024,
 		},
 		cpLib.Nisd{
 			PeerPort: 8008,
@@ -375,8 +374,8 @@ func TestEqualVdevDistribution(t *testing.T) {
 				hvs[0],
 				devices[0],
 			},
-			TotalSize:     1024*1024*1024*1024,
-			AvailableSize: 1024*1024*1024*1024,
+			TotalSize:     1024 * 1024 * 1024 * 1024,
+			AvailableSize: 1024 * 1024 * 1024 * 1024,
 		},
 		cpLib.Nisd{
 			PeerPort: 8009,
@@ -387,10 +386,9 @@ func TestEqualVdevDistribution(t *testing.T) {
 				hvs[1],
 				devices[1],
 			},
-			TotalSize:     1024*1024*1024*1024,
-			AvailableSize: 1024*1024*1024*1024,
+			TotalSize:     1024 * 1024 * 1024 * 1024,
+			AvailableSize: 1024 * 1024 * 1024 * 1024,
 		},
-		
 	}
 
 	for _, n := range mockNisds {
@@ -438,8 +436,8 @@ func TestEqualVdevDistribution(t *testing.T) {
 								hv,
 								dev,
 							},
-							TotalSize:     1024 * 1024 * 1024 * 1024,    // 1 TB
-							AvailableSize: 1024 * 1024 * 1024 * 1024,	 // 1 TB
+							TotalSize:     1024 * 1024 * 1024 * 1024, // 1 TB
+							AvailableSize: 1024 * 1024 * 1024 * 1024, // 1 TB
 						}
 
 						mockNisd = append(mockNisd, nisd)

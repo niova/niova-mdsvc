@@ -42,12 +42,12 @@ const testAdminSecret = "test-admin-secret-123"
 
 // Global maps to store test results for reuse between tests
 var (
-	PDUs  = make(map[string]cpLib.PDU)
-	Racks = make(map[string]cpLib.Rack)
-	Hypervisors = make(map[string]cpLib.Hypervisor)
-	Devices = make(map[string]cpLib.Device)
-	Nisds = make(map[string]cpLib.Nisd)
-	TestNisds = make(map[string]cpLib.Nisd)
+	PDUs           = make(map[string]cpLib.PDU)
+	Racks          = make(map[string]cpLib.Rack)
+	Hypervisors    = make(map[string]cpLib.Hypervisor)
+	Devices        = make(map[string]cpLib.Device)
+	Nisds          = make(map[string]cpLib.Nisd)
+	TestNisds      = make(map[string]cpLib.Nisd)
 	TestNisdsAfter = make(map[string]cpLib.Nisd)
 )
 

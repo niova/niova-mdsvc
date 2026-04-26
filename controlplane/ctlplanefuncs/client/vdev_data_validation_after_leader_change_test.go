@@ -7,6 +7,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 )
+
 // 2 PDUs
 var pdus = []string{
 	"a1d3f8c2-df29-11f0-b14e-3c9eaf21d540001",
@@ -43,13 +44,13 @@ func TestCreateHierarchy(t *testing.T) {
 	c := newClient(t)
 
 	PDUs := []cpLib.PDU{
-		{	ID: 		   pdus[0],
+		{ID: pdus[0],
 			Name:          "pdu-1",
 			Location:      "us-east",
 			PowerCapacity: "15Kw",
 			Specification: "specification1",
 		},
-		{	ID: 		   pdus[1],
+		{ID: pdus[1],
 			Name:          "pdu-2",
 			Location:      "us-west",
 			PowerCapacity: "15Kw",
@@ -163,7 +164,6 @@ func TestCreateHierarchy(t *testing.T) {
 			DevicePath:    "/temp/path8",
 			Name:          "dev-8",
 		},
-
 	}
 
 	// PUT multiple devices
@@ -183,8 +183,8 @@ func TestCreateHierarchy(t *testing.T) {
 				hvs[0],
 				devices[0],
 			},
-			TotalSize:     1024*1024*1024*1024,    // 1 TB
-			AvailableSize: 1024*1024*1024*1024,
+			TotalSize:     1024 * 1024 * 1024 * 1024, // 1 TB
+			AvailableSize: 1024 * 1024 * 1024 * 1024,
 			SocketPath:    "/path/sockets1",
 			NetInfo: cpLib.NetInfoList{
 				cpLib.NetworkInfo{
@@ -207,8 +207,8 @@ func TestCreateHierarchy(t *testing.T) {
 				hvs[0],
 				devices[1],
 			},
-			TotalSize:     1024*1024*1024*1024,
-			AvailableSize: 1024*1024*1024*1024,
+			TotalSize:     1024 * 1024 * 1024 * 1024,
+			AvailableSize: 1024 * 1024 * 1024 * 1024,
 			SocketPath:    "/path/sockets2",
 			NetInfo: cpLib.NetInfoList{
 				cpLib.NetworkInfo{
@@ -231,8 +231,8 @@ func TestCreateHierarchy(t *testing.T) {
 				hvs[1],
 				devices[2],
 			},
-			TotalSize:     1024*1024*1024*1024,
-			AvailableSize: 1024*1024*1024*1024,
+			TotalSize:     1024 * 1024 * 1024 * 1024,
+			AvailableSize: 1024 * 1024 * 1024 * 1024,
 			SocketPath:    "/path/sockets3",
 			NetInfo: cpLib.NetInfoList{
 				cpLib.NetworkInfo{
@@ -255,8 +255,8 @@ func TestCreateHierarchy(t *testing.T) {
 				hvs[1],
 				devices[3],
 			},
-			TotalSize:     1024*1024*1024*1024,
-			AvailableSize: 1024*1024*1024*1024,
+			TotalSize:     1024 * 1024 * 1024 * 1024,
+			AvailableSize: 1024 * 1024 * 1024 * 1024,
 			SocketPath:    "/path/sockets4",
 			NetInfo: cpLib.NetInfoList{
 				cpLib.NetworkInfo{
@@ -279,8 +279,8 @@ func TestCreateHierarchy(t *testing.T) {
 				hvs[2],
 				devices[4],
 			},
-			TotalSize:     1024*1024*1024*1024,
-			AvailableSize: 1024*1024*1024*1024,
+			TotalSize:     1024 * 1024 * 1024 * 1024,
+			AvailableSize: 1024 * 1024 * 1024 * 1024,
 			SocketPath:    "/path/sockets5",
 			NetInfo: cpLib.NetInfoList{
 				cpLib.NetworkInfo{
@@ -303,8 +303,8 @@ func TestCreateHierarchy(t *testing.T) {
 				hvs[2],
 				devices[5],
 			},
-			TotalSize:     1024*1024*1024*1024,
-			AvailableSize: 1024*1024*1024*1024,
+			TotalSize:     1024 * 1024 * 1024 * 1024,
+			AvailableSize: 1024 * 1024 * 1024 * 1024,
 			SocketPath:    "/path/sockets6",
 			NetInfo: cpLib.NetInfoList{
 				cpLib.NetworkInfo{
@@ -327,8 +327,8 @@ func TestCreateHierarchy(t *testing.T) {
 				hvs[3],
 				devices[6],
 			},
-			TotalSize:     1024*1024*1024*1024,
-			AvailableSize: 1024*1024*1024*1024,
+			TotalSize:     1024 * 1024 * 1024 * 1024,
+			AvailableSize: 1024 * 1024 * 1024 * 1024,
 			SocketPath:    "/path/sockets7",
 			NetInfo: cpLib.NetInfoList{
 				cpLib.NetworkInfo{
@@ -351,8 +351,8 @@ func TestCreateHierarchy(t *testing.T) {
 				hvs[3],
 				devices[7],
 			},
-			TotalSize:     1024*1024*1024*1024,
-			AvailableSize: 1024*1024*1024*1024,
+			TotalSize:     1024 * 1024 * 1024 * 1024,
+			AvailableSize: 1024 * 1024 * 1024 * 1024,
 			SocketPath:    "/path/sockets8",
 			NetInfo: cpLib.NetInfoList{
 				cpLib.NetworkInfo{
@@ -375,8 +375,8 @@ func TestCreateHierarchy(t *testing.T) {
 				hvs[0],
 				devices[0],
 			},
-			TotalSize:     1024*1024*1024*1024,
-			AvailableSize: 1024*1024*1024*1024,
+			TotalSize:     1024 * 1024 * 1024 * 1024,
+			AvailableSize: 1024 * 1024 * 1024 * 1024,
 			SocketPath:    "/path/sockets9",
 			NetInfo: cpLib.NetInfoList{
 				cpLib.NetworkInfo{
@@ -399,8 +399,8 @@ func TestCreateHierarchy(t *testing.T) {
 				hvs[1],
 				devices[1],
 			},
-			TotalSize:     1024*1024*1024*1024,
-			AvailableSize: 1024*1024*1024*1024,
+			TotalSize:     1024 * 1024 * 1024 * 1024,
+			AvailableSize: 1024 * 1024 * 1024 * 1024,
 			SocketPath:    "/path/sockets10",
 			NetInfo: cpLib.NetInfoList{
 				cpLib.NetworkInfo{
@@ -414,7 +414,6 @@ func TestCreateHierarchy(t *testing.T) {
 			},
 			NetInfoCnt: 2,
 		},
-		
 	}
 
 	for _, n := range mockNisds {
@@ -425,7 +424,7 @@ func TestCreateHierarchy(t *testing.T) {
 
 	vdev := &cpLib.VdevReq{
 		Vdev: &cpLib.VdevCfg{
-			Size: 1024 * 1024 * 1024 * 1024,    // 1 TB
+			Size:       1024 * 1024 * 1024 * 1024, // 1 TB
 			NumReplica: 2,
 		},
 	}
@@ -441,7 +440,7 @@ func TestCreateVdevAfterLeaderKill(t *testing.T) {
 
 	vdev1 := &cpLib.VdevReq{
 		Vdev: &cpLib.VdevCfg{
-			Size: 200 * 1024 * 1024 * 1024,     // 200 GB
+			Size:       200 * 1024 * 1024 * 1024, // 200 GB
 			NumReplica: 2,
 		},
 	}
@@ -465,8 +464,8 @@ func TestCreateVdevAfterLeaderRestart(t *testing.T) {
 				hvs[2],
 				devices[2],
 			},
-			TotalSize:     1024*1024*1024*1024,    // 1 TB
-			AvailableSize: 1024*1024*1024*1024,
+			TotalSize:     1024 * 1024 * 1024 * 1024, // 1 TB
+			AvailableSize: 1024 * 1024 * 1024 * 1024,
 		},
 		cpLib.Nisd{
 			PeerPort: 7001,
@@ -477,8 +476,8 @@ func TestCreateVdevAfterLeaderRestart(t *testing.T) {
 				hvs[3],
 				devices[3],
 			},
-			TotalSize:     1024*1024*1024*1024,
-			AvailableSize: 1024*1024*1024*1024,
+			TotalSize:     1024 * 1024 * 1024 * 1024,
+			AvailableSize: 1024 * 1024 * 1024 * 1024,
 		},
 	}
 
@@ -490,7 +489,7 @@ func TestCreateVdevAfterLeaderRestart(t *testing.T) {
 
 	vdev2 := &cpLib.VdevReq{
 		Vdev: &cpLib.VdevCfg{
-			Size: 200 * 1024 * 1024 * 1024,     // 200 GB
+			Size:       200 * 1024 * 1024 * 1024, // 200 GB
 			NumReplica: 2,
 		},
 	}
