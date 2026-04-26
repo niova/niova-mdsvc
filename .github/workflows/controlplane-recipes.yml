@@ -100,9 +100,8 @@ jobs:
       run: mkdir  /home/runner/work/niovad/niovad/code_cov &&
            export GOCOVERDIR=/work/niovad/niovad/code_cov
 
-    - name: run recipes for controlplane application
-      run: export GOCOVERDIR=/home/runner/work/niovad/niovad/code_cov && 
-           export USER_ENCRYPTION_KEY=81gavMyXh9dEMT7kM7gR+gS79ovzPwyjWmV1VA/TUII &&
+    - name:  run recipes for controlplane application
+      run: export GOCOVERDIR=/home/runner/work/niovad/niovad/code_cov &&
             cd /home/runner/work/niovad/niovad/build_dir/holon/ &&
            ../run-cp-recipes.sh '/home/runner/work/niovad/niovad/build_dir/holon'
                              '/home/runner/work/niovad/niovad/build_dir'
