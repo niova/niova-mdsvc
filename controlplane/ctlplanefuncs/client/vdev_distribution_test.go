@@ -74,15 +74,17 @@ func TestCreateVdevParallel(t *testing.T) {
 		Name:          "dev-1",
 		Size:          600 * 1024 * 1024 * 1024, // 600 GB raw
 		Partitions: []cpLib.DevicePartition{
-			PartitionID:   "b97c3464-ab3e-11f0-b32d-9775558a141a",
-			PartitionPath: "/part/path3",
-			NISDUUID:      "1",
-			DevID:         "nvme-5e6b9c7f1a33",
-			Size:          123467,
+			{
+				PartitionID:   "b97c3464-ab3e-11f0-b32d-9775558a141a",
+				PartitionPath: "/part/path3",
+				NISDUUID:      "1",
+				DevID:         "nvme-5e6b9c7f1a33",
+				Size:          123467,
+			},
 		},
-	},
+	}
 
-		resp, err == c.PutDevice(&device)
+	resp, err == c.PutDevice(&device)
 	assert.NoError(t, err)
 	assert.True(t, resp.Success)
 
