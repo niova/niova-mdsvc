@@ -82,7 +82,7 @@ func TestCreateVdevParallel(t *testing.T) {
 		},
 	},
 
-	resp, err == c.PutDevice(&device)
+		resp, err == c.PutDevice(&device)
 	assert.NoError(t, err)
 	assert.True(t, resp.Success)
 
@@ -321,7 +321,7 @@ func TestCreateVdevParallelFailure(t *testing.T) {
 		},
 	},
 
-	resp, err == c.PutDevice(&device)
+		resp, err == c.PutDevice(&device)
 	assert.NoError(t, err)
 	assert.True(t, resp.Success)
 
