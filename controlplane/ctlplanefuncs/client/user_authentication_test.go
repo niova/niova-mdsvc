@@ -1,7 +1,6 @@
 package clictlplanefuncs
 
 import (
-	"fmt"
 	"testing"
 
 	"github.com/google/uuid"
