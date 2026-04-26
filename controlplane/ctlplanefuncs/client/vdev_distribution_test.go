@@ -5,10 +5,11 @@ import (
 	"sync"
 	"testing"
 
-	cpLib "github.com/00pauln00/niova-mdsvc/controlplane/ctlplanefuncs/lib"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	cpLib "github.com/00pauln00/niova-mdsvc/controlplane/ctlplanefuncs/lib"
 )
 
 func TestCreateVdevParallel(t *testing.T) {
@@ -72,15 +73,14 @@ func TestCreateVdevParallel(t *testing.T) {
 		DevicePath:    "/dev/path1",
 		Name:          "dev-1",
 		Size:          600 * 1024 * 1024 * 1024, // 600 GB raw
-		Partitions: []cpLib.DevicePartition{cpLib.DevicePartition{
+		Partitions: []cpLib.DevicePartition{
 			PartitionID:   "b97c3464-ab3e-11f0-b32d-9775558a141a",
 			PartitionPath: "/part/path3",
 			NISDUUID:      "1",
 			DevID:         "nvme-5e6b9c7f1a33",
 			Size:          123467,
 		},
-		},
-	}
+	},
 
 	resp, err = c.PutDevice(&device)
 	assert.NoError(t, err)
@@ -92,7 +92,7 @@ func TestCreateVdevParallel(t *testing.T) {
 	const nisdSize = 280 * 1024 * 1024 * 1024 // 250 GB
 
 	nisds := []cpLib.Nisd{
-		cpLib.Nisd{
+		{
 			PeerPort: 8010,
 			ID:       "86adee3a-d5da-11f0-8250-5f1ad86a5661",
 			FailureDomain: []string{
@@ -104,7 +104,7 @@ func TestCreateVdevParallel(t *testing.T) {
 			TotalSize:     nisdSize,
 			AvailableSize: nisdSize,
 		},
-		cpLib.Nisd{
+		{
 			PeerPort: 8011,
 			ID:       "86adee3a-d5da-11f0-8250-5f1ad86a5662",
 			FailureDomain: []string{
@@ -312,15 +312,14 @@ func TestCreateVdevParallelFailure(t *testing.T) {
 		DevicePath:    "/dev/path1",
 		Name:          "dev-2",
 		Size:          600 * 1024 * 1024 * 1024, // 600 GB raw
-		Partitions: []cpLib.DevicePartition{cpLib.DevicePartition{
+		Partitions: []cpLib.DevicePartition{
 			PartitionID:   "b97c3464-ab3e-11f0-b32d-9775558a141a",
 			PartitionPath: "/part/path3",
 			NISDUUID:      "1",
 			DevID:         "nvme-5e6b9c7f1a33",
 			Size:          123467,
 		},
-		},
-	}
+	},
 
 	resp, err = c.PutDevice(&device)
 	assert.NoError(t, err)
@@ -332,7 +331,7 @@ func TestCreateVdevParallelFailure(t *testing.T) {
 	const nisdSize = 160 * 1024 * 1024 * 1024 // 160 GB
 
 	nisds := []cpLib.Nisd{
-		cpLib.Nisd{
+		{
 			PeerPort: 8012,
 			ID:       "86adee3a-d5da-11f0-8250-5f1ad86a5661",
 			FailureDomain: []string{
@@ -344,7 +343,7 @@ func TestCreateVdevParallelFailure(t *testing.T) {
 			TotalSize:     nisdSize,
 			AvailableSize: nisdSize,
 		},
-		cpLib.Nisd{
+		{
 			PeerPort: 8013,
 			ID:       "86adee3a-d5da-11f0-8250-5f1ad86a5662",
 			FailureDomain: []string{

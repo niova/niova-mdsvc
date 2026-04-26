@@ -3,9 +3,10 @@ package clictlplanefuncs
 import (
 	"testing"
 
-	cpLib "github.com/00pauln00/niova-mdsvc/controlplane/ctlplanefuncs/lib"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
+
+	cpLib "github.com/00pauln00/niova-mdsvc/controlplane/ctlplanefuncs/lib"
 )
 
 // 2 PDUs
@@ -174,7 +175,7 @@ func TestCreateHierarchy(t *testing.T) {
 	}
 
 	mockNisds := []cpLib.Nisd{
-		cpLib.Nisd{
+		{
 			PeerPort: 8000,
 			ID:       "d8f4c311-df29-11f0-a27b-19cd40ab5601",
 			FailureDomain: []string{
@@ -198,7 +199,7 @@ func TestCreateHierarchy(t *testing.T) {
 			},
 			NetInfoCnt: 2,
 		},
-		cpLib.Nisd{
+		{
 			PeerPort: 8001,
 			ID:       "d8f4c311-df29-11f0-a27b-19cd40ab5602",
 			FailureDomain: []string{
@@ -222,7 +223,7 @@ func TestCreateHierarchy(t *testing.T) {
 			},
 			NetInfoCnt: 2,
 		},
-		cpLib.Nisd{
+		{
 			PeerPort: 8002,
 			ID:       "d8f4c311-df29-11f0-a27b-19cd40ab5603",
 			FailureDomain: []string{
@@ -246,7 +247,7 @@ func TestCreateHierarchy(t *testing.T) {
 			},
 			NetInfoCnt: 2,
 		},
-		cpLib.Nisd{
+		{
 			PeerPort: 8003,
 			ID:       "d8f4c311-df29-11f0-a27b-19cd40ab5604",
 			FailureDomain: []string{
@@ -270,7 +271,7 @@ func TestCreateHierarchy(t *testing.T) {
 			},
 			NetInfoCnt: 2,
 		},
-		cpLib.Nisd{
+		{
 			PeerPort: 8004,
 			ID:       "d8f4c311-df29-11f0-a27b-19cd40ab5605",
 			FailureDomain: []string{
@@ -294,7 +295,7 @@ func TestCreateHierarchy(t *testing.T) {
 			},
 			NetInfoCnt: 2,
 		},
-		cpLib.Nisd{
+		{
 			PeerPort: 8005,
 			ID:       "d8f4c311-df29-11f0-a27b-19cd40ab5606",
 			FailureDomain: []string{
@@ -318,7 +319,7 @@ func TestCreateHierarchy(t *testing.T) {
 			},
 			NetInfoCnt: 2,
 		},
-		cpLib.Nisd{
+		{
 			PeerPort: 8006,
 			ID:       "d8f4c311-df29-11f0-a27b-19cd40ab5607",
 			FailureDomain: []string{
@@ -342,7 +343,7 @@ func TestCreateHierarchy(t *testing.T) {
 			},
 			NetInfoCnt: 2,
 		},
-		cpLib.Nisd{
+		{
 			PeerPort: 8007,
 			ID:       "d8f4c311-df29-11f0-a27b-19cd40ab5608",
 			FailureDomain: []string{
@@ -366,7 +367,7 @@ func TestCreateHierarchy(t *testing.T) {
 			},
 			NetInfoCnt: 2,
 		},
-		cpLib.Nisd{
+		{
 			PeerPort: 8008,
 			ID:       "d8f4c311-df29-11f0-a27b-19cd40ab5609",
 			FailureDomain: []string{
@@ -390,7 +391,7 @@ func TestCreateHierarchy(t *testing.T) {
 			},
 			NetInfoCnt: 2,
 		},
-		cpLib.Nisd{
+		{
 			PeerPort: 8009,
 			ID:       "d8f4c311-df29-11f0-a27b-19cd40ab5610",
 			FailureDomain: []string{
@@ -455,7 +456,7 @@ func TestCreateVdevAfterLeaderRestart(t *testing.T) {
 	c := newClient(t)
 
 	Nisds := []cpLib.Nisd{
-		cpLib.Nisd{
+		{
 			PeerPort: 7000,
 			ID:       "d8f4c311-df29-11f0-a27b-19cd40ab5611",
 			FailureDomain: []string{
@@ -467,7 +468,7 @@ func TestCreateVdevAfterLeaderRestart(t *testing.T) {
 			TotalSize:     1024 * 1024 * 1024 * 1024, // 1 TB
 			AvailableSize: 1024 * 1024 * 1024 * 1024,
 		},
-		cpLib.Nisd{
+		{
 			PeerPort: 7001,
 			ID:       "d8f4c311-df29-11f0-a27b-19cd40ab5612",
 			FailureDomain: []string{
