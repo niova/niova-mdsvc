@@ -27,7 +27,7 @@ import (
 const defaultAdminSecretKey = "niova-admin-secret-key"
 
 // Default token TTL (15 minutes)
-const defaultTokenTTL = 24 * time.Hour
+const defaultTokenTTL = 15 * time.Minute
 
 // Error message returned by PMDB when key is not found
 const errKeyNotFoundMsg = "Failed to lookup for key"

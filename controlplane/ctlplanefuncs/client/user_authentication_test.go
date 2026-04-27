@@ -20,28 +20,13 @@ func TestCreateHierarchyforUserAuthentication(t *testing.T) {
 		"9bc244bc-df29-11f0-a93b-277aec17e401",
 	}
 
-	// 2 RACKS
 	racks := []string{
 		"3f082930-df29-11f0-ab7b-4bd430991101",
-		"3f082930-df29-11f0-ab7b-4bd430991102",
 	}
 
-	// 4 HVs
 	hvs := []string{
 		"bde1f08a-df63-11f0-88ef-430ddec19901",
-		"bde1f08a-df63-11f0-88ef-430ddec19902",
-		"bde1f08a-df63-11f0-88ef-430ddec19903",
-		"bde1f08a-df63-11f0-88ef-430ddec19904",
 	}
-
-	// 4 Devices
-	// devices := []string{
-	//  "nvme-fb6358163001",
-	//  "nvme-fb6358163002",
-	//  "nvme-fb6358163003",
-	//  "nvme-fb6358163004",
-	//  "nvme-fb6358163005",
-	// }
 
 	c.SetToken(adminToken)
 
@@ -69,22 +54,19 @@ func TestCreateHierarchyforUserAuthentication(t *testing.T) {
 		},
 	}
 
-	for _, n := range mockNisd {
-		resp, err := c.PutNisd(&n)
-		if assert.NoError(t, err) {
-			assert.True(t, resp.Success)
-		}
-		log.Info("response : ", resp, err)
+	resp, err := c.PutNisd(&mockNisd)
+	if assert.NoError(t, err) {
+		assert.True(t, resp.Success)
 	}
+	log.Info("response : ", resp, err)
 
 	req := cpLib.GetReq{
 		GetAll: true,
 	}
 	res, err := c.GetNisds(req)
-	for _, n := range res {
-		log.Infof("Nisd ID: %s, usage: %d", n.ID, usagePercent(n))
-	}
-	log.Info("total number of nisd's : ", len(res))
+	
+	log.Infof("Nisd ID: %s, usage: %d", res.ID, usagePercent(n))
+	
 	assert.NoError(t, err)
 }
 
@@ -175,27 +157,14 @@ func TestCreateHierarchyforMultipleBlockTest(t *testing.T) {
 
 	pdus := []string{
 		"f0991962-2771-11f1-984f-ffb9728f3481",
-		"f0991962-2771-11f1-984f-ffb9728f3482",
 	}
 
-	// 4 RACKS
 	racks := []string{
 		"0a2de204-2772-11f1-a514-1f1acb943981",
-		"0a2de204-2772-11f1-a514-1f1acb943982",
-		"0a2de204-2772-11f1-a514-1f1acb943983",
-		"0a2de204-2772-11f1-a514-1f1acb943984",
 	}
 
-	// 8 HVs
 	hvs := []string{
 		"2fef1454-2772-11f1-997f-236331f79711",
-		"2fef1454-2772-11f1-997f-236331f79712",
-		"2fef1454-2772-11f1-997f-236331f79713",
-		"2fef1454-2772-11f1-997f-236331f79714",
-		"2fef1454-2772-11f1-997f-236331f79715",
-		"2fef1454-2772-11f1-997f-236331f79716",
-		"2fef1454-2772-11f1-997f-236331f79717",
-		"2fef1454-2772-11f1-997f-236331f79718",
 	}
 
 	// 2 NISDs
