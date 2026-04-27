@@ -63,7 +63,7 @@ func TestCreateHierarchyforUserAuthentication(t *testing.T) {
 	}
 	res, err := c.GetNisds(req)
 
-	log.Infof("Nisd ID: %s, usage: %d", res.ID, usagePercent(n))
+	log.Infof("Nisd ID: %s, usage: %d", res[0].ID, usagePercent(n))
 
 	assert.NoError(t, err)
 }
