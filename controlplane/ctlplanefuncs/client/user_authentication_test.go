@@ -31,25 +31,25 @@ func TestCreateHierarchyforUserAuthentication(t *testing.T) {
 	c.SetToken(adminToken)
 
 	mockNisd := cpLib.Nisd{
-			PeerPort: 13000,
-			ID:       "7467890a-2299-11f1-9fc3-ebb3b3f1fb90",
-			FailureDomain: []string{
-				pdus[0],
-				racks[0],
-				hvs[0],
-				"/s3DV_nisd.device",
-				"/s3DV_nisd.device",
+		PeerPort: 13000,
+		ID:       "7467890a-2299-11f1-9fc3-ebb3b3f1fb90",
+		FailureDomain: []string{
+			pdus[0],
+			racks[0],
+			hvs[0],
+			"/s3DV_nisd.device",
+			"/s3DV_nisd.device",
+		},
+		TotalSize:     10 * 1024 * 1024 * 1024,
+		AvailableSize: 10 * 1024 * 1024 * 1024,
+		NetInfo: cpLib.NetInfoList{
+			cpLib.NetworkInfo{
+				//    IPAddr: "172.31.24.182",
+				IPAddr: "127.0.0.1",
+				Port:   13001,
 			},
-			TotalSize:     10 * 1024 * 1024 * 1024,
-			AvailableSize: 10 * 1024 * 1024 * 1024,
-			NetInfo: cpLib.NetInfoList{
-				cpLib.NetworkInfo{
-					//    IPAddr: "172.31.24.182",
-					IPAddr: "127.0.0.1",
-					Port:   13001,
-				},
-			},
-			NetInfoCnt: 1,
+		},
+		NetInfoCnt: 1,
 	}
 
 	resp, err := c.PutNisd(&mockNisd)
