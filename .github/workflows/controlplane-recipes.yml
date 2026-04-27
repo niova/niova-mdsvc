@@ -78,6 +78,14 @@ jobs:
       env:
         LD_LIBRARY_PATH: /home/runner/work/niovad/niovad/build_dir/lib
 
+    - name: Build controlplane client go test binary
+      run: |
+        export PATH=$PATH:/home/runner/work/go/go/bin
+        cd /home/runner/work/niova-mdsvc/niova-mdsvc/controlplane/ctlplanefuncs/client
+        go test -c -o client.test
+        mkdir -p /home/runner/work/niovad/niovad/build_dir/ctlplane_test
+        cp client.test /home/runner/work/niovad/niovad/build_dir/ctlplane_test/
+
     - name: Copy script to run recipes
       run: cp scripts/run-cp-recipes.sh /home/runner/work/niovad/niovad/build_dir/ &&
            cp scripts/controlplane_recipes.txt /home/runner/work/niovad/niovad/build_dir/
