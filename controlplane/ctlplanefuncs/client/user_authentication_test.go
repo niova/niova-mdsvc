@@ -31,7 +31,6 @@ func TestCreateHierarchyforUserAuthentication(t *testing.T) {
 	c.SetToken(adminToken)
 
 	mockNisd := cpLib.Nisd{
-		{
 			PeerPort: 13000,
 			ID:       "7467890a-2299-11f1-9fc3-ebb3b3f1fb90",
 			FailureDomain: []string{
@@ -51,7 +50,6 @@ func TestCreateHierarchyforUserAuthentication(t *testing.T) {
 				},
 			},
 			NetInfoCnt: 1,
-		},
 	}
 
 	resp, err := c.PutNisd(&mockNisd)
