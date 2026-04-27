@@ -1,4 +1,3 @@
-controlPlane_authentication_mechanism_test.yml
 controlPlane_rangeQuery_consistencyCheck_overwrites_insert.yml
 controlPlane_rangeQuery_consistencyCheck_leaderKill.yml
 controlPlane_pmdbrangeRead_delete_old_snapshot.yml
