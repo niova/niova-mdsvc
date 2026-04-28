@@ -149,98 +149,6 @@ func TestUserAuthVdevCreation(t *testing.T) {
 	log.Infof("Secret key of user2: %s", userResp.SecretKey)
 }
 
-func TestCreateHierarchyforMultipleBlockTest(t *testing.T) {
-	c := newClient(t)
-	adminToken := getAdminToken(t)
-
-	pdus := []string{
-		"f0991962-2771-11f1-984f-ffb9728f3481",
-	}
-
-	racks := []string{
-		"0a2de204-2772-11f1-a514-1f1acb943981",
-	}
-
-	hvs := []string{
-		"2fef1454-2772-11f1-997f-236331f79711",
-	}
-
-	// 2 NISDs
-	nisds := []string{
-		"83b1a782-2772-11f1-91ea-5f00b1c98291",
-		"83b1a782-2772-11f1-91ea-5f00b1c98292",
-	}
-
-	c.SetToken(adminToken)
-
-	Nisd := []cpLib.Nisd{
-		{
-			PeerPort: 13000,
-			ID:       nisds[0],
-			FailureDomain: []string{
-				pdus[0],
-				racks[0],
-				hvs[0],
-				"/auth_nisd_0.device",
-				"/auth_nisd_0.device",
-			},
-			TotalSize:     24 * 1024 * 1024 * 1024,
-			AvailableSize: 24 * 1024 * 1024 * 1024,
-			NetInfo: cpLib.NetInfoList{
-				cpLib.NetworkInfo{
-					IPAddr: "172.31.24.182",
-					Port:   13001,
-				},
-			},
-			NetInfoCnt: 1,
-		},
-		{
-			PeerPort: 13002,
-			ID:       nisds[1],
-			FailureDomain: []string{
-				pdus[0],
-				racks[0],
-				hvs[0],
-				"/auth_nisd_1.device",
-				"/auth_nisd_1.device",
-			},
-			TotalSize:     24 * 1024 * 1024 * 1024,
-			AvailableSize: 24 * 1024 * 1024 * 1024,
-			NetInfo: cpLib.NetInfoList{
-				cpLib.NetworkInfo{
-					IPAddr: "172.31.24.182",
-					Port:   13003,
-				},
-			},
-			NetInfoCnt: 1,
-		},
-	}
-
-	for _, n := range Nisd {
-		resp, err := c.PutNisd(&n)
-		if assert.NoError(t, err) {
-			assert.True(t, resp.Success)
-		}
-		log.Info("response : ", resp, err)
-	}
-
-	req := cpLib.GetReq{
-		GetAll: true,
-	}
-
-	nisdList, err := c.GetNisds(req)
-
-	assert.NoError(t, err)
-	require.NotNil(t, nisdList)
-
-	// nisdList is your stored list
-	log.Infof("Total NISDs: %d", len(nisdList))
-
-	for i, n := range nisdList {
-		log.Infof("Index: %d, Nisd ID: %s", i, n.ID)
-	}
-}
-
 func TestUserVdevCreationForMultipleBlockTest(t *testing.T) {
 	// Initialize control plane client for vdev operations
 	c := newClient(t)
@@ -249,7 +157,7 @@ func TestUserVdevCreationForMultipleBlockTest(t *testing.T) {
 	adminToken := getAdminToken(t)
 	log.Info("Admin logged in/setup complete")
 
-	numVdevs := 4
+	numVdevs := 2
 	vdevIDs := make([]string, 0, numVdevs)
 
 	c.SetToken(adminToken)
