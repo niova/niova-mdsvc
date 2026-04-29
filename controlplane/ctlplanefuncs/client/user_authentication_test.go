@@ -177,8 +177,8 @@ func TestCreateHierarchyForMultipleBlockTest(t *testing.T) {
 			"/s3DV_nisd.device",
 			"/s3DV_nisd.device",
 		},
-		TotalSize:     18 * 1024 * 1024 * 1024,
-		AvailableSize: 18 * 1024 * 1024 * 1024,
+		TotalSize:     16 * 1024 * 1024 * 1024,
+		AvailableSize: 16 * 1024 * 1024 * 1024,
 		NetInfo: cpLib.NetInfoList{
 			cpLib.NetworkInfo{
 				IPAddr: "127.0.0.1",
