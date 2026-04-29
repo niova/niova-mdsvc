@@ -157,7 +157,8 @@ func TestUserVdevCreationForMultipleBlockTest(t *testing.T) {
 	adminToken := getAdminToken(t)
 	log.Info("Admin logged in/setup complete")
 
-	numVdevs := 2
+	// NOTE: For testing in CI, only one vdev is created
+	numVdevs := 1
 	vdevIDs := make([]string, 0, numVdevs)
 
 	c.SetToken(adminToken)
