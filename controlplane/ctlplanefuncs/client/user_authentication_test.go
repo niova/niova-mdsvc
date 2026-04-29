@@ -12,7 +12,7 @@ import (
 	userlib "github.com/00pauln00/niova-mdsvc/controlplane/user/lib"
 )
 
-func TestCreateHierarchyforUserAuthentication(t *testing.T) {
+func TestCreateHierarchyForUserAuthentication(t *testing.T) {
 	c := newClient(t)
 	adminToken := getAdminToken(t)
 
@@ -149,6 +149,63 @@ func TestUserAuthVdevCreation(t *testing.T) {
 	log.Infof("Secret key of user2: %s", userResp.SecretKey)
 }
 
+func TestCreateHierarchyForMultipleBlockTest(t *testing.T) {
+	c := newClient(t)
+	adminToken := getAdminToken(t)
+
+	pdus := []string{
+		"9bc244bc-df29-11f0-a93b-277aec17e401",
+	}
+
+	racks := []string{
+		"3f082930-df29-11f0-ab7b-4bd430991101",
+	}
+
+	hvs := []string{
+		"bde1f08a-df63-11f0-88ef-430ddec19901",
+	}
+
+	c.SetToken(adminToken)
+
+	// NOTE: For testing in CI, only 1 NISD is created
+	mockNisd := cpLib.Nisd{
+		PeerPort: 13000,
+		ID:       "7467890a-2299-11f1-9fc3-ebb3b3f1fb91",
+		FailureDomain: []string{
+			pdus[0],
+			racks[0],
+			hvs[0],
+			"/s3DV_nisd.device",
+			"/s3DV_nisd.device",
+		},
+		TotalSize:     24 * 1024 * 1024 * 1024,
+		AvailableSize: 24 * 1024 * 1024 * 1024,
+		NetInfo: cpLib.NetInfoList{
+			cpLib.NetworkInfo{
+				//    IPAddr: "172.31.24.182",
+				IPAddr: "127.0.0.1",
+				Port:   13001,
+			},
+		},
+		NetInfoCnt: 1,
+	}
+
+	resp, err := c.PutNisd(&mockNisd)
+	if assert.NoError(t, err) {
+		assert.True(t, resp.Success)
+	}
+	log.Info("response : ", resp, err)
+
+	req := cpLib.GetReq{
+		GetAll: true,
+	}
+	res, err := c.GetNisds(req)
+
+	log.Infof("Nisd ID: %s, usage: %d", res[0].ID, usagePercent(res[0]))
+
+	assert.NoError(t, err)
+}
+
 func TestUserVdevCreationForMultipleBlockTest(t *testing.T) {
 	// Initialize control plane client for vdev operations
 	c := newClient(t)
@@ -157,8 +214,8 @@ func TestUserVdevCreationForMultipleBlockTest(t *testing.T) {
 	adminToken := getAdminToken(t)
 	log.Info("Admin logged in/setup complete")
 
-	// NOTE: For testing in CI, only one vdev is created
-	numVdevs := 1
+	// NOTE: For testing in CI, only two vdevs are created
+	numVdevs := 2
 	vdevIDs := make([]string, 0, numVdevs)
 
 	c.SetToken(adminToken)
