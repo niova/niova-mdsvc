@@ -44,7 +44,6 @@ func TestCreateHierarchyForUserAuthentication(t *testing.T) {
 		AvailableSize: 10 * 1024 * 1024 * 1024,
 		NetInfo: cpLib.NetInfoList{
 			cpLib.NetworkInfo{
-				//    IPAddr: "172.31.24.182",
 				IPAddr: "127.0.0.1",
 				Port:   13001,
 			},
@@ -154,15 +153,15 @@ func TestCreateHierarchyForMultipleBlockTest(t *testing.T) {
 	adminToken := getAdminToken(t)
 
 	pdus := []string{
-		"9bc244bc-df29-11f0-a93b-277aec17e401",
+		"9bc244bc-df29-11f0-a93b-277aec17e402",
 	}
 
 	racks := []string{
-		"3f082930-df29-11f0-ab7b-4bd430991101",
+		"3f082930-df29-11f0-ab7b-4bd430991102",
 	}
 
 	hvs := []string{
-		"bde1f08a-df63-11f0-88ef-430ddec19901",
+		"bde1f08a-df63-11f0-88ef-430ddec19902",
 	}
 
 	c.SetToken(adminToken)
@@ -178,11 +177,10 @@ func TestCreateHierarchyForMultipleBlockTest(t *testing.T) {
 			"/s3DV_nisd.device",
 			"/s3DV_nisd.device",
 		},
-		TotalSize:     24 * 1024 * 1024 * 1024,
-		AvailableSize: 24 * 1024 * 1024 * 1024,
+		TotalSize:     18 * 1024 * 1024 * 1024,
+		AvailableSize: 18 * 1024 * 1024 * 1024,
 		NetInfo: cpLib.NetInfoList{
 			cpLib.NetworkInfo{
-				//    IPAddr: "172.31.24.182",
 				IPAddr: "127.0.0.1",
 				Port:   13001,
 			},
