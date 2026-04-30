@@ -49,7 +49,7 @@ const (
 	GET_ALL_VDEV             = "get_all_vdev"
 	GET_CHUNK_NISD           = "get_chunk_nisd"
 	GET_NISD_INFO            = "get_nisd_info"
-	GET_NISD_LIST_AVAIL_SIZE = "get_nisd_list_avail_size"
+	GET_NISD_AVAILABLE_SIZES = "GetNisdAvailableSizes"
 	GET_ALL_RESOURCES        = "GetAllResources"
 
 	PUT_NISD_ARGS  = "PutNisdArgs"
@@ -126,6 +126,23 @@ func GetFDIdx(t FD) int {
 		return PARTITION_IDX
 	default:
 		return -1
+	}
+}
+
+func FDName(t FD) string {
+	switch t {
+	case FD_PDU:
+		return "pdu"
+	case FD_RACK:
+		return "rack"
+	case FD_HV:
+		return "hv"
+	case FD_DEVICE:
+		return "device"
+	case FD_PARTITION:
+		return "partition"
+	default:
+		return "any"
 	}
 }
 
@@ -257,6 +274,8 @@ type VdevCfg struct {
 	XMLName      xml.Name `xml:"Vdev"`
 	ID           string
 	Name         string
+	FilterType   string // failure domain level used at creation (e.g. "rack", "hv", "any")
+	FilterID     string // specific entity UUID scoped at creation (empty = no scope)
 	Size         int64
 	NumChunks    uint32
 	NumReplica   uint8
@@ -291,6 +310,10 @@ type VdevReq struct {
 
 type NisdListAvailSize struct {
 	ID            string `json:"id"`
+	PDU           string `json:"pdu,omitempty"`
+	Rack          string `json:"rack,omitempty"`
+	HV            string `json:"hv,omitempty"`
+	TotalSize     int64  `json:"total_size"`
 	AvailableSize int64  `json:"available_size"`
 }
 
@@ -301,9 +324,23 @@ type DeleteVdevReq struct {
 	ID string
 }
 
+// NisdField constants define the projection keys clients pass in GetReq.Fields
+// to request a subset of NISD attributes instead of the full Nisd struct.
+const (
+	NisdFieldID            = "id"
+	NisdFieldTotalSize     = "total_size"
+	NisdFieldAvailableSize = "available_size"
+)
+
+// NisdAvailSizeFields is the canonical field set for capacity-only queries.
+var NisdAvailSizeFields = []string{NisdFieldID, NisdFieldTotalSize, NisdFieldAvailableSize}
+
 type GetReq struct {
 	ID     string
 	GetAll bool
+	// Fields restricts the response to a named subset of attributes.
+	// Use the NisdField* constants. Empty means return all fields.
+	Fields []string
 }
 
 type ResourceType string

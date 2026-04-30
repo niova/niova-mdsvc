@@ -1,0 +1,17 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: niova-proxy
+    static_configs:
+      # Add one entry per proxy instance. Default metrics port is 9701 (-mp flag).
+      - targets:
+          - localhost:9701
+        labels:
+          instance: proxy-0
+      # Uncomment and extend for additional proxy instances:
+      # - targets:
+      #     - localhost:9702
+      #   labels:
+      #     instance: proxy-1

@@ -42,11 +42,13 @@ const testAdminSecret = "test-admin-secret-123"
 
 func TestMain(m *testing.M) {
 	testClusterID = os.Getenv("RAFT_ID")
+	testClusterID = "ab84b5be-f5fc-44da-840c-9004f43c6bc2"
 	if testClusterID == "" {
 		log.Fatal("RAFT_ID env variable not set")
 	}
 
 	testConfigPath = os.Getenv("GOSSIP_NODES_PATH")
+	testConfigPath = "/home/sachin/test/configs/gossipNodes"
 	if testConfigPath == "" {
 		log.Fatal("GOSSIP_NODES_PATH env variable not set")
 	}
@@ -618,7 +620,7 @@ func runPutAndGetRack(b testing.TB, c *CliCFuncs) {
 func BenchmarkPutAndGetRack(b *testing.B) {
 	c := newClient(b)
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		runPutAndGetRack(b, c)
 	}
 }
@@ -873,6 +875,133 @@ func TestParallelVdevCreation(t *testing.T) {
 
 	wg.Wait()
 
+}
+
+func TestEvenChunkDistribution(t *testing.T) {
+	c := newClient(t)
+
+	pdus := []string{
+		"aef100bc-df29-11f0-a93b-277aec17e401",
+		"aef100bc-df29-11f0-a93b-277aec17e402",
+		"aef100bc-df29-11f0-a93b-277aec17e403",
+		"aef100bc-df29-11f0-a93b-277aec17e404",
+		"aef100bc-df29-11f0-a93b-277aec17e405",
+	}
+	racks := []string{
+		"bef200bc-df29-11f0-ab7b-4bd430991101",
+		"bef200bc-df29-11f0-ab7b-4bd430991102",
+		"bef200bc-df29-11f0-ab7b-4bd430991103",
+		"bef200bc-df29-11f0-ab7b-4bd430991104",
+		"bef200bc-df29-11f0-ab7b-4bd430991105",
+		"bef200bc-df29-11f0-ab7b-4bd430991106",
+		"bef200bc-df29-11f0-ab7b-4bd430991107",
+		"bef200bc-df29-11f0-ab7b-4bd430991108",
+		"bef200bc-df29-11f0-ab7b-4bd430991109",
+		"bef200bc-df29-11f0-ab7b-4bd430991110",
+	}
+	hvs := []string{
+		"cef300bc-df63-11f0-88ef-430ddec19901",
+		"cef300bc-df63-11f0-88ef-430ddec19902",
+		"cef300bc-df63-11f0-88ef-430ddec19903",
+		"cef300bc-df63-11f0-88ef-430ddec19904",
+		"cef300bc-df63-11f0-88ef-430ddec19905",
+		"cef300bc-df63-11f0-88ef-430ddec19906",
+		"cef300bc-df63-11f0-88ef-430ddec19907",
+		"cef300bc-df63-11f0-88ef-430ddec19908",
+		"cef300bc-df63-11f0-88ef-430ddec19909",
+		"cef300bc-df63-11f0-88ef-430ddec19910",
+		"cef300bc-df63-11f0-88ef-430ddec19911",
+		"cef300bc-df63-11f0-88ef-430ddec19912",
+		"cef300bc-df63-11f0-88ef-430ddec19913",
+		"cef300bc-df63-11f0-88ef-430ddec19914",
+		"cef300bc-df63-11f0-88ef-430ddec19915",
+		"cef300bc-df63-11f0-88ef-430ddec19916",
+		"cef300bc-df63-11f0-88ef-430ddec19917",
+		"cef300bc-df63-11f0-88ef-430ddec19918",
+		"cef300bc-df63-11f0-88ef-430ddec19919",
+		"cef300bc-df63-11f0-88ef-430ddec19920",
+	}
+
+	// 5 PDUs x 2 racks x 2 HVs x 2 devices x 4 NISDs = 160 NISDs
+	numPDUs := len(pdus)
+	rackPerPdu := 2
+	hvPerRack := 2
+	devPerHv := 2
+	nisdPerDev := 4
+
+	rackIdx, hvIdx, devIdx, nisdID := 0, 0, 0, 1
+
+	// register all NISDs before any VDev is created.
+	for p := range numPDUs {
+		for range rackPerPdu {
+			rack := racks[rackIdx]
+			rackIdx++
+			for range hvPerRack {
+				hv := hvs[hvIdx]
+				hvIdx++
+				for range devPerHv {
+					dev := fmt.Sprintf("nvme-dist%04d", devIdx)
+					devIdx++
+					for n := range nisdPerDev {
+						nisd := cpLib.Nisd{
+							PeerPort: 9000 + uint16(nisdID),
+							ID:       fmt.Sprintf("ffa00000-0000-0000-0000-%012x", nisdID),
+							FailureDomain: []string{
+								pdus[p],
+								rack,
+								hv,
+								dev,
+								fmt.Sprintf("pt-%s-%d", dev, n),
+							},
+							TotalSize:     1_000_000_000_000,
+							AvailableSize: 1_000_000_000_000,
+						}
+						resp, err := c.PutNisd(&nisd)
+						if assert.NoError(t, err) {
+							assert.True(t, resp.Success)
+						}
+						nisdID++
+						time.Sleep(10 * time.Millisecond)
+					}
+				}
+			}
+		}
+	}
+
+	// create VDevs and verify even chunk distribution.
+	//
+	// 100 GB VDev -> 13 chunks, 5 PDU entities.
+	const vdevSize = 100 * 1024 * 1024 * 1024
+	numChunks := int(cpLib.Count8GBChunks(vdevSize))
+	maxAllowed := (numChunks + numPDUs - 1) / numPDUs // ceil(numChunks / numPDUs)
+
+	for range 20 {
+		resp, err := c.CreateVdev(&cpLib.VdevReq{
+			Vdev: &cpLib.VdevCfg{
+				Size:       vdevSize,
+				NumReplica: 1,
+			},
+		})
+		if !assert.NoError(t, err) || !assert.NotNil(t, resp) {
+			time.Sleep(30 * time.Millisecond)
+			continue
+		}
+
+		vdevs, err := c.GetVdevsWithChunkInfo(&cpLib.GetReq{ID: resp.ID})
+		if !assert.NoError(t, err) || !assert.Len(t, vdevs, 1) {
+			time.Sleep(30 * time.Millisecond)
+			continue
+		}
+
+		for _, nc := range vdevs[0].NisdToChkMap {
+			chunks := len(nc.Chunk)
+			assert.LessOrEqualf(t, chunks, maxAllowed,
+				"VDev %s: NISD %s has %d chunks, want <= %d (ceil(%d/%d)); hash skew detected",
+				resp.ID, nc.Nisd.ID, chunks, maxAllowed, numChunks, numPDUs)
+		}
+
+		time.Sleep(30 * time.Millisecond)
+	}
 }
 
 func TestCreateSmallHierarchy(t *testing.T) {
@@ -1706,7 +1835,7 @@ func TestFullHierarchyAuthorizationWithUsers(t *testing.T) {
 	hvID := uuid.NewString()
 	nisdID := uuid.NewString()
 
-	// buildHierarchy creates the full PDU→Rack→HV→NISD chain using whatever
+	// buildHierarchy creates the full PDU->Rack->HV->NISD chain using whatever
 	// token is currently set on ctlClient.
 	buildHierarchy := func() {
 		pduResp, err := ctlClient.PutPDU(&cpLib.PDU{

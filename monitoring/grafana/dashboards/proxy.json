@@ -1,0 +1,1377 @@
+{
+  "title": "Niova Proxy",
+  "uid": "niova-proxy",
+  "schemaVersion": 36,
+  "version": 25,
+  "refresh": "10s",
+  "time": {
+    "from": "now-30m",
+    "to": "now"
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "instance",
+        "type": "query",
+        "datasource": "Prometheus",
+        "query": "query_result(last_over_time(proxy_nisd_total_size_bytes[5m]))",
+        "regex": "/.*proxy=\"([^\"]+)\".*/",
+        "label": "Proxy",
+        "multi": true,
+        "includeAll": true,
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "refresh": 2
+      },
+      {
+        "name": "vdev",
+        "type": "query",
+        "datasource": "Prometheus",
+        "query": "query_result(last_over_time(proxy_vdev_num_chunks{proxy=~\"$instance\"}[5m]))",
+        "regex": "/.*vdev=\"([^\"]+)\".*/",
+        "label": "VDev",
+        "multi": false,
+        "includeAll": false,
+        "current": {},
+        "refresh": 2
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "row",
+      "title": "API Traffic",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Request Rate by Method & Type",
+      "description": "Per-second request rate for each handler type (kv/lease/func) split by GET vs PUT. Expected: smooth curves proportional to client activity. A flat line on PUT with rising GET = read-heavy workload; spikes on func indicate control-plane operations.",
+      "gridPos": {
+        "x": 0,
+        "y": 1,
+        "w": 18,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "targets": [
+        {
+          "expr": "rate(proxy_requests_total{proxy=~\"$instance\"}[1m])",
+          "legendFormat": "{{method}}/{{type}}",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": ["mean", "max", "lastNotNull"]
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "min": 0,
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "showPoints": "never"
+          },
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Total Requests",
+      "description": "Cumulative request count across all handler types since the proxy started.",
+      "gridPos": {
+        "x": 18,
+        "y": 1,
+        "w": 6,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "targets": [
+        {
+          "expr": "sum(proxy_requests_total{proxy=~\"$instance\"})",
+          "legendFormat": "",
+          "instant": true,
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": ["lastNotNull"]
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "background"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "blue", "value": null }
+            ]
+          },
+          "color": { "mode": "thresholds" }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 4,
+      "type": "bargauge",
+      "title": "GET vs PUT Split",
+      "description": "Cumulative GET vs PUT totals across all handler types. Expected: ratio reflects your workload — read-heavy deployments will show GET >> PUT. An unexpected PUT surge may indicate a runaway writer.",
+      "gridPos": {
+        "x": 18,
+        "y": 5,
+        "w": 6,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "targets": [
+        {
+          "expr": "sum by (method) (proxy_requests_total{proxy=~\"$instance\"})",
+          "legendFormat": "{{method}}",
+          "instant": true,
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        },
+        "showUnfilled": true
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "blue", "value": null }
+            ]
+          },
+          "color": { "mode": "thresholds" }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 5,
+      "type": "row",
+      "title": "Cluster Storage Allocation",
+      "gridPos": {
+        "x": 0,
+        "y": 9,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 6,
+      "title": "Imbalance Score (fill % stddev)",
+      "type": "gauge",
+      "gridPos": {
+        "x": 0,
+        "y": 10,
+        "w": 8,
+        "h": 7
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "description": "Standard deviation of available space % across all NISDs. Each NISD's available % is computed individually (available / total * 100), then stddev is taken across all NISDs. Expected: near 0 — all NISDs have roughly the same free space. A rising score means some NISDs are draining faster than others. Values above 10% warrant investigation.",
+      "targets": [
+        {
+          "expr": "stddev(proxy_nisd_available_size_bytes{proxy=~\"$instance\"} / proxy_nisd_total_size_bytes{proxy=~\"$instance\"} * 100) or vector(0)",
+          "legendFormat": "imbalance %",
+          "instant": true
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "showThresholdLabels": true,
+        "showThresholdMarkers": true
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 50,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 10
+              },
+              {
+                "color": "red",
+                "value": 20
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 7,
+      "title": "Total Cluster Capacity",
+      "type": "stat",
+      "gridPos": {
+        "x": 8,
+        "y": 10,
+        "w": 8,
+        "h": 7
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "description": "Sum of raw capacity across all NISDs. Expected: stable — changes only when NISDs are added or decommissioned. An unexpected drop means a NISD is no longer reachable.",
+      "targets": [
+        {
+          "expr": "sum(proxy_nisd_total_size_bytes{proxy=~\"$instance\"})",
+          "legendFormat": "Total Capacity",
+          "instant": true
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "background"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "thresholds": {
+            "mode": "percentage",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 8,
+      "title": "Total Used Capacity",
+      "type": "stat",
+      "gridPos": {
+        "x": 16,
+        "y": 10,
+        "w": 8,
+        "h": 7
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "description": "Sum of used bytes across all NISDs. Expected: a gradual upward slope proportional to write activity. A sudden jump = large bulk write; a sudden drop = data deletion or NISD loss.",
+      "targets": [
+        {
+          "expr": "sum(proxy_nisd_total_size_bytes{proxy=~\"$instance\"} - proxy_nisd_available_size_bytes{proxy=~\"$instance\"})",
+          "legendFormat": "Used",
+          "instant": true
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "background"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "thresholds": {
+            "mode": "percentage",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 70
+              },
+              {
+                "color": "red",
+                "value": 90
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
+        }
+      }
+    },
+    {
+      "id": 9,
+      "type": "row",
+      "title": "Cluster Capacity & Imbalance Heatmap",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 17,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 10,
+      "type": "heatmap",
+      "title": "NISD Fill % Distribution — Imbalance Heatmap",
+      "description": "Heatmap of how NISDs are distributed across fill-% bands. Each column = one scrape; Y = fill % bucket (5% wide); colour = how many NISDs fall there. Expected: a single tight band moving slowly upward as the cluster fills. Spread across many bands = storage imbalance between NISDs.",
+      "gridPos": {
+        "x": 0,
+        "y": 18,
+        "w": 18,
+        "h": 12
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "targets": [
+        {
+          "expr": "(proxy_nisd_total_size_bytes{proxy=~\"$instance\"} - proxy_nisd_available_size_bytes{proxy=~\"$instance\"}) / proxy_nisd_total_size_bytes{proxy=~\"$instance\"} * 100",
+          "legendFormat": "{{nisd}}",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "calculate": true,
+        "calculation": {
+          "yBuckets": {
+            "mode": "size",
+            "value": "5"
+          }
+        },
+        "color": {
+          "scheme": "Oranges",
+          "mode": "scheme",
+          "fill": 0.85,
+          "exponent": 0.5
+        },
+        "yAxis": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "decimals": 0
+        },
+        "tooltip": {
+          "show": true,
+          "yHistogram": false
+        },
+        "exemplars": {
+          "color": "rgba(255,0,255,0.7)"
+        },
+        "cellGap": 1,
+        "filterValues": {
+          "le": 1e-09
+        }
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      }
+    },
+    {
+      "id": 11,
+      "type": "stat",
+      "title": "Hotspot Delta (max − min fill %)",
+      "description": "Fill % of the most-used NISD minus the least-used NISD. Expected: below 10% (green) — NISDs are balanced. 10–25% (yellow) = noticeable skew; above 25% (red) = hot spot, one disk is significantly fuller than the rest.",
+      "gridPos": {
+        "x": 18,
+        "y": 18,
+        "w": 6,
+        "h": 6
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "targets": [
+        {
+          "expr": "max((proxy_nisd_total_size_bytes{proxy=~\"$instance\"} - proxy_nisd_available_size_bytes{proxy=~\"$instance\"}) / proxy_nisd_total_size_bytes{proxy=~\"$instance\"} * 100) - min((proxy_nisd_total_size_bytes{proxy=~\"$instance\"} - proxy_nisd_available_size_bytes{proxy=~\"$instance\"}) / proxy_nisd_total_size_bytes{proxy=~\"$instance\"} * 100)",
+          "legendFormat": "",
+          "instant": true,
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "background"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 10
+              },
+              {
+                "color": "red",
+                "value": 25
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 12,
+      "type": "stat",
+      "title": "Most Filled NISD (fill %)",
+      "gridPos": {
+        "x": 18,
+        "y": 24,
+        "w": 6,
+        "h": 6
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "targets": [
+        {
+          "expr": "topk(1, (proxy_nisd_total_size_bytes{proxy=~\"$instance\"} - proxy_nisd_available_size_bytes{proxy=~\"$instance\"}) / proxy_nisd_total_size_bytes{proxy=~\"$instance\"} * 100)",
+          "legendFormat": "{{nisd}}",
+          "instant": true,
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "orientation": "auto",
+        "textMode": "value_and_name",
+        "colorMode": "background"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 50
+              },
+              {
+                "color": "red",
+                "value": 75
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
+      },
+      "description": "The single NISD with the highest fill % and its UUID. Expected: below 50% (green) — plenty of headroom. 50–75% (yellow) = plan capacity soon; above 75% (red) = urgent, that disk is nearly full."
+    },
+    {
+      "id": 13,
+      "type": "timeseries",
+      "title": "NISD Fill % Over Time",
+      "description": "Fill % trend for every NISD over the selected time range. Expected: lines rising slowly and in parallel as the cluster fills evenly. Lines diverging or one line climbing steeply above the rest indicates a hot-spot NISD absorbing disproportionate writes.",
+      "gridPos": {
+        "x": 0,
+        "y": 30,
+        "w": 18,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "targets": [
+        {
+          "expr": "(proxy_nisd_total_size_bytes{proxy=~\"$instance\"} - proxy_nisd_available_size_bytes{proxy=~\"$instance\"}) / proxy_nisd_total_size_bytes{proxy=~\"$instance\"} * 100",
+          "legendFormat": "{{nisd}}",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": ["lastNotNull", "max"]
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "axisTickCount": 11
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 50 },
+              { "color": "red", "value": 75 }
+            ]
+          },
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 14,
+      "type": "bargauge",
+      "title": "Fill % per NISD — sorted (hotspot view)",
+      "description": "All NISDs sorted by fill % in descending order. Expected: bars all roughly the same height (balanced cluster). A tall outlier on the left = a hot-spot NISD receiving disproportionate writes.",
+      "gridPos": {
+        "x": 0,
+        "y": 38,
+        "w": 24,
+        "h": 10
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "targets": [
+        {
+          "expr": "sort_desc((proxy_nisd_total_size_bytes{proxy=~\"$instance\"} - proxy_nisd_available_size_bytes{proxy=~\"$instance\"}) / proxy_nisd_total_size_bytes{proxy=~\"$instance\"} * 100)",
+          "legendFormat": "{{nisd}}",
+          "instant": true,
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showUnfilled": true
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "displayName": "${__field.labels.nisd}",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 50
+              },
+              {
+                "color": "red",
+                "value": 75
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 15,
+      "type": "row",
+      "title": "Cluster-wide VDev Placement",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 48,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 16,
+      "type": "netsage-sankey-panel",
+      "title": "VDev -> NISD chunk flow (top 10 flows, all VDevs)",
+      "description": "Cluster-wide Sankey showing the 10 heaviest VDev->NISD chunk flows regardless of the $vdev selection. Left nodes = VDevs, right nodes = NISDs, link width = chunk count. topk(10) keeps the diagram readable at any cluster size — the d3-sankey library underlying this plugin is known to hang the browser with hundreds of nodes. A NISD appearing as a wide right node with many incoming links is a hotspot.",
+      "gridPos": {
+        "x": 0,
+        "y": 49,
+        "w": 24,
+        "h": 14
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "targets": [
+        {
+          "expr": "topk(10, proxy_vdev_nisd_chunk_count{proxy=~\"$instance\"})",
+          "legendFormat": "",
+          "instant": true,
+          "refId": "A",
+          "format": "table"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "labelsToFields",
+          "options": {
+            "mode": "columns",
+            "keepLabels": [
+              "vdev",
+              "nisd"
+            ]
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "renameByName": {
+              "vdev": "source",
+              "nisd": "target",
+              "Value": "value"
+            },
+            "excludeByName": {
+              "Time": true,
+              "proxy": true,
+              "__name__": true,
+              "instance": true,
+              "job": true
+            }
+          }
+        }
+      ],
+      "options": {
+        "sourceField": "source",
+        "targetField": "target",
+        "valueField": "value"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      }
+    },
+    {
+      "id": 17,
+      "type": "row",
+      "title": "VDev Health",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 63,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 18,
+      "type": "stat",
+      "title": "Active VDevs",
+      "gridPos": {
+        "x": 0,
+        "y": 64,
+        "w": 6,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "targets": [
+        {
+          "expr": "count(proxy_vdev_num_chunks{proxy=~\"$instance\"})",
+          "legendFormat": "",
+          "instant": true,
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
+      },
+      "description": "Number of VDevs currently reporting metrics. Expected: equals the total VDevs you configured. A drop means one or more VDevs stopped emitting metrics."
+    },
+    {
+      "id": 19,
+      "type": "stat",
+      "title": "Total Chunks Allocated",
+      "gridPos": {
+        "x": 6,
+        "y": 64,
+        "w": 6,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "targets": [
+        {
+          "expr": "sum(proxy_vdev_num_chunks{proxy=~\"$instance\"})",
+          "legendFormat": "",
+          "instant": true,
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
+      },
+      "description": "Total chunk count across all VDevs. Expected: increases steadily as writes are committed. A plateau means no new data is being written; a sharp drop usually means VDevs were deleted."
+    },
+    {
+      "id": 20,
+      "type": "table",
+      "title": "Top 20 VDevs by Chunks Allocated",
+      "gridPos": {
+        "x": 0,
+        "y": 68,
+        "w": 12,
+        "h": 10
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "targets": [
+        {
+          "expr": "topk(20, proxy_vdev_num_chunks{proxy=~\"$instance\"})",
+          "legendFormat": "{{vdev}}",
+          "instant": true,
+          "refId": "A",
+          "format": "table"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "labelsToFields",
+          "options": {
+            "mode": "columns",
+            "keepLabels": [
+              "vdev",
+              "proxy"
+            ]
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "renameByName": {
+              "vdev": "VDev ID",
+              "proxy": "Proxy",
+              "Value": "Chunks",
+              "Time": ""
+            },
+            "excludeByName": {
+              "Time": true,
+              "proxy": true
+            },
+            "indexByName": {
+              "vdev": 0,
+              "Value": 1
+            }
+          }
+        },
+        {
+          "id": "sortBy",
+          "options": {
+            "fields": [
+              {
+                "displayName": "Chunks",
+                "desc": true
+              }
+            ]
+          }
+        }
+      ],
+      "options": {
+        "footer": {
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": [
+          {
+            "displayName": "Chunks",
+            "desc": true
+          }
+        ]
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "width": 0,
+            "minWidth": 100,
+            "align": "auto",
+            "displayMode": "auto",
+            "inspect": false
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "VDev ID"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 340
+              },
+              {
+                "id": "custom.displayMode",
+                "value": "auto"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Chunks"
+            },
+            "properties": [
+              {
+                "id": "custom.displayMode",
+                "value": "color-background"
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "yellow",
+                      "value": 5
+                    },
+                    {
+                      "color": "red",
+                      "value": 10
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "description": "VDevs ranked by chunk count. Expected: bars roughly equal — the allocator distributes chunks evenly. One VDev far ahead of the rest means allocation is skewed toward it."
+    },
+    {
+      "id": 21,
+      "type": "row",
+      "title": "VDev Placement",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 78,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 22,
+      "type": "bargauge",
+      "title": "Chunks per NISD for VDev $vdev",
+      "description": "How many 8-GiB chunks of the selected VDev reside on each NISD. Each bar is labelled with the NISD UUID and its hypervisor (hv) UUID. NISDs sharing the same hv label sit on the same host — if the VDev was created with a coarser failure domain (rack or PDU), the allocator only guarantees replica separation at that level, so multiple NISDs on the same host can legally accumulate chunks. Unequal bars across *different* hv values indicate a real imbalance; unequal bars within the *same* hv value are expected and explained by the failure-domain choice.",
+      "gridPos": {
+        "x": 0,
+        "y": 79,
+        "w": 12,
+        "h": 10
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "targets": [
+        {
+          "expr": "proxy_vdev_nisd_chunk_count{proxy=~\"$instance\", vdev=\"$vdev\"} * on(nisd) group_left(hv, rack) proxy_nisd_info{proxy=~\"$instance\"}",
+          "legendFormat": "{{nisd}} · hv:{{hv}}",
+          "instant": true,
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showUnfilled": true
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "displayName": "${__field.labels.nisd}",
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 23,
+      "type": "stat",
+      "title": "Failure Domain at VDev Creation",
+      "description": "The failure domain level chosen when this VDev was created. 'any' = system chose automatically; 'hv' = replicas guaranteed on different hypervisors; 'rack' / 'pdu' = coarser scopes. When the level is rack or pdu, multiple NISDs on the same hypervisor can legally hold chunks of this VDev — uneven per-NISD counts are expected and not a hotspot.",
+      "gridPos": {
+        "x": 12,
+        "y": 79,
+        "w": 6,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "targets": [
+        {
+          "expr": "proxy_vdev_info{proxy=~\"$instance\", vdev=\"$vdev\"}",
+          "legendFormat": "{{fd_type}}",
+          "instant": true,
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": ["lastNotNull"]
+        },
+        "textMode": "name",
+        "colorMode": "background",
+        "orientation": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "blue", "value": null }
+            ]
+          },
+          "color": { "mode": "thresholds" }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 24,
+      "type": "stat",
+      "title": "Failure Domain Scope (entity)",
+      "description": "The specific entity UUID the failure domain was scoped to at VDev creation (empty if no scope was set — all entities of that level were eligible). When non-empty, only NISDs under this entity were candidates for chunk placement.",
+      "gridPos": {
+        "x": 18,
+        "y": 79,
+        "w": 6,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "targets": [
+        {
+          "expr": "proxy_vdev_info{proxy=~\"$instance\", vdev=\"$vdev\"}",
+          "legendFormat": "{{fd_id}}",
+          "instant": true,
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": ["lastNotNull"]
+        },
+        "textMode": "name",
+        "colorMode": "background",
+        "orientation": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "purple", "value": null }
+            ]
+          },
+          "color": { "mode": "thresholds" }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 25,
+      "type": "netsage-sankey-panel",
+      "title": "VDev -> NISD chunk flow for $vdev",
+      "description": "Sankey diagram of chunk placement for the selected VDev. Left node = VDev, right nodes = NISDs, link width = number of 8-GiB chunks on that NISD. Compare with the bar gauge on the left — both show the same VDev, different visual forms. Unequal link widths mean the allocator skewed chunks toward specific NISDs.",
+      "gridPos": {
+        "x": 12,
+        "y": 83,
+        "w": 12,
+        "h": 16
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "targets": [
+        {
+          "expr": "proxy_vdev_nisd_chunk_count{proxy=~\"$instance\", vdev=\"$vdev\"}",
+          "legendFormat": "",
+          "instant": true,
+          "refId": "A",
+          "format": "table"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "labelsToFields",
+          "options": {
+            "mode": "columns",
+            "keepLabels": [
+              "vdev",
+              "nisd"
+            ]
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "renameByName": {
+              "vdev": "source",
+              "nisd": "target",
+              "Value": "value"
+            },
+            "excludeByName": {
+              "Time": true,
+              "proxy": true,
+              "__name__": true,
+              "instance": true,
+              "job": true
+            }
+          }
+        }
+      ],
+      "options": {
+        "sourceField": "source",
+        "targetField": "target",
+        "valueField": "value"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      }
+    },
+    {
+      "id": 26,
+      "type": "table",
+      "title": "NISD chunk breakdown for VDev $vdev",
+      "description": "Per-NISD chunk count for the selected VDev. Each row is one NISD that holds at least one chunk of this VDev's data. Use this alongside the bar gauge to spot uneven placement or to confirm replicas are spread across distinct NISDs.",
+      "gridPos": {
+        "x": 0,
+        "y": 89,
+        "w": 12,
+        "h": 10
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "targets": [
+        {
+          "expr": "proxy_vdev_nisd_chunk_count{proxy=~\"$instance\", vdev=\"$vdev\"}",
+          "legendFormat": "{{nisd}}",
+          "instant": true,
+          "refId": "A",
+          "format": "table"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "labelsToFields",
+          "options": {
+            "mode": "columns",
+            "keepLabels": [
+              "nisd",
+              "vdev",
+              "proxy"
+            ]
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "renameByName": {
+              "nisd": "NISD",
+              "vdev": "VDev",
+              "Value": "Chunks",
+              "Time": ""
+            },
+            "excludeByName": {
+              "Time": true,
+              "vdev": true,
+              "proxy": true
+            },
+            "indexByName": {
+              "nisd": 0,
+              "Value": 1
+            }
+          }
+        },
+        {
+          "id": "sortBy",
+          "options": {
+            "fields": [
+              {
+                "displayName": "Chunks",
+                "desc": true
+              }
+            ]
+          }
+        }
+      ],
+      "options": {
+        "footer": {
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": [
+          {
+            "displayName": "Chunks",
+            "desc": true
+          }
+        ]
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "width": 0,
+            "minWidth": 100,
+            "align": "auto",
+            "displayMode": "auto",
+            "inspect": false
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "NISD"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 340
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Chunks"
+            },
+            "properties": [
+              {
+                "id": "custom.displayMode",
+                "value": "color-background"
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "blue",
+                      "value": null
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

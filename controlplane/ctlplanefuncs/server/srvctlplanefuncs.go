@@ -91,6 +91,9 @@ const (
 	DSYNC                   = "ds"
 	ALLOW_DEFRAG_MCIB_CACHE = "admc"
 
+	FD_TYPE_KEY = "fdt"
+	FD_ID_KEY   = "fdi"
+
 	cfgkey       = "cfg"
 	NisdCfgKey   = "n_cfg"
 	deviceCfgKey = "d_cfg"
@@ -433,22 +436,50 @@ func ReadAllNisdConfigs(args ...interface{}) (interface{}, error) {
 		log.Errorf("ReadAllNisdConfigs: auth failure: %v", err)
 		return ctlplfl.AuthError(err)
 	}
+
+	var fields []string
+	if req, ok := cpReq.Payload.(ctlplfl.GetReq); ok {
+		fields = req.Fields
+	}
+
 	log.Trace("fetching nisd details for key : ", NisdCfgKey)
-	rrargs := storageiface.RangeReadArgs{
+	readResult, err := cbArgs.Store.RangeRead(storageiface.RangeReadArgs{
 		Selector:   colmfamily,
 		Key:        NisdCfgKey,
 		BufSize:    cbArgs.ReplySize,
 		Consistent: false,
 		Prefix:     NisdCfgKey,
-	}
-	readResult, err := cbArgs.Store.RangeRead(rrargs)
+	})
 	if err != nil {
 		log.Error("Range read failure ", err)
 		return ctlplfl.FuncError(err)
 	}
 	nisdList := ParseEntities[ctlplfl.Nisd](readResult.ResultMap, NisdParser{})
+
+	if len(fields) > 0 {
+		log.Debugf("ReadAllNisdConfigs: returning %d nisd configs (projected fields)", len(nisdList))
+		return ctlplfl.EncodeResponse(nisdToAvailSize(nisdList))
+	}
 	log.Debugf("ReadAllNisdConfigs: returning %d nisd configs", len(nisdList))
 	return ctlplfl.EncodeResponse(nisdList)
+}
+
+func nisdToAvailSize(nisds []ctlplfl.Nisd) []ctlplfl.NisdListAvailSize {
+	result := make([]ctlplfl.NisdListAvailSize, 0, len(nisds))
+	for _, n := range nisds {
+		entry := ctlplfl.NisdListAvailSize{
+			ID:            n.ID,
+			TotalSize:     n.TotalSize,
+			AvailableSize: n.AvailableSize,
+		}
+		if len(n.FailureDomain) > ctlplfl.HV_IDX {
+			entry.PDU = n.FailureDomain[ctlplfl.PDU_IDX]
+			entry.Rack = n.FailureDomain[ctlplfl.RACK_IDX]
+			entry.HV = n.FailureDomain[ctlplfl.HV_IDX]
+		}
+		result = append(result, entry)
+	}
+	return result
 }
 
 func ReadNisdConfig(args ...interface{}) (interface{}, error) {
@@ -676,6 +707,19 @@ func WPCreateVdev(args ...interface{}) (interface{}, error) {
 		Key:   []byte(reverseNameKey),
 		Value: []byte(req.Vdev.ID),
 	})
+
+	// Persist the failure domain filter so it can be surfaced in metrics/dashboards.
+	fdTypeName := ctlplfl.FDName(req.Filter.Type)
+	commitChgs = append(commitChgs, funclib.CommitChg{
+		Key:   fmt.Appendf(nil, "%s/%s/%s", key, cfgkey, FD_TYPE_KEY),
+		Value: []byte(fdTypeName),
+	})
+	if req.Filter.ID != "" {
+		commitChgs = append(commitChgs, funclib.CommitChg{
+			Key:   fmt.Appendf(nil, "%s/%s/%s", key, cfgkey, FD_ID_KEY),
+			Value: []byte(req.Filter.ID),
+		})
+	}
 
 	// Add ownership key to mark user as owner of this vdev
 	ownershipKey := fmt.Sprintf("/u/%s/v/%s", tc.UserID, req.Vdev.ID)
@@ -1246,6 +1290,9 @@ func ReadAllResources(args ...any) (any, error) {
 			Prefix:   key,
 		})
 		if err != nil {
+			if strings.Contains(err.Error(), "Failed to lookup for key") {
+				return map[string][]byte{}, nil
+			}
 			return nil, err
 		}
 		return result.ResultMap, nil
@@ -1733,35 +1780,6 @@ func RdNisdArgs(args ...interface{}) (interface{}, error) {
 	log.Debugf("RdNisdArgs: returning nisd args")
 	return ctlplfl.EncodeResponse(nisdArgs)
 
-}
-
-func buildNisdAvailList(nisds []ctlplfl.Nisd) []ctlplfl.NisdListAvailSize {
-	result := make([]ctlplfl.NisdListAvailSize, 0, len(nisds)) // preallocate
-	for _, n := range nisds {
-		result = append(result, ctlplfl.NisdListAvailSize{
-			ID:            n.ID,
-			AvailableSize: n.AvailableSize,
-		})
-	}
-	return result
-}
-
-func ReadNisdListWithAvailSize(args ...interface{}) (interface{}, error) {
-	cbArgs := args[0].(*PumiceDBServer.PmdbCbArgs)
-	cpReq := args[1].(ctlplfl.CPReq)
-	_, err := validateAndAuthorizeRBAC(cpReq.Token, authz.ReadNisdListWithAvailSize)
-	if err != nil {
-		log.Errorf("ReadNisdListWithAvailSize: token validation failed: %v", err)
-		return ctlplfl.AuthError(err)
-	}
-	nList, err := getNisdList(cbArgs)
-	if err != nil {
-		log.Errorf("ReadNisdListWithAvailSize: RangeReadKV failed: %v", err)
-		return ctlplfl.FuncError(err)
-	}
-	nLas := buildNisdAvailList(nList)
-	log.Debugf("ReadNisdListWithAvailSize: returning nisd List with available size")
-	return ctlplfl.EncodeResponse(nLas)
 }
 
 // Deletes a Vdev, archives its data and refunds allocated space to NISDs.

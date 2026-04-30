@@ -34,4 +34,5 @@ CUUID="$(uuidgen)"
     -u "${CUUID}" \
     -pa /controlplane/configs/gossipNodes \
     -n "Node_${CUUID}" \
+    -mp 9701 \
     -l "/controlplane/logs/pmdb_client_${CUUID}.log" > "./logs/pmdb_client_${CUUID}_stdouterr" 2>&1

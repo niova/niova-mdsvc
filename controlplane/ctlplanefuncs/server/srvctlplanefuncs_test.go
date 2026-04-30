@@ -944,7 +944,7 @@ func TestReadNisdListWithAvailSize(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			authorizer = authz.NewAuthorizerWithConfig(authz.Config{
-				authz.ReadNisdListWithAvailSize: authz.FunctionPolicy{
+				authz.ReadAllNisdConfigs: authz.FunctionPolicy{
 					RBAC: []string{"admin"},
 				},
 			})
@@ -966,8 +966,11 @@ func TestReadNisdListWithAvailSize(t *testing.T) {
 				token, _ = createTestToken(testAdminID, "admin", testSecret)
 			}
 
-			cpReq := ctlplfl.CPReq{Token: token}
-			result, err := ReadNisdListWithAvailSize(cbArgs, cpReq)
+			cpReq := ctlplfl.CPReq{
+				Token:   token,
+				Payload: ctlplfl.GetReq{Fields: ctlplfl.NisdAvailSizeFields},
+			}
+			result, err := ReadAllNisdConfigs(cbArgs, cpReq)
 			if err != nil {
 				t.Fatalf("Unexpected Go-level error: %v", err)
 			}
@@ -1004,6 +1007,170 @@ func TestReadNisdListWithAvailSize(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestReadAllNisdConfigs(t *testing.T) {
+	nisdUUID1 := "59ee0460-1e01-11f1-9566-83949aa998ea"
+	nisdUUID2 := "6aff1570-1e01-11f1-b677-94a5be37ab0f"
+
+	writeNisd := func(ds storageiface.DataStore, nisdID string, totalSize, availSize int64) {
+		ds.Write(fmt.Sprintf("%s/%s/d", NisdCfgKey, nisdID), testDev, "")
+		ds.Write(fmt.Sprintf("%s/%s/pp", NisdCfgKey, nisdID), "8160", "")
+		ds.Write(fmt.Sprintf("%s/%s/hv", NisdCfgKey, nisdID), testHV, "")
+		ds.Write(fmt.Sprintf("%s/%s/ts", NisdCfgKey, nisdID), strconv.FormatInt(totalSize, 10), "")
+		ds.Write(fmt.Sprintf("%s/%s/as", NisdCfgKey, nisdID), strconv.FormatInt(availSize, 10), "")
+		ds.Write(fmt.Sprintf("%s/%s/p", NisdCfgKey, nisdID), testPDU, "")
+		ds.Write(fmt.Sprintf("%s/%s/r", NisdCfgKey, nisdID), testRack, "")
+		ds.Write(fmt.Sprintf("%s/%s/pt", NisdCfgKey, nisdID), testPT, "")
+		ds.Write(fmt.Sprintf("%s/%s/nic", NisdCfgKey, nisdID), "0", "")
+	}
+
+	adminToken := func() string {
+		tk, _ := createTestToken(testAdminID, "admin", testSecret)
+		return tk
+	}()
+
+	authCfg := authz.Config{
+		authz.ReadAllNisdConfigs: authz.FunctionPolicy{RBAC: []string{"admin"}},
+	}
+
+	t.Run("NoFilter_ReturnsFullNisdList", func(t *testing.T) {
+		authorizer = authz.NewAuthorizerWithConfig(authCfg)
+		defer func() { authorizer = nil }()
+
+		ds := memstore.NewMemStore()
+		colmfamily = ""
+		writeNisd(ds, nisdUUID1, 1000000000000, 800000000000)
+		writeNisd(ds, nisdUUID2, 2000000000000, 1500000000000)
+
+		cbArgs := &PumiceDBServer.PmdbCbArgs{Store: ds, ReplySize: 4096}
+		// no Fields set — expect full []Nisd
+		cpReq := ctlplfl.CPReq{Token: adminToken, Payload: ctlplfl.GetReq{GetAll: true}}
+		result, err := ReadAllNisdConfigs(cbArgs, cpReq)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		var cpResp ctlplfl.CPResp
+		if err := pmCmn.Decoder(pmCmn.GOB, result.([]byte), &cpResp); err != nil {
+			t.Fatalf("decode error: %v", err)
+		}
+		if cpResp.Error != nil {
+			t.Fatalf("expected success, got: %s", cpResp.Error.Message)
+		}
+
+		nisds, ok := cpResp.Payload.([]ctlplfl.Nisd)
+		if !ok {
+			t.Fatalf("expected []Nisd payload, got %T", cpResp.Payload)
+		}
+		if len(nisds) != 2 {
+			t.Errorf("expected 2 NISDs, got %d", len(nisds))
+		}
+		for _, n := range nisds {
+			if n.TotalSize == 0 {
+				t.Errorf("NISD %s: expected non-zero TotalSize in full response", n.ID)
+			}
+		}
+	})
+
+	t.Run("WithFilter_ReturnsAvailSizeProjection", func(t *testing.T) {
+		authorizer = authz.NewAuthorizerWithConfig(authCfg)
+		defer func() { authorizer = nil }()
+
+		ds := memstore.NewMemStore()
+		colmfamily = ""
+		writeNisd(ds, nisdUUID1, 1000000000000, 800000000000)
+		writeNisd(ds, nisdUUID2, 2000000000000, 1500000000000)
+
+		cbArgs := &PumiceDBServer.PmdbCbArgs{Store: ds, ReplySize: 4096}
+		cpReq := ctlplfl.CPReq{
+			Token:   adminToken,
+			Payload: ctlplfl.GetReq{Fields: ctlplfl.NisdAvailSizeFields},
+		}
+		result, err := ReadAllNisdConfigs(cbArgs, cpReq)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		var cpResp ctlplfl.CPResp
+		if err := pmCmn.Decoder(pmCmn.GOB, result.([]byte), &cpResp); err != nil {
+			t.Fatalf("decode error: %v", err)
+		}
+		if cpResp.Error != nil {
+			t.Fatalf("expected success, got: %s", cpResp.Error.Message)
+		}
+
+		list, ok := cpResp.Payload.([]ctlplfl.NisdListAvailSize)
+		if !ok {
+			t.Fatalf("expected []NisdListAvailSize payload, got %T", cpResp.Payload)
+		}
+		if len(list) != 2 {
+			t.Errorf("expected 2 entries, got %d", len(list))
+		}
+		ids := map[string]bool{}
+		for _, n := range list {
+			ids[n.ID] = true
+			if n.TotalSize == 0 || n.AvailableSize == 0 {
+				t.Errorf("NISD %s: TotalSize or AvailableSize is zero", n.ID)
+			}
+		}
+		if !ids[nisdUUID1] || !ids[nisdUUID2] {
+			t.Errorf("expected both NISD UUIDs in result, got %v", ids)
+		}
+	})
+
+	t.Run("WithFilter_EmptyStore", func(t *testing.T) {
+		authorizer = authz.NewAuthorizerWithConfig(authCfg)
+		defer func() { authorizer = nil }()
+
+		ds := memstore.NewMemStore()
+		colmfamily = ""
+		cbArgs := &PumiceDBServer.PmdbCbArgs{Store: ds, ReplySize: 4096}
+		cpReq := ctlplfl.CPReq{
+			Token:   adminToken,
+			Payload: ctlplfl.GetReq{Fields: ctlplfl.NisdAvailSizeFields},
+		}
+		result, _ := ReadAllNisdConfigs(cbArgs, cpReq)
+		var cpResp ctlplfl.CPResp
+		pmCmn.Decoder(pmCmn.GOB, result.([]byte), &cpResp)
+		list, ok := cpResp.Payload.([]ctlplfl.NisdListAvailSize)
+		if !ok {
+			t.Fatalf("expected []NisdListAvailSize, got %T", cpResp.Payload)
+		}
+		if len(list) != 0 {
+			t.Errorf("expected empty list, got %d entries", len(list))
+		}
+	})
+
+	t.Run("AuthFailure_InvalidToken", func(t *testing.T) {
+		authorizer = authz.NewAuthorizerWithConfig(authCfg)
+		defer func() { authorizer = nil }()
+
+		ds := memstore.NewMemStore()
+		colmfamily = ""
+		cbArgs := &PumiceDBServer.PmdbCbArgs{Store: ds, ReplySize: 4096}
+
+		for _, desc := range []struct {
+			name  string
+			token string
+		}{
+			{"MissingToken", ""},
+			{"UserRole", func() string { tk, _ := createTestToken(testUserID1, "user", testSecret); return tk }()},
+		} {
+			t.Run(desc.name, func(t *testing.T) {
+				cpReq := ctlplfl.CPReq{Token: desc.token, Payload: ctlplfl.GetReq{}}
+				result, _ := ReadAllNisdConfigs(cbArgs, cpReq)
+				var cpResp ctlplfl.CPResp
+				pmCmn.Decoder(pmCmn.GOB, result.([]byte), &cpResp)
+				if cpResp.Error == nil {
+					t.Error("expected auth error, got success")
+				}
+				if cpResp.Error.Code != ctlplfl.ErrAuth {
+					t.Errorf("expected ErrAuth, got %q", cpResp.Error.Code)
+				}
+			})
+		}
+	})
 }
 
 func TestReadAllResources(t *testing.T) {

@@ -603,12 +603,13 @@ func (ccf *CliCFuncs) PutDeviceInfo(device *ctlplfl.Device) (*ctlplfl.ResponseXM
 }
 
 func (ccf *CliCFuncs) GetNisdListWithAvailSize(req *ctlplfl.GetReq) ([]ctlplfl.NisdListAvailSize, error) {
+	req.Fields = ctlplfl.NisdAvailSizeFields
 	cpReq := &ctlplfl.CPReq{
 		Token:   ccf.token,
-		Payload: req,
+		Payload: *req,
 	}
 	nl := make([]ctlplfl.NisdListAvailSize, 0)
-	cpResp, err := ccf.get(cpReq, ctlplfl.GET_NISD_LIST_AVAIL_SIZE, &nl)
+	cpResp, err := ccf.get(cpReq, ctlplfl.GET_NISD_AVAILABLE_SIZES, &nl)
 	if err != nil {
 		log.Error("Read nisd list with available size failed: ", err)
 		return nil, err
