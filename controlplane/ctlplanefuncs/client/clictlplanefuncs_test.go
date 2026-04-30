@@ -42,13 +42,11 @@ const testAdminSecret = "test-admin-secret-123"
 
 func TestMain(m *testing.M) {
 	testClusterID = os.Getenv("RAFT_ID")
-	testClusterID = "ab84b5be-f5fc-44da-840c-9004f43c6bc2"
 	if testClusterID == "" {
 		log.Fatal("RAFT_ID env variable not set")
 	}
 
 	testConfigPath = os.Getenv("GOSSIP_NODES_PATH")
-	testConfigPath = "/home/sachin/test/configs/gossipNodes"
 	if testConfigPath == "" {
 		log.Fatal("GOSSIP_NODES_PATH env variable not set")
 	}
