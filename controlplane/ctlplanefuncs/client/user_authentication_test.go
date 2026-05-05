@@ -62,7 +62,7 @@ func TestCreateHierarchyForUserAuthentication(t *testing.T) {
 	}
 	res, err := c.GetNisds(req)
 
-	log.Infof("Nisd ID: %s, usage: %d", res[0].ID, usagePercent(res[0]))
+	log.Infof("Nisd ID: %s", res[0].ID)
 
 	assert.NoError(t, err)
 }
@@ -177,8 +177,8 @@ func TestCreateHierarchyForMultipleBlockTest(t *testing.T) {
 			"/s3DV_nisd.device",
 			"/s3DV_nisd.device",
 		},
-		TotalSize:     16 * 1024 * 1024 * 1024,
-		AvailableSize: 16 * 1024 * 1024 * 1024,
+		TotalSize:     24 * 1024 * 1024 * 1024,
+		AvailableSize: 24 * 1024 * 1024 * 1024,
 		NetInfo: cpLib.NetInfoList{
 			cpLib.NetworkInfo{
 				IPAddr: "127.0.0.1",
@@ -199,7 +199,7 @@ func TestCreateHierarchyForMultipleBlockTest(t *testing.T) {
 	}
 	res, err := c.GetNisds(req)
 
-	log.Infof("Nisd ID: %s, usage: %d", res[0].ID, usagePercent(res[0]))
+	log.Infof("Nisd ID: %s", res[0].ID)
 
 	assert.NoError(t, err)
 }
