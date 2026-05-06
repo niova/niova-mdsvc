@@ -3,15 +3,16 @@ global:
   evaluation_interval: 15s
 
 scrape_configs:
-  - job_name: niova-proxy
+  - job_name: niova-controlplane
     static_configs:
-      # Add one entry per proxy instance. Default metrics port is 9701 (-mp flag).
+      # One entry per cluster node. Each node runs one proxy on port 9701 (-mp flag).
+      # Set `node` to the node's hostname or IP for display in Grafana.
       - targets:
           - localhost:9701
         labels:
-          instance: proxy-0
-      # Uncomment and extend for additional proxy instances:
+          node: node-0
+      # Add one block per additional node:
       # - targets:
-      #     - localhost:9702
+      #     - 192.168.1.11:9701
       #   labels:
-      #     instance: proxy-1
+      #     node: node-1

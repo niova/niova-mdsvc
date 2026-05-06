@@ -1,7 +1,7 @@
 apiVersion: 1
 
 providers:
-  - name: niova-proxy
+  - name: niova-controlplane
     folder: Niova
     type: file
     disableDeletion: false

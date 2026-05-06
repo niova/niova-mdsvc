@@ -4,6 +4,13 @@ datasources:
   - name: Prometheus
     type: prometheus
     access: proxy
-    url: http://localhost:9091
+    url: http://localhost:9093
     isDefault: true
+    editable: false
+
+  - name: Prometheus-2
+    type: prometheus
+    access: proxy
+    url: http://localhost:9092
+    isDefault: false
     editable: false

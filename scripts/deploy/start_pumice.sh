@@ -102,6 +102,7 @@ log "Starting CTLPlane_proxy with client UUID=${CUUID}"
     -u "${CUUID}" \
     -pa "${CONFIGS_DIR}/gossipNodes" \
     -n "Node_${CUUID}" \
+    -mp 9701 \
     -l "${LOG_DIR}/pmdb_client_${CUUID}.log" \
     -ll "Trace" \
     > "${LOG_DIR}/pmdb_client_${CUUID}_stdouterr" 2>&1 &

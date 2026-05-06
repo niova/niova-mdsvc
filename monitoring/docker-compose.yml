@@ -9,9 +9,23 @@ services:
     command:
       - --config.file=/etc/prometheus/prometheus.yml
       - --storage.tsdb.retention.time=7d
-      - --web.listen-address=:9091
+      - --web.listen-address=:9093
     ports:
-      - "9091:9091"
+      - "9093:9093"
+    network_mode: host
+    restart: unless-stopped
+
+  prometheus2:
+    image: prom/prometheus:v2.51.0
+    container_name: prometheus2
+    volumes:
+      - ./prometheus/prometheus2.yml:/etc/prometheus/prometheus.yml:ro
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=7d
+      - --web.listen-address=:9092
+    ports:
+      - "9092:9092"
     network_mode: host
     restart: unless-stopped
 
@@ -23,14 +37,14 @@ services:
     environment:
       - GF_SECURITY_ADMIN_PASSWORD=admin
       - GF_USERS_ALLOW_SIGN_UP=false
-      - GF_SERVER_HTTP_PORT=3002
+      - GF_SERVER_HTTP_PORT=3005
       - GF_PLUGINS_ALLOW_LOADING_UNSIGNED_PLUGINS=netsage-sankey-panel
     volumes:
       - grafana-data:/var/lib/grafana
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
       - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
     ports:
-      - "3001:3001"
+      - "3005:3005"
     network_mode: host
     restart: unless-stopped
     depends_on:
