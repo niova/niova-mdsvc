@@ -23,8 +23,8 @@
         "name": "node",
         "type": "query",
         "datasource": "${datasource}",
-        "query": "label_values(proxy_nisd_total_size_bytes, node)",
-        "label": "Node",
+        "query": "label_values(proxy_nisd_total_size_bytes, instance)",
+        "label": "Instance",
         "multi": true,
         "includeAll": true,
         "current": {
@@ -37,7 +37,7 @@
         "name": "vdev",
         "type": "query",
         "datasource": "${datasource}",
-        "query": "label_values(proxy_vdev_num_chunks{node=~\"$node\"}, vdev)",
+        "query": "label_values(proxy_vdev_num_chunks{instance=~\"$node\"}, vdev)",
         "label": "VDev",
         "multi": false,
         "includeAll": false,
@@ -76,7 +76,7 @@
       },
       "targets": [
         {
-          "expr": "rate(proxy_requests_total{node=~\"$node\"}[1m])",
+          "expr": "rate(proxy_requests_total{instance=~\"$node\"}[1m])",
           "legendFormat": "{{method}}/{{type}}",
           "refId": "A"
         }
@@ -125,7 +125,7 @@
       },
       "targets": [
         {
-          "expr": "sum(proxy_requests_total{node=~\"$node\"})",
+          "expr": "sum(proxy_requests_total{instance=~\"$node\"})",
           "legendFormat": "",
           "instant": true,
           "refId": "A"
@@ -170,7 +170,7 @@
       },
       "targets": [
         {
-          "expr": "sum by (method) (proxy_requests_total{node=~\"$node\"})",
+          "expr": "sum by (method) (proxy_requests_total{instance=~\"$node\"})",
           "legendFormat": "{{method}}",
           "instant": true,
           "refId": "A"
@@ -229,7 +229,7 @@
       "description": "Standard deviation of available space % across all NISDs. Each NISD's available % is computed individually (available / total * 100), then stddev is taken across all NISDs. Expected: near 0 — all NISDs have roughly the same free space. A rising score means some NISDs are draining faster than others. Values above 10% warrant investigation.",
       "targets": [
         {
-          "expr": "stddev(proxy_nisd_available_size_bytes{node=~\"$node\"} / proxy_nisd_total_size_bytes{node=~\"$node\"} * 100) or vector(0)",
+          "expr": "stddev(proxy_nisd_available_size_bytes{instance=~\"$node\"} / proxy_nisd_total_size_bytes{instance=~\"$node\"} * 100) or vector(0)",
           "legendFormat": "imbalance %",
           "instant": true
         }
@@ -285,7 +285,7 @@
       "description": "Sum of raw capacity across all NISDs. Expected: stable — changes only when NISDs are added or decommissioned. An unexpected drop means a NISD is no longer reachable.",
       "targets": [
         {
-          "expr": "sum(proxy_nisd_total_size_bytes{node=~\"$node\"})",
+          "expr": "sum(proxy_nisd_total_size_bytes{instance=~\"$node\"})",
           "legendFormat": "Total Capacity",
           "instant": true
         }
@@ -330,7 +330,7 @@
       "description": "Sum of used bytes across all NISDs. Expected: a gradual upward slope proportional to write activity. A sudden jump = large bulk write; a sudden drop = data deletion or NISD loss.",
       "targets": [
         {
-          "expr": "sum(proxy_nisd_total_size_bytes{node=~\"$node\"} - proxy_nisd_available_size_bytes{node=~\"$node\"})",
+          "expr": "sum(proxy_nisd_total_size_bytes{instance=~\"$node\"} - proxy_nisd_available_size_bytes{instance=~\"$node\"})",
           "legendFormat": "Used",
           "instant": true
         }
@@ -398,7 +398,7 @@
       },
       "targets": [
         {
-          "expr": "(proxy_nisd_total_size_bytes{node=~\"$node\"} - proxy_nisd_available_size_bytes{node=~\"$node\"}) / proxy_nisd_total_size_bytes{node=~\"$node\"} * 100",
+          "expr": "(proxy_nisd_total_size_bytes{instance=~\"$node\"} - proxy_nisd_available_size_bytes{instance=~\"$node\"}) / proxy_nisd_total_size_bytes{instance=~\"$node\"} * 100",
           "legendFormat": "{{nisd}}",
           "refId": "A"
         }
@@ -457,7 +457,7 @@
       },
       "targets": [
         {
-          "expr": "max((proxy_nisd_total_size_bytes{node=~\"$node\"} - proxy_nisd_available_size_bytes{node=~\"$node\"}) / proxy_nisd_total_size_bytes{node=~\"$node\"} * 100) - min((proxy_nisd_total_size_bytes{node=~\"$node\"} - proxy_nisd_available_size_bytes{node=~\"$node\"}) / proxy_nisd_total_size_bytes{node=~\"$node\"} * 100)",
+          "expr": "max((proxy_nisd_total_size_bytes{instance=~\"$node\"} - proxy_nisd_available_size_bytes{instance=~\"$node\"}) / proxy_nisd_total_size_bytes{instance=~\"$node\"} * 100) - min((proxy_nisd_total_size_bytes{instance=~\"$node\"} - proxy_nisd_available_size_bytes{instance=~\"$node\"}) / proxy_nisd_total_size_bytes{instance=~\"$node\"} * 100)",
           "legendFormat": "",
           "instant": true,
           "refId": "A"
@@ -517,7 +517,7 @@
       },
       "targets": [
         {
-          "expr": "topk(1, (proxy_nisd_total_size_bytes{node=~\"$node\"} - proxy_nisd_available_size_bytes{node=~\"$node\"}) / proxy_nisd_total_size_bytes{node=~\"$node\"} * 100)",
+          "expr": "topk(1, (proxy_nisd_total_size_bytes{instance=~\"$node\"} - proxy_nisd_available_size_bytes{instance=~\"$node\"}) / proxy_nisd_total_size_bytes{instance=~\"$node\"} * 100)",
           "legendFormat": "{{nisd}}",
           "instant": true,
           "refId": "A"
@@ -579,7 +579,7 @@
       },
       "targets": [
         {
-          "expr": "(proxy_nisd_total_size_bytes{node=~\"$node\"} - proxy_nisd_available_size_bytes{node=~\"$node\"}) / proxy_nisd_total_size_bytes{node=~\"$node\"} * 100",
+          "expr": "(proxy_nisd_total_size_bytes{instance=~\"$node\"} - proxy_nisd_available_size_bytes{instance=~\"$node\"}) / proxy_nisd_total_size_bytes{instance=~\"$node\"} * 100",
           "legendFormat": "{{nisd}}",
           "refId": "A"
         }
@@ -638,7 +638,7 @@
       },
       "targets": [
         {
-          "expr": "sort_desc((proxy_nisd_total_size_bytes{node=~\"$node\"} - proxy_nisd_available_size_bytes{node=~\"$node\"}) / proxy_nisd_total_size_bytes{node=~\"$node\"} * 100)",
+          "expr": "sort_desc((proxy_nisd_total_size_bytes{instance=~\"$node\"} - proxy_nisd_available_size_bytes{instance=~\"$node\"}) / proxy_nisd_total_size_bytes{instance=~\"$node\"} * 100)",
           "legendFormat": "{{nisd}}",
           "instant": true,
           "refId": "A"
@@ -715,7 +715,7 @@
       },
       "targets": [
         {
-          "expr": "topk(10, proxy_vdev_nisd_chunk_count{node=~\"$node\"})",
+          "expr": "topk(10, proxy_vdev_nisd_chunk_count{instance=~\"$node\"})",
           "legendFormat": "",
           "instant": true,
           "refId": "A",
@@ -789,7 +789,7 @@
       },
       "targets": [
         {
-          "expr": "count(proxy_vdev_num_chunks{node=~\"$node\"})",
+          "expr": "count(proxy_vdev_num_chunks{instance=~\"$node\"})",
           "legendFormat": "",
           "instant": true,
           "refId": "A"
@@ -841,7 +841,7 @@
       },
       "targets": [
         {
-          "expr": "sum(proxy_vdev_num_chunks{node=~\"$node\"})",
+          "expr": "sum(proxy_vdev_num_chunks{instance=~\"$node\"})",
           "legendFormat": "",
           "instant": true,
           "refId": "A"
@@ -893,7 +893,7 @@
       },
       "targets": [
         {
-          "expr": "topk(20, proxy_vdev_num_chunks{node=~\"$node\"})",
+          "expr": "topk(20, proxy_vdev_num_chunks{instance=~\"$node\"})",
           "legendFormat": "{{vdev}}",
           "instant": true,
           "refId": "A",
@@ -1053,7 +1053,7 @@
       },
       "targets": [
         {
-          "expr": "proxy_vdev_nisd_chunk_count{node=~\"$node\", vdev=\"$vdev\"} * on(nisd) group_left(hv, rack) proxy_nisd_info{node=~\"$node\"}",
+          "expr": "proxy_vdev_nisd_chunk_count{instance=~\"$node\", vdev=\"$vdev\"} * on(nisd) group_left(hv, rack) max by (nisd, hv, rack) (proxy_nisd_info{instance=~\"$node\"})",
           "legendFormat": "{{nisd}} · hv:{{hv}}",
           "instant": true,
           "refId": "A"
@@ -1109,7 +1109,7 @@
       },
       "targets": [
         {
-          "expr": "proxy_vdev_info{node=~\"$node\", vdev=\"$vdev\"}",
+          "expr": "max by (fd_type) (proxy_vdev_info{instance=~\"$node\", vdev=\"$vdev\"})",
           "legendFormat": "{{fd_type}}",
           "instant": true,
           "refId": "A"
@@ -1153,7 +1153,7 @@
       },
       "targets": [
         {
-          "expr": "proxy_vdev_info{node=~\"$node\", vdev=\"$vdev\"}",
+          "expr": "max by (fd_id) (proxy_vdev_info{instance=~\"$node\", vdev=\"$vdev\"})",
           "legendFormat": "{{fd_id}}",
           "instant": true,
           "refId": "A"
@@ -1183,8 +1183,8 @@
     {
       "id": 25,
       "type": "netsage-sankey-panel",
-      "title": "VDev -> NISD chunk flow for $vdev",
-      "description": "Sankey diagram of chunk placement for the selected VDev. Left node = VDev, right nodes = NISDs, link width = number of 8-GiB chunks on that NISD. Compare with the bar gauge on the left — both show the same VDev, different visual forms. Unequal link widths mean the allocator skewed chunks toward specific NISDs.",
+      "title": "VDev → NISD chunk flow for $vdev (top 20)",
+      "description": "Sankey diagram showing the 20 largest chunk flows for the selected VDev (limited for readability). Left = VDev, right = NISDs, link width = number of 8-GiB chunks. Use the bar gauge + table below for the full list of all NISDs.",
       "gridPos": {
         "x": 12,
         "y": 83,
@@ -1197,7 +1197,7 @@
       },
       "targets": [
         {
-          "expr": "proxy_vdev_nisd_chunk_count{node=~\"$node\", vdev=\"$vdev\"}",
+          "expr": "topk(20, proxy_vdev_nisd_chunk_count{instance=~\"$node\", vdev=\"$vdev\"})",
           "legendFormat": "",
           "instant": true,
           "refId": "A",
@@ -1260,7 +1260,7 @@
       },
       "targets": [
         {
-          "expr": "proxy_vdev_nisd_chunk_count{node=~\"$node\", vdev=\"$vdev\"}",
+          "expr": "proxy_vdev_nisd_chunk_count{instance=~\"$node\", vdev=\"$vdev\"}",
           "legendFormat": "{{nisd}}",
           "instant": true,
           "refId": "A",
