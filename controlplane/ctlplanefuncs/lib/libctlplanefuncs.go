@@ -241,6 +241,14 @@ type NisdVdevAlloc struct {
 	Ptr           *Nisd
 }
 
+// DeviceAlloc tracks a device in the hierarchy with its child NISDs.
+// AvailableSize is the sum of all child NISD AvailableSize values.
+type DeviceAlloc struct {
+	ID            string
+	AvailableSize int64
+	Nisds         []*Nisd
+}
+
 type VdevCfg struct {
 	XMLName      xml.Name `xml:"Vdev"`
 	ID           string

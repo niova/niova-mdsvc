@@ -701,15 +701,17 @@ func WPCreateVdev(args ...interface{}) (interface{}, error) {
 	return pmCmn.Encoder(pmCmn.GOB, funcIntrm)
 }
 
-func allocateNisdPerChunk(req *ctlplfl.VdevReq, fd int, chunk string,
+func allocateNisdPerChunk(req *ctlplfl.VdevReq, fd int, chunkIdx int, chunk string,
 	commitChgs *[]funclib.CommitChg,
-	nisdMap *btree.Map[string, *ctlplfl.NisdVdevAlloc]) error {
+	nisdMap *btree.Map[string, *ctlplfl.NisdVdevAlloc],
+	deviceUsage map[string]int) error {
 
 	if fd < 0 || fd >= ctlplfl.FD_MAX {
 		return fmt.Errorf("invalid failure domain: %d", fd)
 	}
 
 	pickedNISD := make(map[string]struct{})
+	pickedDevices := make(map[string]struct{})
 	pickedEntity := make(map[int]struct{})
 
 	tree := HR.FD[fd].Tree
@@ -726,17 +728,25 @@ func allocateNisdPerChunk(req *ctlplfl.VdevReq, fd int, chunk string,
 		}
 
 		for r := 0; r < int(req.Vdev.NumReplica); r++ {
-			nisd, err := HR.PickNISD(en, pickedNISD, nisdMap)
+			devOffset := chunkIdx + VdevDeviceOffset + r
+			dev, err := HR.PickDevice(en, pickedDevices, deviceUsage, nisdMap, devOffset)
 			if err != nil {
-				log.Error("PickNISD():failed to pick NISD: ", err)
+				log.Error("PickDevice(): failed to pick device: ", err)
+				return err
+			}
+			nisd, err := HR.PickNISDFromDevice(dev, pickedNISD, nisdMap)
+			if err != nil {
+				log.Error("PickNISDFromDevice(): failed to pick NISD: ", err)
 				return err
 			}
 			genAllocationKV(req.Vdev.ID, chunk, nisd, r, commitChgs)
+			pickedDevices[dev.ID] = struct{}{}
+			deviceUsage[dev.ID]++
 		}
 		return nil
 	}
 
-	// Deterministic entity start index
+	// Deterministic entity start index (provides cross-vdev diversity)
 	hash := ctlplfl.NisdAllocHash([]byte(req.Vdev.ID + chunk))
 	startIdx, err := GetIdxForNisdAlloc(hash, treeLen)
 	if err != nil {
@@ -770,9 +780,20 @@ func allocateNisdPerChunk(req *ctlplfl.VdevReq, fd int, chunk string,
 				continue
 			}
 
-			nisd, lastErr = HR.PickNISD(ent, pickedNISD, nisdMap)
+			// Phase 1: Pick optimal device within this entity
+			devOffset := chunkIdx + VdevDeviceOffset + r
+			dev, devErr := HR.PickDevice(ent, pickedDevices, deviceUsage, nisdMap, devOffset)
+			if devErr != nil {
+				lastErr = devErr
+				continue
+			}
+
+			// Phase 2: Pick optimal NISD within the chosen device
+			nisd, lastErr = HR.PickNISDFromDevice(dev, pickedNISD, nisdMap)
 			if lastErr == nil {
 				picked = curIdx
+				pickedDevices[dev.ID] = struct{}{}
+				deviceUsage[dev.ID]++
 				break
 			}
 		}
@@ -793,15 +814,20 @@ func allocateNisdPerChunk(req *ctlplfl.VdevReq, fd int, chunk string,
 
 func allocateNisdPerVdev(req *ctlplfl.VdevReq, fd int, nisdMap *btree.Map[string, *ctlplfl.NisdVdevAlloc]) ([]funclib.CommitChg, error) {
 	commitCh := make([]funclib.CommitChg, 0)
+	// Track device usage across all chunks in this vdev
+	deviceUsage := make(map[string]int)
+
 	for i := 0; i < int(req.Vdev.NumChunks); i++ {
 		log.Debugf("allocating nisd for chunk: %d, from fd: %d ", i, fd)
-		err := allocateNisdPerChunk(req, fd, strconv.Itoa(i), &commitCh, nisdMap)
+		err := allocateNisdPerChunk(req, fd, i, strconv.Itoa(i), &commitCh, nisdMap, deviceUsage)
 		if err != nil {
 			err = fmt.Errorf("failed to allocate nisd from fd: %d, %v", fd, err)
 			log.Error(err)
 			return nil, err
 		}
 	}
+	// Advance the global device offset so the next vdev starts at a different device
+	VdevDeviceOffset++
 	return commitCh, nil
 }
 
@@ -867,6 +893,23 @@ func applyNISDAlloc(allocMap *btree.Map[string, *ctlplfl.NisdVdevAlloc]) {
 				BytesToGB(alloc.AvailableSize),
 			)
 			HR.DeleteNisd(alloc.Ptr)
+		} else {
+			// Recalculate device available sizes for NISDs that remain
+			devID := alloc.Ptr.FailureDomain[ctlplfl.DEVICE_IDX]
+			for i := range HR.FD {
+				for _, fdID := range alloc.Ptr.FailureDomain {
+					ent, ok := HR.FD[i].Tree.Get(&Entities{ID: fdID})
+					if !ok {
+						continue
+					}
+					dn, ok := ent.Devices.Get(&DeviceNode{ctlplfl.DeviceAlloc{ID: devID}})
+					if !ok {
+						continue
+					}
+					recalcDeviceAvailSize(dn)
+					break
+				}
+			}
 		}
 		return true
 	})

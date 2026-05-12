@@ -2,6 +2,8 @@ package clictlplanefuncs
 
 import (
 	"fmt"
+	"sort"
+	"strings"
 	"testing"
 	"time"
 
@@ -108,10 +110,10 @@ func TestCreateLargeHierarchy(t *testing.T) {
 
 	mockNisd := make([]cpLib.Nisd, 0, 160)
 
-	pduCount := len(pdus)
+	pduCount := 1
 	rackPerPdu := 2
-	hvPerRack := 2
-	devPerHv := 2
+	hvPerRack := 1
+	devPerHv := 6
 	nisdPerDev := 4
 
 	rackIdx := 0
@@ -147,8 +149,8 @@ func TestCreateLargeHierarchy(t *testing.T) {
 								dev,
 								fmt.Sprintf("%s-%d", dev, n),
 							},
-							TotalSize:     1_000_000_000_000,
-							AvailableSize: 1_000_000_000_000,
+							TotalSize:     1869169767219,
+							AvailableSize: 1869169767219,
 						}
 
 						mockNisd = append(mockNisd, nisd)
@@ -383,4 +385,369 @@ func TestCreateVdevWithInvalidFilters(t *testing.T) {
 			log.Infof("[TEST END] %s", tc.name)
 		})
 	}
+}
+
+func TestColorHVFilteredVdevChunkDistribution(t *testing.T) {
+	c := newClient(t)
+
+	adminToken := getAdminToken(t)
+
+	c.SetToken(adminToken)
+
+	const (
+		numVdevs = 16
+		hvID     = "bde1f08a-df63-11f0-88ef-430ddec19901"
+	)
+
+	createdVdevs := make([]string, 0, numVdevs)
+
+	// -------------------------------------------------------------------------
+	// Step 1: Create VDEVs
+	// -------------------------------------------------------------------------
+
+	log.Infof(
+		"Creating %d VDEVs with HV filter: %s",
+		numVdevs,
+		hvID,
+	)
+
+	for i := 0; i < numVdevs; i++ {
+
+		req := &cpLib.VdevReq{
+			Vdev: &cpLib.VdevCfg{
+				Size:       1024 * 1024 * 1024 * 1024,
+				NumReplica: 1,
+			},
+			Filter: cpLib.Filter{
+				Type: cpLib.FD_HV,
+				ID:   hvID,
+			},
+		}
+
+		resp, err := c.CreateVdev(req)
+
+		require.NoError(t, err)
+		require.NotNil(t, resp)
+		require.True(t, resp.Success)
+
+		createdVdevs = append(createdVdevs, resp.ID)
+
+		log.Infof(
+			"Created VDEV[%d] ID=%s",
+			i+1,
+			resp.ID,
+		)
+
+		time.Sleep(1 * time.Second)
+	}
+
+	// Allow metadata settlement
+
+	time.Sleep(5 * time.Second)
+
+	allVdevs := make([]cpLib.Vdev, 0)
+
+	for _, vdevID := range createdVdevs {
+
+		vdevs, err := c.GetVdevsWithChunkInfo(
+			&cpLib.GetReq{
+				ID: vdevID,
+			},
+		)
+
+		require.NoError(t, err)
+		require.NotEmpty(t, vdevs)
+
+		allVdevs = append(allVdevs, vdevs[0])
+	}
+
+	const (
+		reset  = "\033[0m"
+		blue   = "\033[44m"
+		orange = "\033[48;5;208m"
+		green  = "\033[42m"
+		red    = "\033[41m"
+		purple = "\033[45m"
+		yellow = "\033[43m"
+		cyan   = "\033[46m"
+		white  = "\033[107m"
+	)
+
+	colorPalette := []string{
+		blue,
+		orange,
+		green,
+		red,
+		purple,
+		yellow,
+		cyan,
+		white,
+	}
+
+	deviceChunkDist := make(map[string]int)
+	nisdChunkDist := make(map[string]int)
+
+	deviceColors := make(map[string]string)
+
+	// vdev -> chunk -> device
+	vdevChunkDevice := make(map[string]map[int]string)
+
+	// vdev -> chunk -> nisd
+	vdevChunkNisd := make(map[string]map[int]string)
+
+	deviceSet := make(map[string]bool)
+
+	maxChunk := 0
+	totalChunks := 0
+
+	for vdevIdx, vdev := range allVdevs {
+
+		vdevName := fmt.Sprintf(
+			"vdev-%d",
+			vdevIdx+1,
+		)
+
+		vdevChunkDevice[vdevName] = make(map[int]string)
+		vdevChunkNisd[vdevName] = make(map[int]string)
+
+		log.Infof(
+			"Processing VDEV=%s NumChunks=%d ",
+			vdev.Cfg.ID,
+			vdev.Cfg.NumChunks,
+		)
+
+		for _, chunkMap := range vdev.NisdToChkMap {
+
+			fd := chunkMap.Nisd.FailureDomain
+
+			if len(fd) <= cpLib.DEVICE_IDX {
+
+				log.Warnf(
+					"NISD=%s malformed failure domain",
+					chunkMap.Nisd.ID,
+				)
+
+				continue
+			}
+
+			// Validate HV
+
+			require.GreaterOrEqual(
+				t,
+				len(fd),
+				cpLib.HV_IDX+1,
+			)
+
+			assert.Equal(
+				t,
+				hvID,
+				fd[cpLib.HV_IDX],
+				"chunk allocated outside requested HV",
+			)
+
+			deviceID := fd[cpLib.DEVICE_IDX]
+			nisdID := chunkMap.Nisd.ID
+
+			deviceSet[deviceID] = true
+
+			for _, chk := range chunkMap.Chunk {
+
+				totalChunks++
+
+				if chk > maxChunk {
+					maxChunk = chk
+				}
+
+				deviceChunkDist[deviceID]++
+				nisdChunkDist[nisdID]++
+
+				vdevChunkDevice[vdevName][chk] = deviceID
+				vdevChunkNisd[vdevName][chk] = nisdID
+			}
+		}
+	}
+
+	deviceIDs := make([]string, 0)
+
+	for dev := range deviceSet {
+		deviceIDs = append(deviceIDs, dev)
+	}
+
+	sort.Strings(deviceIDs)
+
+	for i, dev := range deviceIDs {
+		deviceColors[dev] = colorPalette[i%len(colorPalette)]
+	}
+
+	fmt.Printf("\n")
+
+	fmt.Printf("===============================================================================================================\n")
+	fmt.Printf("                              VDEVID Chunks Distribution Across Devices                                        \n")
+	fmt.Printf("===============================================================================================================\n\n")
+
+	// Header
+
+	fmt.Printf("%-12s", "")
+
+	for chk := 0; chk <= maxChunk; chk++ {
+		fmt.Printf(" %-16d", chk)
+	}
+
+	fmt.Printf("\n")
+
+	// Rows
+
+	for i := len(allVdevs) - 1; i >= 0; i-- {
+
+		vdevName := fmt.Sprintf(
+			"vdev-%d",
+			i+1,
+		)
+
+		fmt.Printf("%-12s", vdevName)
+
+		for chk := 0; chk <= maxChunk; chk++ {
+
+			deviceID := vdevChunkDevice[vdevName][chk]
+
+			if deviceID == "" {
+
+				fmt.Printf(" %-16s", "-")
+
+				continue
+			}
+
+			shortDev := strings.TrimPrefix(
+				deviceID,
+				"nvme-",
+			)
+
+			cell := fmt.Sprintf(
+				"%s %-13s %s",
+				deviceColors[deviceID],
+				shortDev,
+				reset,
+			)
+
+			fmt.Printf(" %-16s", cell)
+		}
+
+		fmt.Printf("\n")
+	}
+
+	fmt.Printf("\nLegend:\n")
+
+	for _, dev := range deviceIDs {
+
+		shortDev := strings.TrimPrefix(
+			dev,
+			"nvme-",
+		)
+
+		fmt.Printf(
+			"%s %-14s %s -> %s\n",
+			deviceColors[dev],
+			" ",
+			reset,
+			shortDev,
+		)
+	}
+
+	fmt.Printf("\n\n")
+
+	fmt.Printf("===============================================================================================================\n")
+	fmt.Printf("                               VDEVID Chunks Distribution Across NISDs                                         \n")
+	fmt.Printf("===============================================================================================================\n\n")
+
+	// Header
+
+	fmt.Printf("%-12s", "")
+
+	for chk := 0; chk <= maxChunk; chk++ {
+		fmt.Printf(" %-20d", chk)
+	}
+
+	fmt.Printf("\n")
+
+	// Rows
+
+	for i := len(allVdevs) - 1; i >= 0; i-- {
+
+		vdevName := fmt.Sprintf(
+			"vdev-%d",
+			i+1,
+		)
+
+		fmt.Printf("%-12s", vdevName)
+
+		for chk := 0; chk <= maxChunk; chk++ {
+
+			nisdID := vdevChunkNisd[vdevName][chk]
+
+			if nisdID == "" {
+
+				fmt.Printf(" %-20s", "-")
+
+				continue
+			}
+
+			fmt.Printf(" %-20s", nisdID)
+		}
+
+		fmt.Printf("\n")
+	}
+
+	// -------------------------------------------------------------------------
+	// Final Statistics
+	// -------------------------------------------------------------------------
+
+	fmt.Printf("\n")
+
+	fmt.Printf("===============================================================================================================\n")
+	fmt.Printf("                                         FINAL STATISTICS                                                      \n")
+	fmt.Printf("===============================================================================================================\n")
+
+	fmt.Printf(
+		"Total VDEVs Created : %d\n",
+		len(createdVdevs),
+	)
+
+	fmt.Printf(
+		"Total Chunks        : %d\n",
+		totalChunks,
+	)
+
+	fmt.Printf(
+		"Unique Devices      : %d\n",
+		len(deviceChunkDist),
+	)
+
+	fmt.Printf(
+		"Unique NISDs        : %d\n",
+		len(nisdChunkDist),
+	)
+
+	fmt.Printf("===============================================================================================================\n")
+
+	// // -------------------------------------------------------------------------
+	// // Optional Cleanup
+	// // -------------------------------------------------------------------------
+
+	// for _, vdevID := range createdVdevs {
+
+	// 	_, err := c.DeleteVdev(
+	// 		&cpLib.DeleteVdevReq{
+	// 			ID: vdevID,
+	// 		},
+	// 	)
+
+	// 	if err != nil {
+
+	// 		log.Warnf(
+	// 			"Failed cleanup for VDEV=%s err=%v",
+	// 			vdevID,
+	// 			err,
+	// 		)
+	// 	}
+	// }
 }
