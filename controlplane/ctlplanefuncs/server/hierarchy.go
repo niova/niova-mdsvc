@@ -11,18 +11,18 @@ import (
 	ctlplfl "github.com/00pauln00/niova-mdsvc/controlplane/ctlplanefuncs/lib"
 )
 
-// DeviceNode wraps a DeviceAlloc for btree storage.
-// The Devices tree within an Entity is ordered by DeviceNode.ID.
-type DeviceNode struct {
-	cpLib.DeviceAlloc
-}
+// // DeviceNode wraps a DeviceAlloc for btree storage.
+// // The Devices tree within an Entity is ordered by DeviceNode.ID.
+// type DeviceNode struct {
+// 	cpLib.DeviceAlloc
+// }
 
 // Entities maps a single entity to the set of Devices associated with it.
 // Here the Entity could be a PDU/Rack/HV/Device/Partition.
 // The Devices Tree holds all the device ptrs associated with the Entity.
 type Entities struct {
 	ID      string
-	Devices *btree.BTreeG[*DeviceNode]
+	Devices *btree.BTreeG[*cpLib.DeviceAlloc]
 }
 
 // FailureDomain groups entities under a specific failure-isolation class.
@@ -52,7 +52,7 @@ var VdevDeviceOffset int
 
 func compareEntity(a, b *Entities) bool   { return a.ID < b.ID }
 func compareNisd(a, b *cpLib.Nisd) bool    { return a.ID < b.ID }
-func compareDevNode(a, b *DeviceNode) bool { return a.ID < b.ID }
+func compareDevice(a, b *cpLib.DeviceAlloc) bool { return a.ID < b.ID }
 
 // Initialize the Hierarchy Struct
 func (hr *Hierarchy) Init() {
@@ -72,7 +72,7 @@ func (fd *FailureDomain) getOrCreateEntity(id string) *Entities {
 	}
 	n := Entities{
 		ID:      id,
-		Devices: btree.NewBTreeG[*DeviceNode](compareDevNode),
+		Devices: btree.NewBTreeG[*cpLib.DeviceAlloc](compareDevice),
 	}
 	fd.Tree.Set(&n)
 	return &n
@@ -91,23 +91,21 @@ func (fd *FailureDomain) deleteEmptyEntity(id string) {
 }
 
 // getOrCreateDeviceInEntity finds or creates a DeviceNode within an entity.
-func getOrCreateDeviceInEntity(ent *Entities, devID string) *DeviceNode {
-	dn, ok := ent.Devices.Get(&DeviceNode{cpLib.DeviceAlloc{ID: devID}})
+func getOrCreateDeviceInEntity(ent *Entities, devID string) *cpLib.DeviceAlloc {
+	dn, ok := ent.Devices.Get(&cpLib.DeviceAlloc{ID: devID})
 	if ok {
 		return dn
 	}
-	dn = &DeviceNode{
-		DeviceAlloc: cpLib.DeviceAlloc{
-			ID:    devID,
-			Nisds: make([]*cpLib.Nisd, 0),
-		},
+	dn = &cpLib.DeviceAlloc{
+		ID:    devID,
+		Nisds: make([]*cpLib.Nisd, 0),
 	}
 	ent.Devices.Set(dn)
 	return dn
 }
 
 // addNisdToDevice adds a NISD to a DeviceNode and recalculates AvailableSize.
-func addNisdToDevice(dn *DeviceNode, n *cpLib.Nisd) {
+func addNisdToDevice(dn *cpLib.DeviceAlloc, n *cpLib.Nisd) {
 	// Check if NISD already exists; if so, update it.
 	for i, existing := range dn.Nisds {
 		if existing.ID == n.ID {
@@ -122,7 +120,7 @@ func addNisdToDevice(dn *DeviceNode, n *cpLib.Nisd) {
 
 // removeNisdFromDevice removes a NISD from a DeviceNode and recalculates AvailableSize.
 // Returns true if the device is now empty (no NISDs left).
-func removeNisdFromDevice(dn *DeviceNode, nisdID string) bool {
+func removeNisdFromDevice(dn *cpLib.DeviceAlloc, nisdID string) bool {
 	for i, existing := range dn.Nisds {
 		if existing.ID == nisdID {
 			dn.Nisds = append(dn.Nisds[:i], dn.Nisds[i+1:]...)
@@ -133,7 +131,7 @@ func removeNisdFromDevice(dn *DeviceNode, nisdID string) bool {
 	return len(dn.Nisds) == 0
 }
 
-func recalcDeviceAvailSize(dn *DeviceNode) {
+func recalcDeviceAvailSize(dn *cpLib.DeviceAlloc) {
 	var total int64
 	for _, n := range dn.Nisds {
 		total += n.AvailableSize
@@ -173,7 +171,7 @@ func (hr *Hierarchy) DeleteNisd(n *cpLib.Nisd) {
 			continue
 		}
 
-		dn, ok := e.Devices.Get(&DeviceNode{cpLib.DeviceAlloc{ID: devID}})
+		dn, ok := e.Devices.Get(&cpLib.DeviceAlloc{ID: devID})
 		if !ok {
 			continue
 		}
@@ -234,7 +232,7 @@ func (hr *Hierarchy) LookupNAddNisd(nisd *ctlplfl.Nisd, nisdMap *btree.Map[strin
 // back to the least-used device.
 func (hr *Hierarchy) PickDevice(ent *Entities, pickedDevices map[string]struct{},
 	deviceUsage map[string]int, nisdMap *btree.Map[string, *ctlplfl.NisdVdevAlloc],
-	startOffset int) (*DeviceNode, error) {
+	startOffset int) (*cpLib.DeviceAlloc, error) {
 
 	devCnt := ent.Devices.Len()
 	if devCnt == 0 {
@@ -242,8 +240,8 @@ func (hr *Hierarchy) PickDevice(ent *Entities, pickedDevices map[string]struct{}
 	}
 
 	// Collect eligible devices (those with enough available size)
-	eligible := make([]*DeviceNode, 0, devCnt)
-	ent.Devices.Scan(func(dn *DeviceNode) bool {
+	eligible := make([]*cpLib.DeviceAlloc, 0, devCnt)
+	ent.Devices.Scan(func(dn *cpLib.DeviceAlloc) bool {
 		effectiveSize := hr.effectiveDeviceAvailSize(dn, nisdMap)
 		if effectiveSize >= ctlplfl.CHUNK_SIZE {
 			eligible = append(eligible, dn)
@@ -268,7 +266,7 @@ func (hr *Hierarchy) PickDevice(ent *Entities, pickedDevices map[string]struct{}
 	}
 
 	// Fallback: all eligible devices already picked, pick least-used starting from offset
-	var bestFallback *DeviceNode
+	var bestFallback *cpLib.DeviceAlloc
 	bestFallbackUsage := int(^uint(0) >> 1) // max int
 	for i := 0; i < numEligible; i++ {
 		idx := (offset + i) % numEligible
@@ -288,7 +286,7 @@ func (hr *Hierarchy) PickDevice(ent *Entities, pickedDevices map[string]struct{}
 
 // effectiveDeviceAvailSize returns the device's available size accounting for
 // any pending NISD allocations tracked in nisdMap.
-func (hr *Hierarchy) effectiveDeviceAvailSize(dn *DeviceNode, nisdMap *btree.Map[string, *ctlplfl.NisdVdevAlloc]) int64 {
+func (hr *Hierarchy) effectiveDeviceAvailSize(dn *cpLib.DeviceAlloc, nisdMap *btree.Map[string, *ctlplfl.NisdVdevAlloc]) int64 {
 	var total int64
 	for _, nisd := range dn.Nisds {
 		if alloc, ok := nisdMap.Get(nisd.ID); ok {
@@ -302,7 +300,7 @@ func (hr *Hierarchy) effectiveDeviceAvailSize(dn *DeviceNode, nisdMap *btree.Map
 
 // PickNISDFromDevice selects the optimal NISD within a device.
 // Returns the NISD with the highest available size that hasn't been picked yet.
-func (hr *Hierarchy) PickNISDFromDevice(dn *DeviceNode, pickedNISD map[string]struct{},
+func (hr *Hierarchy) PickNISDFromDevice(dn *cpLib.DeviceAlloc, pickedNISD map[string]struct{},
 	nisdMap *btree.Map[string, *ctlplfl.NisdVdevAlloc]) (*cpLib.NisdVdevAlloc, error) {
 
 	var optimalNisd *cpLib.NisdVdevAlloc
@@ -358,7 +356,7 @@ func (hr *Hierarchy) Dump() {
 
 			log.Debugf("  Entity: %s", ent.ID)
 
-			ent.Devices.Scan(func(dn *DeviceNode) bool {
+			ent.Devices.Scan(func(dn *cpLib.DeviceAlloc) bool {
 				if dn == nil {
 					return true
 				}
@@ -402,7 +400,7 @@ func (hr *Hierarchy) GetNisdByPDUID(pduID, nisdID string) (*cpLib.Nisd, error) {
 
 	// Search through all devices within the PDU entity
 	var found *cpLib.Nisd
-	pduEntity.Devices.Scan(func(dn *DeviceNode) bool {
+	pduEntity.Devices.Scan(func(dn *cpLib.DeviceAlloc) bool {
 		for _, n := range dn.Nisds {
 			if n.ID == nisdID {
 				found = n

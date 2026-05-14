@@ -902,7 +902,7 @@ func applyNISDAlloc(allocMap *btree.Map[string, *ctlplfl.NisdVdevAlloc]) {
 					if !ok {
 						continue
 					}
-					dn, ok := ent.Devices.Get(&DeviceNode{ctlplfl.DeviceAlloc{ID: devID}})
+					dn, ok := ent.Devices.Get(&ctlplfl.DeviceAlloc{ID: devID})
 					if !ok {
 						continue
 					}
