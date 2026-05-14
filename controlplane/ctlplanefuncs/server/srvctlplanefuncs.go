@@ -701,7 +701,7 @@ func WPCreateVdev(args ...interface{}) (interface{}, error) {
 	return pmCmn.Encoder(pmCmn.GOB, funcIntrm)
 }
 
-func allocateNisdPerChunk(req *ctlplfl.VdevReq, fd int, chunkIdx int, chunk string,
+func allocateNisdPerChunk(req *ctlplfl.VdevReq, fd int, chunkIdx int,
 	commitChgs *[]funclib.CommitChg,
 	nisdMap *btree.Map[string, *ctlplfl.NisdVdevAlloc],
 	deviceUsage map[string]int) error {
@@ -709,7 +709,7 @@ func allocateNisdPerChunk(req *ctlplfl.VdevReq, fd int, chunkIdx int, chunk stri
 	if fd < 0 || fd >= ctlplfl.FD_MAX {
 		return fmt.Errorf("invalid failure domain: %d", fd)
 	}
-
+	chunk := strconv.Itoa(chunkIdx)
 	pickedNISD := make(map[string]struct{})
 	pickedDevices := make(map[string]struct{})
 	pickedEntity := make(map[int]struct{})
@@ -819,7 +819,7 @@ func allocateNisdPerVdev(req *ctlplfl.VdevReq, fd int, nisdMap *btree.Map[string
 
 	for i := 0; i < int(req.Vdev.NumChunks); i++ {
 		log.Debugf("allocating nisd for chunk: %d, from fd: %d ", i, fd)
-		err := allocateNisdPerChunk(req, fd, i, strconv.Itoa(i), &commitCh, nisdMap, deviceUsage)
+		err := allocateNisdPerChunk(req, fd, i, &commitCh, nisdMap, deviceUsage)
 		if err != nil {
 			err = fmt.Errorf("failed to allocate nisd from fd: %d, %v", fd, err)
 			log.Error(err)
