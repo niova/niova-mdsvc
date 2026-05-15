@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/tidwall/btree"
+	"github.com/google/uuid"
 
 	log "github.com/00pauln00/niova-lookout/pkg/xlog"
 
@@ -104,6 +105,7 @@ const (
 	hvKey        = "hv"
 	ptKey        = "pt"
 	argsKey      = "na"
+	pfsKey       = "pfs"
 )
 
 // TokenClaims holds user identity extracted from a verified JWT.
@@ -682,6 +684,16 @@ func WPCreateVdev(args ...interface{}) (interface{}, error) {
 		Value: []byte("1"),
 	})
 	log.Infof("added ownership key: %s for vdev: %s", ownershipKey, req.Vdev.ID)
+
+	if req.Vdev.PFSID != "" {
+		commitChgs = append(commitChgs, funclib.CommitChg{
+			Key:   []byte(fmt.Sprintf("%s/%s/pfs", key, cfgkey)),
+			Value: []byte(req.Vdev.PFSID),
+		})
+		commitChgs = append(commitChgs, funclib.CommitChg{
+			Key:   []byte(fmt.Sprintf("%s/%s/v/%s", pfsKey, req.Vdev.PFSID, req.Vdev.ID)),
+		})
+	}
 	if req.Vdev.Name != "" {
 		// Add ownership key to mark user as owner of this vdev name
 		ownershipKeybyName := fmt.Sprintf("/u/%s/vname/%s", tc.UserID, req.Vdev.Name)
@@ -704,7 +716,8 @@ func WPCreateVdev(args ...interface{}) (interface{}, error) {
 func allocateNisdPerChunk(req *ctlplfl.VdevReq, fd int, chunkIdx int,
 	commitChgs *[]funclib.CommitChg,
 	nisdMap *btree.Map[string, *ctlplfl.NisdVdevAlloc],
-	deviceUsage map[string]int) error {
+	deviceUsage map[string]int,
+	offset int) error {
 
 	if fd < 0 || fd >= ctlplfl.FD_MAX {
 		return fmt.Errorf("invalid failure domain: %d", fd)
@@ -728,7 +741,7 @@ func allocateNisdPerChunk(req *ctlplfl.VdevReq, fd int, chunkIdx int,
 		}
 
 		for r := 0; r < int(req.Vdev.NumReplica); r++ {
-			devOffset := chunkIdx + VdevDeviceOffset + r
+			devOffset := chunkIdx + offset + r
 			dev, err := HR.PickDevice(en, pickedDevices, deviceUsage, nisdMap, devOffset)
 			if err != nil {
 				log.Error("PickDevice(): failed to pick device: ", err)
@@ -781,7 +794,7 @@ func allocateNisdPerChunk(req *ctlplfl.VdevReq, fd int, chunkIdx int,
 			}
 
 			// Phase 1: Pick optimal device within this entity
-			devOffset := chunkIdx + VdevDeviceOffset + r
+			devOffset := chunkIdx + offset + r
 			dev, devErr := HR.PickDevice(ent, pickedDevices, deviceUsage, nisdMap, devOffset)
 			if devErr != nil {
 				lastErr = devErr
@@ -812,29 +825,27 @@ func allocateNisdPerChunk(req *ctlplfl.VdevReq, fd int, chunkIdx int,
 	return nil
 }
 
-func allocateNisdPerVdev(req *ctlplfl.VdevReq, fd int, nisdMap *btree.Map[string, *ctlplfl.NisdVdevAlloc]) ([]funclib.CommitChg, error) {
+func allocateNisdPerVdev(req *ctlplfl.VdevReq, fd int, nisdMap *btree.Map[string, *ctlplfl.NisdVdevAlloc], offset int) ([]funclib.CommitChg, error) {
 	commitCh := make([]funclib.CommitChg, 0)
 	// Track device usage across all chunks in this vdev
 	deviceUsage := make(map[string]int)
 
 	for i := 0; i < int(req.Vdev.NumChunks); i++ {
 		log.Debugf("allocating nisd for chunk: %d, from fd: %d ", i, fd)
-		err := allocateNisdPerChunk(req, fd, i, &commitCh, nisdMap, deviceUsage)
+		err := allocateNisdPerChunk(req, fd, i, &commitCh, nisdMap, deviceUsage, offset)
 		if err != nil {
 			err = fmt.Errorf("failed to allocate nisd from fd: %d, %v", fd, err)
 			log.Error(err)
 			return nil, err
 		}
 	}
-	// Advance the global device offset so the next vdev starts at a different device
-	VdevDeviceOffset++
 	return commitCh, nil
 }
 
-func AllocNISDs(req *ctlplfl.VdevReq, allocMap *btree.Map[string, *ctlplfl.NisdVdevAlloc], txn *funclib.FuncIntrm) error {
+func AllocNISDs(req *ctlplfl.VdevReq, allocMap *btree.Map[string, *ctlplfl.NisdVdevAlloc], txn *funclib.FuncIntrm, offset int) error {
 
 	if req.Filter.Type != ctlplfl.FD_ANY {
-		return allocateNisdsAtFailureDomain(req, ctlplfl.GetFDIdx(req.Filter.Type), allocMap, txn)
+		return allocateNisdsAtFailureDomain(req, ctlplfl.GetFDIdx(req.Filter.Type), allocMap, txn, offset)
 	}
 
 	startFD, err := HR.GetFDLevel(int(req.Vdev.NumReplica))
@@ -843,7 +854,7 @@ func AllocNISDs(req *ctlplfl.VdevReq, allocMap *btree.Map[string, *ctlplfl.NisdV
 	}
 
 	for fd := startFD; fd < ctlplfl.FD_MAX; fd++ {
-		if err := allocateNisdsAtFailureDomain(req, fd, allocMap, txn); err != nil {
+		if err := allocateNisdsAtFailureDomain(req, fd, allocMap, txn, offset); err != nil {
 			log.Error("allocation failed, retrying next failure domain: ", err)
 			allocMap.Clear()
 			continue
@@ -855,11 +866,11 @@ func AllocNISDs(req *ctlplfl.VdevReq, allocMap *btree.Map[string, *ctlplfl.NisdV
 }
 
 func allocateNisdsAtFailureDomain(req *ctlplfl.VdevReq, fd int,
-	allocMap *btree.Map[string, *ctlplfl.NisdVdevAlloc], txn *funclib.FuncIntrm) error {
+	allocMap *btree.Map[string, *ctlplfl.NisdVdevAlloc], txn *funclib.FuncIntrm, offset int) error {
 
 	log.Debugf("selected fd %d for vdev ID: %s", fd, req.Vdev.ID)
 
-	changes, err := allocateNisdPerVdev(req, fd, allocMap)
+	changes, err := allocateNisdPerVdev(req, fd, allocMap, offset)
 	if err != nil {
 		return err
 	}
@@ -958,9 +969,33 @@ func APCreateVdev(args ...interface{}) (interface{}, error) {
 	}
 	req.Vdev.ID = resp.ID
 	req.Vdev.NumChunks = uint32(ctlplfl.Count8GBChunks(req.Vdev.Size))
-	if err := AllocNISDs(&req, allocMap, &intrm); err != nil {
+	offset := 0
+	if req.Vdev.PFSID != "" {
+		offsetKey := fmt.Sprintf("%s/%s/offset", pfsKey, req.Vdev.PFSID)
+		res, err := cbArgs.Store.Read(offsetKey, colmfamily)
+		if err != nil {		
+			log.Errorf("APCreateVdev: failed to read offset for vdev %s: %v", req.Vdev.ID, err)
+			return ctlplfl.FuncError(err)	
+		}
+		parsed, err := strconv.Atoi(string(res))
+		if err != nil {
+			log.Errorf("APCreateVdev: failed to parse offset for vdev %s: %v", req.Vdev.ID, err)
+			return ctlplfl.FuncError(err)	
+		}
+		offset = parsed
+	}
+
+	if err := AllocNISDs(&req, allocMap, &intrm, offset); err != nil {
 		log.Errorf("APCreateVdev: NISD allocation failed for vdev %s: %v", req.Vdev.ID, err)
 		return ctlplfl.FuncError(err)
+	}
+
+	if req.Vdev.PFSID != "" {
+		offset++
+		intrm.Changes = append(intrm.Changes, funclib.CommitChg{
+			Key:   []byte(fmt.Sprintf("%s/%s/offset", pfsKey, req.Vdev.PFSID)),
+			Value: []byte(strconv.Itoa(offset)),
+		})
 	}
 
 	resp.Success = true
@@ -1280,7 +1315,8 @@ func ReadVdevsInfoWithChunkMapping(args ...interface{}) (interface{}, error) {
 				if nr, err := strconv.ParseUint(string(value), 10, 8); err == nil {
 					vdev.Cfg.NumReplica = uint8(nr)
 				}
-			case NAME:
+			case "pfs":
+				vdev.Cfg.PFSID = string(value)			case NAME:
 				vdev.Cfg.Name = string(value)
 			}
 
@@ -1757,4 +1793,91 @@ func APDeleteVdev(args ...interface{}) (interface{}, error) {
 	resp.Success = true
 	log.Debugf("APDeleteVdev: vdev %s deleted successfully", req.ID)
 	return ctlplfl.EncodeResponse(resp)
+}
+
+func WPPFSCfg(args ...interface{}) (interface{}, error) {
+	cpReq := args[0].(ctlplfl.CPReq)
+	pfs := cpReq.Payload.(ctlplfl.PFS)
+	if _, err := validateAndAuthorizeRBAC(cpReq.Token, authz.WPPFSCfg); err != nil {
+		log.Errorf("WPPFSCfg: auth failure: %v", err)
+		return ctlplfl.WPAuthError(err)
+	}
+
+	if pfs.ID == "" {
+		id, err := uuid.NewV7()
+		if err != nil {
+			return nil, err
+		}
+		pfs.ID = id.String()
+	}
+
+	resp := &ctlplfl.ResponseXML{
+		Name:    pfs.ID,
+		Success: true,
+	}
+
+	commitChgs := []funclib.CommitChg{
+		{Key: []byte(fmt.Sprintf("%s/%s/nm", pfsKey, pfs.ID)), Value: []byte(pfs.Name)},
+		{Key: []byte(fmt.Sprintf("%s/%s/offset", pfsKey, pfs.ID)), Value: []byte("0")},
+	}
+
+	funcIntrm := funclib.FuncIntrm{
+		Changes:  commitChgs,
+		Response: resp,
+	}
+	return pmCmn.Encoder(pmCmn.GOB, funcIntrm)
+}
+
+func ReadPFSCfg(args ...interface{}) (interface{}, error) {
+	cbArgs := args[0].(*PumiceDBServer.PmdbCbArgs)
+	cpReq := args[1].(ctlplfl.CPReq)
+	req := cpReq.Payload.(ctlplfl.GetReq)
+	key := pfsKey
+	if !req.GetAll {
+		key = fmt.Sprintf("%s/%s", pfsKey, req.ID)
+	}
+	if _, err := validateAndAuthorizeRBAC(cpReq.Token, authz.ReadPFSCfg); err != nil {
+		log.Errorf("ReadPFSCfg: auth failure: %v", err)
+		return ctlplfl.AuthError(err)
+	}
+	readResult, err := cbArgs.Store.RangeRead(storageiface.RangeReadArgs{
+		Selector: colmfamily,
+		Key:      key,
+		BufSize:  cbArgs.ReplySize,
+		Prefix:   key,
+	})
+	if err != nil {
+		log.Error("Range read failure: ", err)
+		return ctlplfl.FuncError(err)
+	}
+
+	pfsMap := make(map[string]*ctlplfl.PFS)
+	for k, v := range readResult.ResultMap {
+		parts := strings.Split(strings.Trim(k, "/"), "/")
+		if len(parts) < 2 || parts[0] != pfsKey {
+			continue
+		}
+		id := parts[1]
+		if _, ok := pfsMap[id]; !ok {
+			pfsMap[id] = &ctlplfl.PFS{ID: id, VdevIDs: make([]string, 0)}
+		}
+		if len(parts) >= 3 {
+			if parts[2] == "nm" {
+				pfsMap[id].Name = string(v)
+			} else if parts[2] == "offset" {
+				offset, err := strconv.Atoi(string(v))
+				if err == nil {
+					pfsMap[id].Offset = offset
+				}
+			} else if parts[2] == "v" && len(parts) >= 4 { // pfs/<PFSID>/v/<VdevID> -> 1
+				pfsMap[id].VdevIDs = append(pfsMap[id].VdevIDs, parts[3])
+			}
+		}
+	}
+
+	pfsList := make([]ctlplfl.PFS, 0, len(pfsMap))
+	for _, p := range pfsMap {
+		pfsList = append(pfsList, *p)
+	}
+	return ctlplfl.EncodeResponse(pfsList)
 }

@@ -45,6 +45,8 @@ const (
 	ReadAllVdevInfo               FunctionName = "ReadAllVdevInfo"
 	ReadChunkNisd                 FunctionName = "ReadChunkNisd"
 	RdNisdArgs                    FunctionName = "RdNisdArgs"
+	WPPFSCfg                      FunctionName = "WPPFSCfg"
+	ReadPFSCfg                    FunctionName = "ReadPFSCfg"
 	PutUser                       FunctionName = "PutUser"
 	GetUser                       FunctionName = "GetUser"
 	CreateAdminUser               FunctionName = "CreateAdminUser"
@@ -129,6 +131,12 @@ var defaultPolicies = map[FunctionName]FunctionPolicy{
 	},
 	RdNisdArgs: {
 		RBAC: []string{"admin"},
+	},
+	WPPFSCfg: {
+		RBAC: []string{"admin"},
+	},
+	ReadPFSCfg: {
+		RBAC: []string{"admin", "user"},
 	},
 	PutUser: {
 		RBAC: []string{"admin"},

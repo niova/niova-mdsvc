@@ -408,6 +408,44 @@ func (ccf *CliCFuncs) GetPDUs(req *ctlplfl.GetReq) ([]ctlplfl.PDU, error) {
 	return pdus, nil
 }
 
+func (ccf *CliCFuncs) PutPFS(req *ctlplfl.PFS) (*ctlplfl.ResponseXML, error) {
+	cpReq := &ctlplfl.CPReq{
+		Token:   ccf.token,
+		Payload: req,
+	}
+	resp := &ctlplfl.ResponseXML{}
+	cpResp, err := ccf.put(cpReq, ctlplfl.PUT_PFS, resp)
+	if err != nil {
+		log.Error("PutPFS failed: ", err)
+		return nil, err
+	}
+
+	if err := cpResp.Err(); err != nil {
+		return nil, err
+	}
+
+	return resp, nil
+}
+
+func (ccf *CliCFuncs) GetPFS(req *ctlplfl.GetReq) ([]ctlplfl.PFS, error) {
+	cpReq := &ctlplfl.CPReq{
+		Token:   ccf.token,
+		Payload: req,
+	}
+	pfss := make([]ctlplfl.PFS, 0)
+	cpResp, err := ccf.get(cpReq, ctlplfl.GET_PFS, &pfss)
+	if err != nil {
+		log.Error("GetPFS failed: ", err)
+		return nil, err
+	}
+
+	if err := cpResp.Err(); err != nil {
+		return nil, err
+	}
+
+	return pfss, nil
+}
+
 func (ccf *CliCFuncs) PutRack(req *ctlplfl.Rack) (*ctlplfl.ResponseXML, error) {
 	cpReq := &ctlplfl.CPReq{
 		Token:   ccf.token,

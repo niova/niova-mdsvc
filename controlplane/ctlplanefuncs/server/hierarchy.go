@@ -45,10 +45,6 @@ type Hierarchy struct {
 
 var HR Hierarchy
 
-// VdevDeviceOffset is a global counter incremented after each vdev allocation.
-// It rotates the device start position so consecutive vdevs pick different devices
-// for the same chunk index, distributing chunks equally across all devices.
-var VdevDeviceOffset int
 
 func compareEntity(a, b *Entities) bool   { return a.ID < b.ID }
 func compareNisd(a, b *cpLib.Nisd) bool    { return a.ID < b.ID }
