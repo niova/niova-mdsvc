@@ -1961,3 +1961,37 @@ func TestABACVdevOwnership(t *testing.T) {
 
 	t.Log("ABAC Vdev Ownership Test Completed Successfully")
 }
+
+
+
+func TestVdevWithPFS(t *testing.T) {
+
+	c := newClient(t)
+
+	pfsReq := cpLib.PFS{
+		Name: "test-pfs-offset",
+	}
+
+	pfsResp, err := c.PutPFS(&pfsReq)
+	require.NoError(t, err, "PutPFS should succeed")
+	require.True(t, pfsResp.Success)
+	pfsID := pfsResp.ID
+
+	for i:=0; i<100; i++{
+		vdev := &cpLib.VdevReq{
+			Vdev: &cpLib.VdevCfg{
+				Size:       1024 * 1024 * 1024 * 1024,
+				NumReplica: 1,
+				PFSID:      pfsID,
+			},
+			// Filter: cpLib.Filter{
+			// 	Type: cpLib.FD_HV,
+			// },
+		}
+
+		resp, err := c.CreateVdev(vdev)
+		assert.NoError(t, err)
+		assert.True(t, resp.Success)
+
+	}
+}
