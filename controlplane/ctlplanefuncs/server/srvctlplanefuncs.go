@@ -715,7 +715,7 @@ func WPCreateVdev(args ...interface{}) (interface{}, error) {
 func allocateNisdPerChunk(req *ctlplfl.VdevReq, fd int, chunkIdx int,
 	commitChgs *[]funclib.CommitChg,
 	nisdMap *btree.Map[string, *ctlplfl.NisdVdevAlloc],
-	deviceUsage map[string]int,
+	deviceUsage map[string]*DeviceUsageInfo,
 	offset int) error {
 
 	if fd < 0 || fd >= ctlplfl.FD_MAX {
@@ -741,7 +741,7 @@ func allocateNisdPerChunk(req *ctlplfl.VdevReq, fd int, chunkIdx int,
 
 		for r := 0; r < int(req.Vdev.NumReplica); r++ {
 			devOffset := chunkIdx + offset + r
-			dev, err := HR.PickDevice(en, pickedDevices, deviceUsage, nisdMap, devOffset)
+			dev, err := HR.PickDevice(en, pickedDevices, deviceUsage, devOffset)
 			if err != nil {
 				log.Error("PickDevice(): failed to pick device: ", err)
 				return err
@@ -753,7 +753,13 @@ func allocateNisdPerChunk(req *ctlplfl.VdevReq, fd int, chunkIdx int,
 			}
 			genAllocationKV(req.Vdev.ID, chunk, nisd, r, commitChgs)
 			pickedDevices[dev.ID] = struct{}{}
-			deviceUsage[dev.ID]++
+			info := deviceUsage[dev.ID]
+			if info == nil {
+				info = &DeviceUsageInfo{AvailableSize: dev.AvailableSize}
+				deviceUsage[dev.ID] = info
+			}
+			info.Usage++
+			info.AvailableSize -= ctlplfl.CHUNK_SIZE
 		}
 		return nil
 	}
@@ -794,7 +800,7 @@ func allocateNisdPerChunk(req *ctlplfl.VdevReq, fd int, chunkIdx int,
 
 			// Phase 1: Pick optimal device within this entity
 			devOffset := chunkIdx + offset + r
-			dev, devErr := HR.PickDevice(ent, pickedDevices, deviceUsage, nisdMap, devOffset)
+			dev, devErr := HR.PickDevice(ent, pickedDevices, deviceUsage, devOffset)
 			if devErr != nil {
 				lastErr = devErr
 				continue
@@ -805,7 +811,13 @@ func allocateNisdPerChunk(req *ctlplfl.VdevReq, fd int, chunkIdx int,
 			if lastErr == nil {
 				picked = curIdx
 				pickedDevices[dev.ID] = struct{}{}
-				deviceUsage[dev.ID]++
+				info := deviceUsage[dev.ID]
+				if info == nil {
+					info = &DeviceUsageInfo{AvailableSize: dev.AvailableSize}
+					deviceUsage[dev.ID] = info
+				}
+				info.Usage++
+				info.AvailableSize -= ctlplfl.CHUNK_SIZE
 				break
 			}
 		}
@@ -827,7 +839,7 @@ func allocateNisdPerChunk(req *ctlplfl.VdevReq, fd int, chunkIdx int,
 func allocateNisdPerVdev(req *ctlplfl.VdevReq, fd int, nisdMap *btree.Map[string, *ctlplfl.NisdVdevAlloc], offset int) ([]funclib.CommitChg, error) {
 	commitCh := make([]funclib.CommitChg, 0)
 	// Track device usage across all chunks in this vdev
-	deviceUsage := make(map[string]int)
+	deviceUsage := make(map[string]*DeviceUsageInfo)
 
 	for i := 0; i < int(req.Vdev.NumChunks); i++ {
 		log.Debugf("allocating nisd for chunk: %d, from fd: %d ", i, fd)
@@ -895,6 +907,8 @@ func commitAllocChgs(txn *funclib.FuncIntrm,
 
 func applyNISDAlloc(allocMap *btree.Map[string, *ctlplfl.NisdVdevAlloc]) {
 	allocMap.Ascend("", func(_ string, alloc *ctlplfl.NisdVdevAlloc) bool {
+		// Compute the delta: how much AvailableSize changed for this NISD
+		delta := alloc.AvailableSize - alloc.Ptr.AvailableSize
 		alloc.Ptr.AvailableSize = alloc.AvailableSize
 		if alloc.Ptr.AvailableSize < ctlplfl.CHUNK_SIZE {
 			log.Debugf(
@@ -904,7 +918,7 @@ func applyNISDAlloc(allocMap *btree.Map[string, *ctlplfl.NisdVdevAlloc]) {
 			)
 			HR.DeleteNisd(alloc.Ptr)
 		} else {
-			// Recalculate device available sizes for NISDs that remain
+			// Incrementally update device available sizes
 			devID := alloc.Ptr.FailureDomain[ctlplfl.DEVICE_IDX]
 			for i := range HR.FD {
 				for _, fdID := range alloc.Ptr.FailureDomain {
@@ -916,7 +930,7 @@ func applyNISDAlloc(allocMap *btree.Map[string, *ctlplfl.NisdVdevAlloc]) {
 					if !ok {
 						continue
 					}
-					recalcDeviceAvailSize(dn)
+					dn.AvailableSize += delta
 					break
 				}
 			}

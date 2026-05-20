@@ -100,39 +100,31 @@ func getOrCreateDeviceInEntity(ent *Entities, devID string) *cpLib.DeviceAlloc {
 	return dn
 }
 
-// addNisdToDevice adds a NISD to a DeviceNode and recalculates AvailableSize.
+// addNisdToDevice adds a NISD to a DeviceNode and incrementally updates AvailableSize.
 func addNisdToDevice(dn *cpLib.DeviceAlloc, n *cpLib.Nisd) {
 	// Check if NISD already exists; if so, update it.
 	for i, existing := range dn.Nisds {
 		if existing.ID == n.ID {
+			dn.AvailableSize += n.AvailableSize - existing.AvailableSize
 			dn.Nisds[i] = n
-			recalcDeviceAvailSize(dn)
 			return
 		}
 	}
 	dn.Nisds = append(dn.Nisds, n)
-	recalcDeviceAvailSize(dn)
+	dn.AvailableSize += n.AvailableSize
 }
 
-// removeNisdFromDevice removes a NISD from a DeviceNode and recalculates AvailableSize.
+// removeNisdFromDevice removes a NISD from a DeviceNode and decrements AvailableSize.
 // Returns true if the device is now empty (no NISDs left).
 func removeNisdFromDevice(dn *cpLib.DeviceAlloc, nisdID string) bool {
 	for i, existing := range dn.Nisds {
 		if existing.ID == nisdID {
+			dn.AvailableSize -= existing.AvailableSize
 			dn.Nisds = append(dn.Nisds[:i], dn.Nisds[i+1:]...)
-			recalcDeviceAvailSize(dn)
 			return len(dn.Nisds) == 0
 		}
 	}
 	return len(dn.Nisds) == 0
-}
-
-func recalcDeviceAvailSize(dn *cpLib.DeviceAlloc) {
-	var total int64
-	for _, n := range dn.Nisds {
-		total += n.AvailableSize
-	}
-	dn.AvailableSize = total
 }
 
 // Add NISD and the corresponding parent entities to the Hierarchy
@@ -221,77 +213,87 @@ func (hr *Hierarchy) LookupNAddNisd(nisd *ctlplfl.Nisd, nisdMap *btree.Map[strin
 	return ns
 }
 
+// DeviceUsageInfo tracks per-device allocation state across chunks in a vdev.
+type DeviceUsageInfo struct {
+	Usage         int   // number of times this device has been picked
+	AvailableSize int64 // effective available size (decremented as NISDs are allocated)
+}
+
 // PickDevice selects a device within an entity using round-robin rotation.
 // startOffset controls which device position to begin scanning from, enabling
 // cross-vdev rotation so consecutive vdevs pick different devices for the same chunk.
 // Within a chunk, it prefers devices not yet picked; if all are picked, it falls
-// back to the least-used device.
+// back to the least-used device with the most available size.
 func (hr *Hierarchy) PickDevice(ent *Entities, pickedDevices map[string]struct{},
-	deviceUsage map[string]int, nisdMap *btree.Map[string, *ctlplfl.NisdVdevAlloc],
-	startOffset int) (*cpLib.DeviceAlloc, error) {
+	deviceUsage map[string]*DeviceUsageInfo, startOffset int) (*cpLib.DeviceAlloc, error) {
 
 	devCnt := ent.Devices.Len()
 	if devCnt == 0 {
 		return nil, fmt.Errorf("no devices in entity %s", ent.ID)
 	}
 
-	// Collect eligible devices (those with enough available size)
-	eligible := make([]*cpLib.DeviceAlloc, 0, devCnt)
-	ent.Devices.Scan(func(dn *cpLib.DeviceAlloc) bool {
-		effectiveSize := hr.effectiveDeviceAvailSize(dn, nisdMap)
-		if effectiveSize >= ctlplfl.CHUNK_SIZE {
-			eligible = append(eligible, dn)
+	offset := startOffset % devCnt
+
+	var selected *cpLib.DeviceAlloc
+
+	var bestFallback *cpLib.DeviceAlloc
+	bestFallbackUsage := int(^uint(0) >> 1) // max int
+	var bestFallbackAvail int64
+
+	i := 0
+
+	ent.Devices.Scan(func(_ *cpLib.DeviceAlloc) bool {
+
+		idx := (offset + i) % devCnt
+		i++
+
+		dn, ok := ent.Devices.GetAt(idx)
+		if !ok {
+			return true
 		}
+
+		usage := 0
+		availSize := dn.AvailableSize
+
+		if info, ok := deviceUsage[dn.ID]; ok {
+			usage = info.Usage
+			availSize = info.AvailableSize
+		}
+
+		// Skip devices without enough space
+		if availSize < ctlplfl.CHUNK_SIZE {
+			return true
+		}
+
+		// First eligible unpicked device wins
+		if _, picked := pickedDevices[dn.ID]; !picked {
+			selected = dn
+			return false // break Scan()
+		}
+
+		// Track fallback:
+		// least usage -> highest free space
+		if usage < bestFallbackUsage ||
+			(usage == bestFallbackUsage &&
+				availSize > bestFallbackAvail) {
+
+			bestFallback = dn
+			bestFallbackUsage = usage
+			bestFallbackAvail = availSize
+		}
+
 		return true
 	})
 
-	if len(eligible) == 0 {
-		return nil, fmt.Errorf("no suitable device found in entity %s", ent.ID)
-	}
-
-	numEligible := len(eligible)
-	offset := startOffset % numEligible
-
-	// First pass: pick first unpicked device starting from offset
-	for i := 0; i < numEligible; i++ {
-		idx := (offset + i) % numEligible
-		dn := eligible[idx]
-		if _, picked := pickedDevices[dn.ID]; !picked {
-			return dn, nil
-		}
-	}
-
-	// Fallback: all eligible devices already picked, pick least-used starting from offset
-	var bestFallback *cpLib.DeviceAlloc
-	bestFallbackUsage := int(^uint(0) >> 1) // max int
-	for i := 0; i < numEligible; i++ {
-		idx := (offset + i) % numEligible
-		dn := eligible[idx]
-		usage := deviceUsage[dn.ID]
-		if usage < bestFallbackUsage {
-			bestFallback = dn
-			bestFallbackUsage = usage
-		}
+	if selected != nil {
+		return selected, nil
 	}
 
 	if bestFallback != nil {
 		return bestFallback, nil
 	}
-	return nil, fmt.Errorf("no suitable device found in entity %s", ent.ID)
-}
 
-// effectiveDeviceAvailSize returns the device's available size accounting for
-// any pending NISD allocations tracked in nisdMap.
-func (hr *Hierarchy) effectiveDeviceAvailSize(dn *cpLib.DeviceAlloc, nisdMap *btree.Map[string, *ctlplfl.NisdVdevAlloc]) int64 {
-	var total int64
-	for _, nisd := range dn.Nisds {
-		if alloc, ok := nisdMap.Get(nisd.ID); ok {
-			total += alloc.AvailableSize
-		} else {
-			total += nisd.AvailableSize
-		}
-	}
-	return total
+	return nil, fmt.Errorf("no suitable device found in entity %s", ent.ID)
 }
 
 // PickNISDFromDevice selects the optimal NISD within a device.
