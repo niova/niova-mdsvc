@@ -1328,8 +1328,9 @@ func ReadVdevsInfoWithChunkMapping(args ...interface{}) (interface{}, error) {
 				if nr, err := strconv.ParseUint(string(value), 10, 8); err == nil {
 					vdev.Cfg.NumReplica = uint8(nr)
 				}
-			case "pfs":
-				vdev.Cfg.PFSID = string(value)			case NAME:
+			case pfsKey:
+				vdev.Cfg.PFSID = string(value)
+			case NAME:
 				vdev.Cfg.Name = string(value)
 			}
 

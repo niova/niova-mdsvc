@@ -45,9 +45,8 @@ type Hierarchy struct {
 
 var HR Hierarchy
 
-
-func compareEntity(a, b *Entities) bool   { return a.ID < b.ID }
-func compareNisd(a, b *cpLib.Nisd) bool    { return a.ID < b.ID }
+func compareEntity(a, b *Entities) bool          { return a.ID < b.ID }
+func compareNisd(a, b *cpLib.Nisd) bool          { return a.ID < b.ID }
 func compareDevice(a, b *cpLib.DeviceAlloc) bool { return a.ID < b.ID }
 
 // Initialize the Hierarchy Struct

@@ -1962,8 +1962,6 @@ func TestABACVdevOwnership(t *testing.T) {
 	t.Log("ABAC Vdev Ownership Test Completed Successfully")
 }
 
-
-
 func TestVdevWithPFS(t *testing.T) {
 
 	c := newClient(t)
@@ -1977,7 +1975,7 @@ func TestVdevWithPFS(t *testing.T) {
 	require.True(t, pfsResp.Success)
 	pfsID := pfsResp.ID
 
-	for i:=0; i<100; i++{
+	for i := 0; i < 100; i++ {
 		vdev := &cpLib.VdevReq{
 			Vdev: &cpLib.VdevCfg{
 				Size:       1024 * 1024 * 1024 * 1024,
