@@ -12,9 +12,9 @@ func EncodeResponse(payload any) (any, error) {
 
 // EncodePagedResponse encodes a paginated CPResp with nextKey.
 // When nextKey is empty, there are no more pages remaining.
-func EncodePagedResponse(payload any, hasMore bool, nextKey string, seqNo uint64) (any, error) {
+func EncodePagedResponse(payload any, nextKey string, seqNo uint64) (any, error) {
 	page := &Pagination{}
-	if hasMore {
+	if nextKey != "" {
 		page.SetTokenData(seqNo, nextKey)
 	}
 

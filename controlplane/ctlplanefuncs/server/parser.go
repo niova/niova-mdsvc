@@ -76,8 +76,7 @@ func ParseEntities[T Entity](itr storageiface.Iterator, pe ParseEntity) []T {
 // Returns:
 //   - objects  – the collected objects for this page
 //   - nextKey  – the last key inside the final returned object (use as next requestLastKey)
-//   - hasMore  – true if more objects exist beyond this page
-func ParseEntitiesPaginated[T Entity](itr storageiface.Iterator, pe ParseEntity, requestLastKey string, objIDIdx ...int) (objects []T, nextKey string, hasMore bool) {
+func ParseEntitiesPaginated[T Entity](itr storageiface.Iterator, pe ParseEntity, requestLastKey string, objIDIdx ...int) (objects []T, nextKey string) {
 
 	// Resolve the object-ID index (default = BASE_UUID_PREFIX).
 	idIdx := BASE_UUID_PREFIX
@@ -95,7 +94,6 @@ func ParseEntitiesPaginated[T Entity](itr storageiface.Iterator, pe ParseEntity,
 
 	entityMap := make(map[string]Entity)
 	var currentID string   // ID of the object being assembled
-	var completedID string // ID of the last fully appended object
 	var lastKey string     // last KV key *within* the last completed object
 	var prevKey string     // KV key seen in the previous iteration
 	totalSize := 0         // Accumulated approximate byte size of objects
@@ -132,12 +130,11 @@ func ParseEntitiesPaginated[T Entity](itr storageiface.Iterator, pe ParseEntity,
 				if b, err := json.Marshal(obj); err == nil {
 					totalSize += len(b)
 				}
-				completedID = currentID
 				lastKey = prevKey // last KV *inside* the finished object
 			}
 
 			if totalSize >= ctlplfl.MAX_REPLY_SIZE {
-				hasMore = true
+				nextKey = lastKey
 				break
 			}
 
@@ -156,18 +153,12 @@ func ParseEntitiesPaginated[T Entity](itr storageiface.Iterator, pe ParseEntity,
 		if e, ok := entityMap[currentID]; ok {
 			obj := pe.GetEntity(e).(T)
 			objects = append(objects, obj)
-			completedID = currentID
 			lastKey = prevKey // last KV seen for this object
 		}
 	}
 
-	// ── Build the next key ──
-	if hasMore && completedID != "" {
-		nextKey = lastKey
-	}
-
-	log.Debugf("ParseEntitiesPaginated: returned %d objects, hasMore=%v, totalSize=%d", len(objects), hasMore, totalSize)
-	return objects, nextKey, hasMore
+	log.Debugf("ParseEntitiesPaginated: returned %d objects, nextKey=%s, totalSize=%d", len(objects), nextKey, totalSize)
+	return objects, nextKey
 }
 
 func ParseEntitiesMap(itr storageiface.Iterator, pe ParseEntity) map[string]Entity {

@@ -461,9 +461,9 @@ func ReadAllNisdConfigs(args ...interface{}) (interface{}, error) {
 	}
 	defer itr.Close()
 
-	nisdList, nextKey, hasMore := ParseEntitiesPaginated[ctlplfl.Nisd](itr, NisdParser{}, lastKey)
-	log.Debugf("ReadAllNisdConfigs: returning %d nisd configs (hasMore=%v)", len(nisdList), hasMore)
-	return ctlplfl.EncodePagedResponse(nisdList, hasMore, nextKey, itr.GetSeqNum())
+	nisdList, nextKey := ParseEntitiesPaginated[ctlplfl.Nisd](itr, NisdParser{}, lastKey)
+	log.Debugf("ReadAllNisdConfigs: returning %d nisd configs", len(nisdList))
+	return ctlplfl.EncodePagedResponse(nisdList, nextKey, itr.GetSeqNum())
 }
 
 func ReadNisdConfig(args ...interface{}) (interface{}, error) {
@@ -495,7 +495,7 @@ func ReadNisdConfig(args ...interface{}) (interface{}, error) {
 	}
 	defer itr.Close()
 
-	nisdList, _, _ := ParseEntitiesPaginated[ctlplfl.Nisd](itr, NisdParser{}, "")
+	nisdList, _ := ParseEntitiesPaginated[ctlplfl.Nisd](itr, NisdParser{}, "")
 	log.Debugf("ReadNisdConfig: returning nisd config for key %s", key)
 	return ctlplfl.EncodeResponse(nisdList[0])
 }
@@ -514,7 +514,7 @@ func getNisdList(cbArgs *PumiceDBServer.PmdbCbArgs) ([]ctlplfl.Nisd, error) {
 	}
 	defer itr.Close()
 
-	nisdList, _, _ := ParseEntitiesPaginated[ctlplfl.Nisd](itr, NisdParser{}, "")
+	nisdList, _ := ParseEntitiesPaginated[ctlplfl.Nisd](itr, NisdParser{}, "")
 	return nisdList, nil
 }
 
@@ -572,9 +572,9 @@ func RdDeviceInfo(args ...interface{}) (interface{}, error) {
 	}
 	defer itr.Close()
 
-	deviceList, nextKey, hasMore := ParseEntitiesPaginated[ctlplfl.Device](itr, deviceWithPartitionParser{}, lastKey)
+	deviceList, nextKey := ParseEntitiesPaginated[ctlplfl.Device](itr, deviceWithPartitionParser{}, lastKey)
 	log.Debugf("RdDeviceInfo: returning device info for key %s", key)
-	return ctlplfl.EncodePagedResponse(deviceList, hasMore, nextKey, itr.GetSeqNum())
+	return ctlplfl.EncodePagedResponse(deviceList, nextKey, itr.GetSeqNum())
 }
 
 func WPDeviceInfo(args ...interface{}) (interface{}, error) {
@@ -955,9 +955,9 @@ func ReadPartition(args ...interface{}) (interface{}, error) {
 	}
 	defer itr.Close()
 
-	pt, nextKey, hasMore := ParseEntitiesPaginated[ctlplfl.DevicePartition](itr, ptParser{}, lastKey)
-	log.Debugf("ReadPartition: returning %d partition(s) for key %s (hasMore=%v)", len(pt), key, hasMore)
-	return ctlplfl.EncodePagedResponse(pt, hasMore, nextKey, itr.GetSeqNum())
+	pt, nextKey := ParseEntitiesPaginated[ctlplfl.DevicePartition](itr, ptParser{}, lastKey)
+	log.Debugf("ReadPartition: returning %d partition(s) for key %s", len(pt), key)
+	return ctlplfl.EncodePagedResponse(pt, nextKey, itr.GetSeqNum())
 }
 
 func WPPDUCfg(args ...interface{}) (interface{}, error) {
@@ -1001,9 +1001,9 @@ func ReadPDUCfg(args ...interface{}) (interface{}, error) {
 	}
 	defer itr.Close()
 
-	pduList, nextKey, hasMore := ParseEntitiesPaginated[ctlplfl.PDU](itr, pduParser{}, lastKey)
-	log.Debugf("ReadPDUCfg: returning %d PDU config(s) (hasMore=%v)", len(pduList), hasMore)
-	return ctlplfl.EncodePagedResponse(pduList, hasMore, nextKey, itr.GetSeqNum())
+	pduList, nextKey := ParseEntitiesPaginated[ctlplfl.PDU](itr, pduParser{}, lastKey)
+	log.Debugf("ReadPDUCfg: returning %d PDU config(s)", len(pduList))
+	return ctlplfl.EncodePagedResponse(pduList, nextKey, itr.GetSeqNum())
 }
 
 func WPRackCfg(args ...interface{}) (interface{}, error) {
@@ -1047,9 +1047,9 @@ func ReadRackCfg(args ...interface{}) (interface{}, error) {
 	}
 	defer itr.Close()
 
-	rackList, nextKey, hasMore := ParseEntitiesPaginated[ctlplfl.Rack](itr, rackParser{}, lastKey)
-	log.Debugf("ReadRackCfg: returning %d rack config(s) (hasMore=%v)", len(rackList), hasMore)
-	return ctlplfl.EncodePagedResponse(rackList, hasMore, nextKey, itr.GetSeqNum())
+	rackList, nextKey := ParseEntitiesPaginated[ctlplfl.Rack](itr, rackParser{}, lastKey)
+	log.Debugf("ReadRackCfg: returning %d rack config(s)", len(rackList))
+	return ctlplfl.EncodePagedResponse(rackList, nextKey, itr.GetSeqNum())
 }
 
 func WPHyperVisorCfg(args ...interface{}) (interface{}, error) {
@@ -1095,9 +1095,9 @@ func ReadHyperVisorCfg(args ...interface{}) (interface{}, error) {
 	}
 	defer itr.Close()
 
-	hvList, nextKey, hasMore := ParseEntitiesPaginated[ctlplfl.Hypervisor](itr, hvParser{}, lastKey)
-	log.Debugf("ReadHyperVisorCfg: returning %d hypervisor config(s) (hasMore=%v)", len(hvList), hasMore)
-	return ctlplfl.EncodePagedResponse(hvList, hasMore, nextKey, itr.GetSeqNum())
+	hvList, nextKey := ParseEntitiesPaginated[ctlplfl.Hypervisor](itr, hvParser{}, lastKey)
+	log.Debugf("ReadHyperVisorCfg: returning %d hypervisor config(s)", len(hvList))
+	return ctlplfl.EncodePagedResponse(hvList, nextKey, itr.GetSeqNum())
 }
 
 func ReadVdevsInfoWithChunkMapping(args ...interface{}) (interface{}, error) {
@@ -1373,9 +1373,9 @@ func ReadAllVdevInfo(args ...interface{}) (interface{}, error) {
 	}
 	defer vdevItr.Close()
 
-	vdevList, nextKey, hasMore := ParseEntitiesPaginated[ctlplfl.VdevCfg](vdevItr, vdevParser{}, lastKey)
-	log.Debugf("ReadAllVdevInfo: returning %d vdev(s) (hasMore=%v)", len(vdevList), hasMore)
-	return ctlplfl.EncodePagedResponse(vdevList, hasMore, nextKey, vdevItr.GetSeqNum())
+	vdevList, nextKey := ParseEntitiesPaginated[ctlplfl.VdevCfg](vdevItr, vdevParser{}, lastKey)
+	log.Debugf("ReadAllVdevInfo: returning %d vdev(s)", len(vdevList))
+	return ctlplfl.EncodePagedResponse(vdevList, nextKey, vdevItr.GetSeqNum())
 }
 
 func ReadChunkNisd(args ...interface{}) (interface{}, error) {
@@ -1484,12 +1484,12 @@ func ReadChunksInfoPaginated(args ...interface{}) (interface{}, error) {
 
 	// Use objIDIdx=3 so the paginator groups by parts[3] (chunk index)
 	// rather than parts[1] (vdevID), ensuring each ChunkInfo is complete.
-	chunks, nextKey, hasMore := ParseEntitiesPaginated[ctlplfl.ChunkInfo](
+	chunks, nextKey := ParseEntitiesPaginated[ctlplfl.ChunkInfo](
 		itr, chunkInfoParser{}, lastKey, 3)
 
-	log.Debugf("ReadChunksInfoPaginated: vdev=%s returning %d chunks (hasMore=%v)",
-		req.ID, len(chunks), hasMore)
-	return ctlplfl.EncodePagedResponse(chunks, hasMore, nextKey, itr.GetSeqNum())
+	log.Debugf("ReadChunksInfoPaginated: vdev=%s returning %d chunks",
+		req.ID, len(chunks))
+	return ctlplfl.EncodePagedResponse(chunks, nextKey, itr.GetSeqNum())
 }
 
 func WPNisdArgs(args ...interface{}) (interface{}, error) {
@@ -1648,7 +1648,7 @@ func APDeleteVdev(args ...interface{}) (interface{}, error) {
 					return pmCmn.Encoder(pmCmn.GOB, resp)
 				}
 				defer nisdItr.Close()
-				nisdList, _, _ := ParseEntitiesPaginated[ctlplfl.Nisd](nisdItr, NisdParser{}, "")
+				nisdList, _ := ParseEntitiesPaginated[ctlplfl.Nisd](nisdItr, NisdParser{}, "")
 				if len(nisdList) > 0 {
 					nisdRefundMap[nisdID] = &nisdList[0]
 				}
