@@ -313,7 +313,7 @@ func (ccf *CliCFuncs) CreateVdev(vdev *ctlplfl.VdevReq) (*ctlplfl.ResponseXML, e
 	return resp, nil
 }
 
-func (ccf *CliCFuncs) GetVdevsWithChunkInfo(req *ctlplfl.GetVdevReq) ([]ctlplfl.Vdev, error) {
+func (ccf *CliCFuncs) GetVdevsWithChunkInfo(req *ctlplfl.GetReq) ([]ctlplfl.Vdev, error) {
 	cpReq := &ctlplfl.CPReq{
 		Token:   ccf.token,
 		Payload: req,
@@ -522,7 +522,7 @@ func (ccf *CliCFuncs) GetNisdArgs(req ctlplfl.GetReq) (ctlplfl.NisdArgs, error) 
 	return args, nil
 }
 
-func (ccf *CliCFuncs) GetVdevCfg(req *ctlplfl.GetVdevReq) (ctlplfl.VdevCfg, error) {
+func (ccf *CliCFuncs) GetVdevCfg(req *ctlplfl.GetReq) (ctlplfl.VdevCfg, error) {
 	vdev := ctlplfl.VdevCfg{}
 	cpReq := &ctlplfl.CPReq{
 		Token:   ccf.token,
@@ -541,7 +541,7 @@ func (ccf *CliCFuncs) GetVdevCfg(req *ctlplfl.GetVdevReq) (ctlplfl.VdevCfg, erro
 	return vdev, nil
 }
 
-func (ccf *CliCFuncs) GetVdevCfgs(req *ctlplfl.GetVdevReq) ([]ctlplfl.VdevCfg, error) {
+func (ccf *CliCFuncs) GetVdevCfgs(req *ctlplfl.GetReq) ([]ctlplfl.VdevCfg, error) {
 	cpReq := &ctlplfl.CPReq{
 		Token:   ccf.token,
 		Payload: req,

@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"github.com/google/uuid"
 
 	"github.com/tidwall/btree"
 
@@ -180,6 +181,16 @@ func getConfKey(cfgType, id string) string {
 
 func getVdevChunkKey(vdevID string) string {
 	return fmt.Sprintf("%s/%s/%s", vdevKey, vdevID, chunkKey)
+}
+
+func isUUID(s string) bool {
+	_, err := uuid.Parse(s)
+
+	if err == nil {
+		return true
+	}
+
+	return false
 }
 
 func ReadSnapByName(args ...interface{}) (interface{}, error) {
@@ -1122,16 +1133,16 @@ func ReadHyperVisorCfg(args ...interface{}) (interface{}, error) {
 func ReadVdevsInfoWithChunkMapping(args ...interface{}) (interface{}, error) {
 	cbArgs := args[0].(*PumiceDBServer.PmdbCbArgs)
 	cpReq := args[1].(ctlplfl.CPReq)
-	req := cpReq.Payload.(ctlplfl.GetVdevReq)
+	req := cpReq.Payload.(ctlplfl.GetReq)
 	tc, err := ValidateToken(cpReq.Token)
 	if err != nil {
 		log.Errorf("ReadVdevsInfoWithChunkMapping: token validation failed: %v", err)
 		return ctlplfl.FuncError(err)
 	}
 
-	vdevuuid := req.Value
-	if !req.IsID && !req.GetAll {
-		vnKey := getConfKey(vnameKey, req.Value)
+	vdevuuid := req.ID
+	if !isUUID(req.ID) && !req.GetAll {
+		vnKey := getConfKey(vnameKey, req.ID)
 		var rqResult *storageiface.RangeReadResult
 		rqResult, err = cbArgs.Store.RangeRead(storageiface.RangeReadArgs{
 			Selector: colmfamily,
@@ -1295,8 +1306,8 @@ func ReadVdevsInfoWithChunkMapping(args ...interface{}) (interface{}, error) {
 func ReadVdevInfo(args ...interface{}) (interface{}, error) {
 	cbArgs := args[0].(*PumiceDBServer.PmdbCbArgs)
 	cpReq := args[1].(ctlplfl.CPReq)
-	req := cpReq.Payload.(ctlplfl.GetVdevReq)
-	err := req.ValidateVdevRequest()
+	req := cpReq.Payload.(ctlplfl.GetReq)
+	err := req.ValidateRequest()
 	if err != nil {
 		log.Errorf("ReadVdevInfo: invalid request: %v", err)
 		return ctlplfl.FuncError(fmt.Errorf("Invalid Request"))
@@ -1306,9 +1317,9 @@ func ReadVdevInfo(args ...interface{}) (interface{}, error) {
 		log.Errorf("ReadVdevInfo: token validation failed: %v", err)
 		return ctlplfl.AuthError(fmt.Errorf("Invalid Token"))
 	}
-	vdevID := req.Value
-	if !req.IsID {
-		vnKey := getConfKey(vnameKey, req.Value)
+	vdevID := req.ID
+	if !isUUID(req.ID){
+		vnKey := getConfKey(vnameKey, req.ID)
 		var rqResult *storageiface.RangeReadResult
 		rqResult, err = cbArgs.Store.RangeRead(storageiface.RangeReadArgs{
 			Selector: colmfamily,
@@ -1355,7 +1366,7 @@ func ReadVdevInfo(args ...interface{}) (interface{}, error) {
 	}
 
 	claims := map[string]any{
-		"vdevID": req.Value,
+		"vdevID": req.ID,
 	}
 
 	authtoken, err := authtc.CreateToken(claims)
@@ -1363,7 +1374,7 @@ func ReadVdevInfo(args ...interface{}) (interface{}, error) {
 		log.Error("Token Creation failed with: ", err)
 		return ctlplfl.FuncError(err)
 	}
-	log.Trace("Created AuthToken ", authtoken, " for vdev ", req.Value)
+	log.Trace("Created AuthToken ", authtoken, " for vdev ", req.ID)
 
 	vdevInfo := ctlplfl.VdevCfg{
 		ID:        vdevID,
@@ -1397,7 +1408,7 @@ func ReadVdevInfo(args ...interface{}) (interface{}, error) {
 		}
 
 	}
-	log.Debugf("ReadVdevInfo: returning vdev config for %s ", req.Value)
+	log.Debugf("ReadVdevInfo: returning vdev config for %s ", req.ID)
 	return ctlplfl.EncodeResponse(vdevInfo)
 }
 

@@ -245,7 +245,7 @@ func TestCreateVdevWithFilters(t *testing.T) {
 
 			log.Infof("Created Vdev ID=%s", resp.ID)
 
-			getReq := &cpLib.GetVdevReq{Value: resp.ID, IsID: true}
+			getReq := &cpLib.GetReq{ID: resp.ID}
 
 			vdevs, err := c.GetVdevsWithChunkInfo(getReq)
 			log.Infof("GetVdevsWithChunkInfo response: count=%d err=%v", len(vdevs), err)
