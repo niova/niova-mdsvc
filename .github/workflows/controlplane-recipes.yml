@@ -12,92 +12,14 @@ jobs:
     continue-on-error: true
     steps:
     - uses: actions/checkout@v4
+    - uses: ./.github/actions/common-setup
       with:
         submodules: 'recursive'
         fetch-depth: 0
     
-    - name: apt update
-      run: sudo apt update
-
-    - name: dpkg / rpm prep
-      run: sudo -E apt-get install -y uuid-dev uuid libuuid1 libgcrypt20 openssl libssl-dev `apt-cache search librocksdb | awk '{print $1}'` uncrustify libasan5 libtsan0
-  
-    # Install golang
-    - name: Install golang 1.20.3
-      run: sudo rm -rf /usr/bin/go &&
-           sudo wget https://golang.org/dl/go1.23.0.linux-amd64.tar.gz &&
-           sudo mkdir /home/runner/work/go &&
-           sudo tar -C /home/runner/work/go -xzf  go1.23.0.linux-amd64.tar.gz &&
-           export PATH=$PATH:/home/runner/work/go/go/bin &&
-           go version
-
-    # Install Ansible
-    - name: Install Ansible
-      run:  pip3 install ansible==9.2
-
-    # Install python libraries
-    - name: Install python libraries
-      run:  pip3 install setuptools wheel func_timeout sockets psutil dpath jmespath
-
-    # Update submodules
-    - name: Update submodules
-      run: git submodule update --init --recursive
-      shell: bash
-
-    - name: build libbacktrace
-      run: cd modules/niova-pumicedb/modules/libbacktrace/ && 
-           ./configure && 
-           make && sudo make install
-
-    # Build niova-core for niova-raft
-    - name: Build niova-core
-      run: cd modules/niova-pumicedb/modules/niova-raft/modules/niova-core/ && 
-           ./prepare.sh && 
-           ./configure --enable-devel --prefix=/home/runner/work/niovad/niovad/build_dir/ && 
-           make -j 4 && 
-           make -j 4 check && 
-           make install
-
-    - name: Build niova-raft
-      run: cd modules/niova-pumicedb/modules/niova-raft/ &&
-           ./prepare.sh &&
-           ./configure --with-niova=/home/runner/work/niovad/niovad/build_dir/ --prefix=/home/runner/work/niovad/niovad/build_dir/ --enable-devel &&
-           make clean && 
-           make -j 4 && 
-           make install
-
-    - name: Build niova-pumicedb
-      run: cd modules/niova-pumicedb/ &&
-           ./prepare.sh &&
-           ./configure --enable-devel --with-niova=/home/runner/work/niovad/niovad/build_dir/ --prefix=/home/runner/work/niovad/niovad/build_dir/ &&
-           make clean && make -j 4 && make install
-    
-    - name: Build go applications using makefile
-      run: export PATH=$PATH:/home/runner/work/go/go/bin && make -e DIR=/home/runner/work/niovad/niovad/build_dir
-
-      env:
-        LD_LIBRARY_PATH: /home/runner/work/niovad/niovad/build_dir/lib
-
     - name: Copy script to run recipes
       run: cp scripts/run-recipes.sh /home/runner/work/niovad/niovad/build_dir/ &&
            cp scripts/controlplane_recipes.txt /home/runner/work/niovad/niovad/build_dir/
-
-    # Checkout holon repo
-    - name: Checkout repository
-      uses: actions/checkout@v4
-      with:
-       repository: 00pauln00/holon
-       path: ./holon
-
-    - name: Copy holon repo
-      run: cp -r ./holon /home/runner/work/niovad/niovad/build_dir/
-
-    - name: Create log directory for storing holon logs
-      run: mkdir  /home/runner/work/niovad/niovad/holon_log
-
-    - name: Create dir for cover data counters, metadata to be placed
-      run: mkdir  /home/runner/work/niovad/niovad/code_cov &&
-           export GOCOVERDIR=/work/niovad/niovad/code_cov
 
     - name: run recipes for controlplane application
       run: export GOCOVERDIR=/home/runner/work/niovad/niovad/code_cov && 
@@ -110,22 +32,8 @@ jobs:
                              '/home/runner/work/go/go/bin'
                              5
 
-    - name: Run go covdata tool to generate code cover report
-      run: cd /home/runner/work/niovad/niovad/code_cov &&
-           export PATH=$PATH:/home/runner/work/go/go/bin &&
-           echo "***** Code Coverage Report *****" &&
-           go tool covdata percent -i=./ &&
-           echo "***** End *****"
+    - uses: ./.github/actions/teardown-success
+      if: ${{ success() }}
 
-    - name: Prepare artifact filename
-      id: prepare_artifact_filename
-      run: |
-        echo ::set-output name=ARTIFACT_NAME::test-recipe-report_${{ github.event.pull_request.head.sha }}_${{ github.run_attempt }}
-      if: failure()
-
-    - name: Archive the test results
-      uses: actions/upload-artifact@v4
-      with:
-         name: ${{ steps.prepare_artifact_filename.outputs.ARTIFACT_NAME }}
-         path: /home/runner/work/niovad/niovad/holon_log
-      if: failure()
+    - uses: ./.github/actions/teardown-failure
+      if: failure() # run teardown regardless of failure
