@@ -32,10 +32,6 @@ runs:
       run:  pip3 install setuptools wheel func_timeout sockets psutil dpath jmespath
       shell: bash 
 
-    - name: Update submodules
-      run: git submodule update --init --recursive
-      shell: bash
-
     - name: build libbacktrace
       run: cd modules/niova-pumicedb/modules/libbacktrace/ && 
            ./configure && 

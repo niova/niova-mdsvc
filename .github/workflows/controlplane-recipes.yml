@@ -13,9 +13,6 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - uses: ./.github/actions/common-setup
-      with:
-        submodules: 'recursive'
-        fetch-depth: 0
     
     - name: Copy script to run recipes
       run: cp scripts/run-recipes.sh /home/runner/work/niovad/niovad/build_dir/ &&
