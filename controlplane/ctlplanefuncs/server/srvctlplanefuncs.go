@@ -3,11 +3,11 @@ package srvctlplanefuncs
 import (
 	"C"
 	"fmt"
+	"github.com/google/uuid"
 	"path"
 	"strconv"
 	"strings"
 	"time"
-	"github.com/google/uuid"
 
 	"github.com/tidwall/btree"
 
@@ -1318,7 +1318,7 @@ func ReadVdevInfo(args ...interface{}) (interface{}, error) {
 		return ctlplfl.AuthError(fmt.Errorf("Invalid Token"))
 	}
 	vdevID := req.ID
-	if !isUUID(req.ID){
+	if !isUUID(req.ID) {
 		vnKey := getConfKey(vnameKey, req.ID)
 		var rqResult *storageiface.RangeReadResult
 		rqResult, err = cbArgs.Store.RangeRead(storageiface.RangeReadArgs{

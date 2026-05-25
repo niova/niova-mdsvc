@@ -8077,7 +8077,7 @@ func (m model) doVdevSearch(query string) VdevSearchMsg {
 
 	// Fetch chunk mapping for the specific vdev (no admin role required).
 	vdevs, err := m.cpClient.GetVdevsWithChunkInfo(&ctlplfl.GetReq{
-		ID:  matchedID,
+		ID:     matchedID,
 		GetAll: false,
 	})
 	if err != nil {

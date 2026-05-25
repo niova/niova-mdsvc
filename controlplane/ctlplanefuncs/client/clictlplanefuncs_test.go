@@ -628,7 +628,7 @@ func TestVdevNisdChunk(t *testing.T) {
 
 	// create nisd
 	mockNisd := cpLib.Nisd{
-		PeerPort: 8001,
+		PeerPort: 8101,
 		ID:       "1d67328a-df29-11f0-9e36-d7e439f8e740",
 		FailureDomain: []string{
 			"17ab4598-df29-11f0-afa1-2f5633c6b6c9",
