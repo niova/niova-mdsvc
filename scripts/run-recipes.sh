@@ -23,6 +23,8 @@ export NIOVA_NISD_SECRET="NISD-secret"
 export NIOVA_NISD_DO_TOKEN_VALIDATION=1
 
 while IFS= read -r line; do
+   # skip commented lines
+   [[ "$line" =~ ^[[:space:]]*# ]] && continue
    recipe_list+=("$line")
 done <$RECIPE_FILE
 for recipe in "${recipe_list[@]}"
