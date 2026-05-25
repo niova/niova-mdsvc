@@ -3,8 +3,6 @@ description: Sets up environment and dependencies for Niova-MDSVC CI workflows.
 runs:
     using: "composite"
     steps:
-    - name: Checkout
-      uses: actions/checkout@v4
 
     - name: apt update
       run: sudo apt update
