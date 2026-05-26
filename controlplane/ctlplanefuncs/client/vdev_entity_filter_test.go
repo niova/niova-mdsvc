@@ -450,9 +450,8 @@ func TestColorHVFilteredVdevChunkDistribution(t *testing.T) {
 	for _, vdevID := range createdVdevs {
 
 		vdevs, err := c.GetVdevsWithChunkInfo(
-			&cpLib.GetVdevReq{
-				Value: vdevID,
-				IsID:  true,
+			&cpLib.GetReq{
+				ID: vdevID,
 			},
 		)
 
