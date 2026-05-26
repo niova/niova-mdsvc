@@ -13,7 +13,7 @@ Name:           %{pkg_name}
 Version:        %{version}
 Release:        1%{?dist}
 Summary:        Niova Metadata Service Control Plane
-License:        Apache-2.0
+License:        TBD
 URL:            https://github.com/00pauln00/niova-mdsvc
 ExclusiveArch:  aarch64
 
