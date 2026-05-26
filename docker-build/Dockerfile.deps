@@ -55,10 +55,4 @@ RUN git clone https://github.com/ianlancetaylor/libbacktrace.git && \
     ldconfig && \
     cd .. && rm -rf libbacktrace
 
-# ── Step 5: Install Serf (Gossip Agent) ───────────────────────────────────────
-RUN curl -LO https://releases.hashicorp.com/serf/0.10.1/serf_0.10.1_linux_$(if [ "$(uname -m)" = "x86_64" ]; then echo "amd64"; else echo "arm64"; fi).zip && \
-    unzip serf_0.10.1_linux_*.zip && \
-    mv serf /usr/local/bin/ && \
-    rm serf_0.10.1_linux_*.zip
-
 WORKDIR /
