@@ -1,36 +1,30 @@
-Here is the updated guide aligned with the **YAML-based config** and the new scripts.
-
----
-
-# ⚠️ Hokkaido Test Cluster Deployment Guide
+# ⚠️ Niova CTLPlane Deployment Guide
 
 > **WARNING**
-> These scripts are **specific to the Hokkaido Test Cluster**.
-> Do **not** reuse them in other environments without validation.
+> These scripts are designed for test environments.
+> Validate all paths and configurations before running in production.
 
 ---
 
 ## 🧩 Prerequisites
 
-1. The **same NFS volume** must be mounted on **I/O nodes 4–8**.
-2. The **local filesystem `/var`** must be available on **I/O nodes 4–8**.
-3. Passwordless SSH must be configured between nodes (required for `pdsh`).
+1. **Passwordless SSH** must be configured between nodes (required for `multinode` deployment).
+2. **Serf** and **jq** must be installed on all nodes if using gossip-based discovery.
+3. The **NFS volume** (if used) must be mounted consistently across all participating nodes.
 
 ---
 
 ## 🗂️ Configuration
 
-All deployment parameters are defined in a single YAML file.
+Discovery and deployment parameters are defined in `config.yaml`.
 
-### `config.yaml`
+### `config.yaml` Structure
 
 ```yaml
 nodes:
-  - <io-04.ip>
-  - <io-05.ip>
-  - <io-06.ip>
-  - <io-07.ip>
-  - <io-08.ip>
+  - 192.168.1.10
+  - 192.168.1.11
+  - 192.168.1.12
 
 gossip:
   port_range:
@@ -39,96 +33,87 @@ gossip:
 
 ports:
   peer: 10000
-  client: 10005
+  client: 10105
 
-base_dir: /work/ctlplane
+output_dir: /var/niova/cp
+bin_dir: /usr/local/bin/niova
+lib_dir: /usr/local/lib
 ```
 
-This file controls:
-
-* Cluster membership
-* Gossip port range
-* Peer and client ports
-* Base directory for configs, logs, and databases
-
-No hardcoded IPs or paths remain in the scripts.
+* **nodes**: List of physical node IPs or hostnames.
+* **gossip.port_range**: Range of ports for Serf gossip agents.
+* **ports**: Base ports for Raft peering and client communication.
+* **output_dir**: Base directory for generated configs, logs, and databases.
+* **bin_dir**: Location of Niova binaries (`CTLPlane_pmdbServer`, `CTLPlane_proxy`).
+* **lib_dir**: Location of required shared libraries.
 
 ---
 
-## 🚀 Deployment Steps
+## 🚀 Deployment
 
-1. Copy all required files to the Niova installation directory:
+The `deploy.sh` script automates the generation of Raft configurations and process management.
 
-   ```bash
-   cp ./* <NIOVA_DIR_PATH>
-   ```
-
-2. Run deployment using the YAML config:
-
-   ```bash
-   sudo ./deploy.sh config.yaml
-   ```
-
-This will:
-
-* Generate RAFT, peer, and gossip configs
-* Populate `${base_dir}/configs`
-* Start CTLPlane processes on all nodes listed in `nodes`
-
----
-
-## 💡 Notes
-
-* The **CTL interface is node-local**.
-* **inotify does not work over NFS**, so CTL queries must be run on the same node where the process executes.
-
----
-
-## 🔍 Verification
-
-Process verification using node list from `config.yaml`:
+### Usage
 
 ```bash
-pdsh -w 192.168.96.8[4-8] 'ps -ef | grep CTLPlane'
+sudo ./deploy.sh [-m init|restart] [-t localhost|multinode] <config.yaml>
 ```
 
----
+### Options
 
-## 🛑 Stopping CTLPlane
+* **`-m <mode>`**:
+  - `init`: Clean install. Deletes existing configs/DBs and generates new UUIDs.
+  - `restart`: Preserves existing data. Re-applies library paths and restarts services.
+* **`-t <type>`**:
+  - `localhost`: Runs all processes on the current machine (useful for dev).
+  - `multinode`: Distributes processes across nodes listed in `config.yaml`. Requires SSH access and shared `output_dir` (NFS).
+
+### Example
 
 ```bash
-pdsh -w 192.168.96.8[4-8] 'sudo killall CTLPlane_pmdbServer'
-pdsh -w 192.168.96.8[4-8] 'sudo killall CTLPlane_proxy'
+# Initial cluster setup on multiple nodes
+sudo ./deploy.sh -m init -t multinode config.yaml
 ```
 
 ---
 
-## 🛑 Stopping cp-monitor
+## 📡 Serf Gossip Interface
+
+The `serf_gossip_interface.sh` script is used to discover the active Control Plane proxy via the gossip network.
+
+### Usage
 
 ```bash
-pdsh -w 192.168.96.8[4-8] 'sudo killall cp-monitor' 
+./serf_gossip_interface.sh <gossip_nodes_path> <gossip_key>
+```
+
+* **gossip_nodes_path**: Path to the generated `gossipNodes` file (found in `${output_dir}/config/`).
+* **gossip_key**: The Serf encryption key (must match the one used in `deploy.sh`).
+
+The script outputs the `PROXY_IP` and `PROXY_HTTP_PORT` of a healthy proxy node.
+
+---
+
+## 🛑 Management Commands
+
+If `pdsh` is installed, you can manage the cluster across all nodes:
+
+### Verification
+```bash
+pdsh -w <node_list> 'ps -ef | grep CTLPlane'
+```
+
+### Stopping Services
+```bash
+pdsh -w <node_list> 'sudo killall CTLPlane_pmdbServer CTLPlane_proxy'
 ```
 
 ---
 
-## 🗄️ Logs and Configuration Location
+## 🗄️ Artifact Locations
 
-All generated artifacts are stored under:
+All generated files are stored in the `output_dir` specified in `config.yaml`:
 
-```
-<base_dir>   # defined in config.yaml
-```
-
-For Hokkaido:
-
-```
-/work/ctlplane
-```
-
-Includes:
-
-* `configs/` — RAFT, peer, gossip configs
-* `logs/` — server and proxy logs
-* `db/` — RAFT databases
-
----
+* `config/`: RAFT, peer, and gossip configuration files.
+* `log/`: Process-specific logs and stdout redirects.
+* `db/`: RAFT state databases (`.raftdb`).
