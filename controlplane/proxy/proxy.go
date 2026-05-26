@@ -542,7 +542,7 @@ func (handler *proxyHandler) GetFuncHandlerCB(name string, body []byte, response
 	defer func() {
 		<-limiter
 	}()
-	log.Infof("ReadFuncHandlerCB called with name: ", name, string(body))
+	log.Info("ReadFuncHandlerCB called with name: ", name, string(body))
 	encType := GetEncodingType(reader)
 	var cpReq *cpLib.CPReq
 	var err error
