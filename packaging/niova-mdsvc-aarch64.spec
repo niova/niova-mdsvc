@@ -14,7 +14,7 @@ Version:        %{version}
 Release:        1%{?dist}
 Summary:        Niova Metadata Service Control Plane
 License:        TBD
-URL:            https://github.com/00pauln00/niova-mdsvc
+URL:            https://github.com/niova/niova-mdsvc
 ExclusiveArch:  aarch64
 
 # ---------------------------------------------------------------------------

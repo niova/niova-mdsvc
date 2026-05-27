@@ -7,7 +7,7 @@ Version:        %{version}
 Release:        1%{?dist}
 Summary:        Niova core C libraries (libbacktrace + niova-core)
 License:        TBD
-URL:            https://github.com/00pauln00/niova-mdsvc
+URL:            https://github.com/niova/niova-core
 ExclusiveArch:  aarch64
 
 %description
