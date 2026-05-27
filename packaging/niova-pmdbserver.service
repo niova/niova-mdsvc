@@ -1,0 +1,31 @@
+[Unit]
+Description=Niova Control Plane PMDB Server
+Documentation=https://github.com/00pauln00/niova-mdsvc
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=niova
+Group=niova
+EnvironmentFile=/etc/niova/niova.env
+
+ExecStart=/usr/local/bin/niova/CTLPlane_pmdbServer \
+    -r ${RAFT_UUID} \
+    -u ${PEER_UUID} \
+    -g /var/lib/niova/configs/gossipNodes \
+    -l /var/log/niova/pmdb_server.log \
+    -ll Info \
+    -p 1
+
+Restart=on-failure
+RestartSec=5s
+
+# Give the pmdb server time to flush state on stop
+TimeoutStopSec=30s
+
+StandardOutput=append:/var/log/niova/pmdb_server_stdout.log
+StandardError=append:/var/log/niova/pmdb_server_stderr.log
+
+[Install]
+WantedBy=multi-user.target

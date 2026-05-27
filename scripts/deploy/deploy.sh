@@ -1,51 +1,312 @@
 #!/bin/bash
-set -e
+# deploy.sh - CTLPlane CP deployment script (FINAL FIXED)
 
-# Usage: sudo ./deploy.sh config.yaml
+set -euo pipefail
 
-CFG_FILE="$(readlink -f "$1")"
-[ -f "$CFG_FILE" ] || { echo "Config file not found"; exit 1; }
+# ---- Defaults ----
+MODE="restart"
+TYPE="localhost"
 
-# ---------------- YAML PARSING ----------------
+log() { echo "[deploy][$(date '+%Y-%m-%d %H:%M:%S')] $*"; }
 
-# nodes
-mapfile -t IPS < <(awk '
+usage() {
+    echo "Usage: $0 [-m init|restart] [-t localhost|multinode] <config.yaml>"
+    exit 1
+}
+
+# ---- Parse args ----
+while getopts ":m:t:" opt; do
+    case $opt in
+        m) MODE="$OPTARG" ;;
+        t) TYPE="$OPTARG" ;;
+        :) echo "Option -${OPTARG} requires an argument."; usage ;;
+        *) usage ;;
+    esac
+done
+shift $((OPTIND - 1))
+
+CFG_FILE="${1:-}"
+[ -n "$CFG_FILE" ] || usage
+CFG_FILE="$(readlink -f "$CFG_FILE")"
+[ -f "$CFG_FILE" ] || { echo "Config not found: $CFG_FILE"; exit 1; }
+
+case "$MODE" in init|restart) ;; *) usage ;; esac
+case "$TYPE" in localhost|multinode) ;; *) usage ;; esac
+
+log "mode=$MODE type=$TYPE config=$CFG_FILE"
+
+# ---- Parse config ----
+mapfile -t NODES < <(awk '
     $1=="nodes:" {flag=1; next}
-    flag && $1=="-" {print $2; next}
+    flag && $1=="-" {print $2}
     flag && $1!~"-" {exit}
 ' "$CFG_FILE")
 
-# gossip ports
 START_GOSSIP_PORT=$(awk '/start:/ {print $2}' "$CFG_FILE")
 END_GOSSIP_PORT=$(awk '/end:/ {print $2}' "$CFG_FILE")
-
-# peer / client ports
 PEER_PORT=$(awk '/peer:/ {print $2}' "$CFG_FILE")
 CLIENT_PORT=$(awk '/client:/ {print $2}' "$CFG_FILE")
 
-# base_dir
-BASE_DIR=$(awk -F: '$1=="base_dir" {gsub(/^[ \t]+|[ \t]+$/, "", $2); print $2}' "$CFG_FILE")
+OUTPUT_DIR=$(awk '/output_dir:/ {print $2}' "$CFG_FILE")
+LIB_DIR=$(awk '/lib_dir:/ {print $2}' "$CFG_FILE")
+BIN_DIR=$(awk '/bin_dir:/ {print $2}' "$CFG_FILE")
 
-[ "${#IPS[@]}" -gt 0 ] || { echo "No nodes found"; exit 1; }
-[ -n "$BASE_DIR" ] || { echo "base_dir missing"; exit 1; }
+# ---- Validate ----
+[ "${#NODES[@]}" -gt 0 ] || exit 1
+[ -n "$PEER_PORT" ] || exit 1
+[ -n "$CLIENT_PORT" ] || exit 1
+[ -n "$OUTPUT_DIR" ] || exit 1
+[ -n "$LIB_DIR" ] || exit 1
+[ -n "$BIN_DIR" ] || exit 1
 
-PDSH_HOSTS=$(IFS=','; echo "${IPS[*]}")
+# ---- Paths ----
+RAFT_CONFIG_DIR="${OUTPUT_DIR}/config"
+LOG_DIR="${OUTPUT_DIR}/log"
+DB_DIR="${OUTPUT_DIR}/db"
 
-# ---------------- FRESH SETUP ----------------
+mkdir -p "$RAFT_CONFIG_DIR" "$LOG_DIR" "$DB_DIR" "${OUTPUT_DIR}/ctl-interface"
 
-echo "WARNING: A fresh run will DELETE the existing database at ${BASE_DIR}/db!"
-read -p "Do you want to continue with a fresh setup? [y/N]: " FRESH
+# ---- Env ----
+export LD_LIBRARY_PATH="${LIB_DIR}:/usr/lib64:/usr/lib:${LD_LIBRARY_PATH:-}"
+export NIOVA_INOTIFY_BASE_PATH="${OUTPUT_DIR}/ctl-interface"
+export NIOVA_LOCAL_CTL_SVC_DIR="${RAFT_CONFIG_DIR}"
+export NIOVA_APPLY_HANDLER_VERSION=0
+export USER_ENCRYPTION_KEY="81gavMyXh9dEMT7kM7gR+gS79ovzPwyjWmV1VA/TUII"
 
-if [[ "$FRESH" =~ ^[Yy]$ ]]; then
-    rm -rf "${BASE_DIR}"
-    mkdir -p "${BASE_DIR}/"{db,ctl,logs}
-    cp "$CFG_FILE" "${BASE_DIR}/"
+# ============================================================
+# FUNCTION: update STORE paths (restart mode)
+# ============================================================
+update_store_paths() {
+    local dir="$1"
+    local newpath="$2"
 
-    rm -rf configs
-    ./gen_raft_cfgs.sh "$CFG_FILE"
+    # remove trailing slash to avoid //
+    newpath="${newpath%/}"
 
-    cp -r configs "${BASE_DIR}/"
-    cp -r lib libexec start_pumice.sh "${BASE_DIR}/"
+    log "Updating STORE paths in ${dir} to ${newpath}"
+
+    for file in "${dir}"/*.peer; do
+        [ -e "$file" ] || continue
+
+        uuid="$(basename "$file" .peer)"
+        tmp="$(mktemp)"
+
+        awk -v p="$newpath" -v u="$uuid" '
+        /^STORE/ {
+            print "STORE        " p "/" u ".raftdb"
+            next
+        }
+        { print }
+        ' "$file" > "$tmp"
+
+        mv "$tmp" "$file"
+        chmod 0666 "$file"
+
+        log "updated $file"
+    done
+}
+
+# ============================================================
+# INIT
+# ============================================================
+if [ "$MODE" = "init" ]; then
+    log "Initializing..."
+
+    rm -rf "$RAFT_CONFIG_DIR" "$LOG_DIR" "$DB_DIR" "${OUTPUT_DIR}/ctl-interface"
+    mkdir -p "$RAFT_CONFIG_DIR" "$LOG_DIR" "$DB_DIR" "${OUTPUT_DIR}/ctl-interface"
+
+    RAFT_UUID=$(uuidgen)
+    RAFT_FILE="${RAFT_CONFIG_DIR}/${RAFT_UUID}.raft"
+    echo "RAFT $RAFT_UUID" > "$RAFT_FILE"
+
+    idx=0
+    for node in "${NODES[@]}"; do
+        PEER_UUID=$(uuidgen)
+        echo "PEER ${PEER_UUID}" >> "$RAFT_FILE"
+
+        if [ "$TYPE" = "localhost" ]; then
+            IP="127.0.0.1"
+            PPORT=$((PEER_PORT + idx))
+            CPORT=$((CLIENT_PORT + idx))
+        else
+            IP="$node"
+            PPORT="$PEER_PORT"
+            CPORT="$CLIENT_PORT"
+        fi
+
+        cat > "${RAFT_CONFIG_DIR}/${PEER_UUID}.peer" <<EOF
+RAFT         ${RAFT_UUID}
+IPADDR       ${IP}
+PORT         ${PPORT}
+CLIENT_PORT  ${CPORT}
+STORE        ${DB_DIR}/${PEER_UUID}.raftdb
+EOF
+
+        idx=$((idx + 1))
+    done
+
+    echo "${NODES[*]}" > "${RAFT_CONFIG_DIR}/gossipNodes"
+    echo "${START_GOSSIP_PORT} ${END_GOSSIP_PORT}" >> "${RAFT_CONFIG_DIR}/gossipNodes"
 fi
 
-pdsh -w "${PDSH_HOSTS}" "cd ${BASE_DIR} && AUTH_ENABLED=${AUTH_ENABLED:-true} ${BASE_DIR}/start_pumice.sh" "$CFG_FILE"
+RAFT_FILE=$(ls "${RAFT_CONFIG_DIR}"/*.raft 2>/dev/null | head -n1)
+[ -n "$RAFT_FILE" ] || { echo "No .raft file found. Run with -m init"; exit 1; }
+RAFT_UUID=$(basename "$RAFT_FILE" .raft)
+
+log "RAFT_UUID=$RAFT_UUID"
+
+# ============================================================
+# RESTART MODE: fix STORE paths
+# ============================================================
+if [ "$MODE" = "restart" ]; then
+    update_store_paths "${RAFT_CONFIG_DIR}" "${DB_DIR}"
+fi
+
+
+# ============================================================
+# LOCAL MODE
+# ============================================================
+if [ "$TYPE" = "localhost" ]; then
+    for peer in "${RAFT_CONFIG_DIR}"/*.peer; do
+        uuid=$(basename "$peer" .peer)
+
+        "${BIN_DIR}/CTLPlane_pmdbServer" -r "$RAFT_UUID" -u "$uuid" \
+            -g "${RAFT_CONFIG_DIR}/gossipNodes" \
+            -l "${LOG_DIR}/pmdb_server_${uuid}.log" -ll Trace > "${LOG_DIR}/pmdb_server_${uuid}_stdout.log" 2>&1 &
+
+    done
+
+    sleep 5
+
+    PROXY_UUID=$(uuidgen)
+    "${BIN_DIR}/CTLPlane_proxy" -r "$RAFT_UUID" \
+        -u "$PROXY_UUID" \
+        -pa "${RAFT_CONFIG_DIR}/gossipNodes" \
+        -n "Node" \
+        -l "${LOG_DIR}/proxy_${PROXY_UUID}.log" -ll Trace > "${LOG_DIR}/proxy_${PROXY_UUID}_stdout.log" 2>&1 &
+fi
+
+# ============================================================
+# MULTINODE MODE (NFS-BASED)
+# ============================================================
+if [ "$TYPE" = "multinode" ]; then
+
+    log "Preparing shared deployment script..."
+
+    # Generate the shared remote start script on NFS.
+    # NOTE: The heredoc delimiter is QUOTED ('REMOTE_EOF') so that shell
+    # variables inside the remote script are NOT expanded at generation time.
+    # The handful of deploy-time values we need are injected via sed afterwards.
+    REMOTE_SCRIPT="${OUTPUT_DIR}/remote_start.sh"
+    cat > "$REMOTE_SCRIPT" <<'REMOTE_EOF'
+#!/usr/bin/bash
+set -euo pipefail
+
+log_remote() { echo "[remote][$(date '+%Y-%m-%d %H:%M:%S')] $*"; }
+
+# ---- Environment (placeholders replaced by deploy.sh) ----
+export LD_LIBRARY_PATH="__LIB_DIR__:/usr/lib64:/usr/lib:${LD_LIBRARY_PATH:-}"
+export NIOVA_INOTIFY_BASE_PATH="__OUTPUT_DIR__/ctl-interface"
+export NIOVA_LOCAL_CTL_SVC_DIR="__RAFT_CONFIG_DIR__"
+export NIOVA_APPLY_HANDLER_VERSION=0
+export USER_ENCRYPTION_KEY="81gavMyXh9dEMT7kM7gR+gS79ovzPwyjWmV1VA/TUII"
+
+RAFT_CONFIG_DIR="__RAFT_CONFIG_DIR__"
+BIN_DIR="__BIN_DIR__"
+LOG_DIR="__LOG_DIR__"
+DB_DIR="__DB_DIR__"
+RAFT_UUID="__RAFT_UUID__"
+
+# ---- Detect local IP addresses (works on both Ubuntu and Rocky) ----
+log_remote "Detecting identity..."
+if command -v hostname &>/dev/null && hostname -I &>/dev/null; then
+    IPS=$(hostname -I | tr ' ' '\n' | grep -v '^$')
+else
+    # Fallback: parse 'ip addr' output (works on minimal Rocky installs)
+    IPS=$(ip -4 addr show scope global | awk '/inet / {split($2,a,"/"); print a[1]}')
+fi
+
+# ---- Match local IP to a .peer file ----
+PEER_FILE=""
+for ip in $IPS; do
+    match=$(grep -rl "IPADDR[[:space:]]\+${ip}$" "${RAFT_CONFIG_DIR}"/*.peer 2>/dev/null | head -n1) || true
+    if [ -n "$match" ]; then
+        PEER_FILE="$match"
+        break
+    fi
+done
+
+if [ -z "$PEER_FILE" ]; then
+    log_remote "ERROR: No matching peer found for IPs: $IPS"
+    exit 1
+fi
+
+PEER_UUID=$(basename "$PEER_FILE" .peer)
+log_remote "Found identity: $PEER_UUID (IP matched)"
+
+log_remote "Starting pmdbServer..."
+nohup "${BIN_DIR}/CTLPlane_pmdbServer" -r "${RAFT_UUID}" -u "$PEER_UUID" \
+    -g "${RAFT_CONFIG_DIR}/gossipNodes" \
+    -l "${LOG_DIR}/pmdb_server_${PEER_UUID}.log" -ll Trace \
+    > "${LOG_DIR}/pmdb_server_${PEER_UUID}_stdout.log" 2>&1 &
+
+sleep 2
+
+log_remote "Starting proxy..."
+PROXY_UUID=$(uuidgen)
+nohup "${BIN_DIR}/CTLPlane_proxy" -r "${RAFT_UUID}" -u "$PROXY_UUID" \
+    -pa "${RAFT_CONFIG_DIR}/gossipNodes" \
+    -n "Node" \
+    -l "${LOG_DIR}/proxy_${PROXY_UUID}.log" -ll Trace \
+    > "${LOG_DIR}/proxy_${PROXY_UUID}_stdout.log" 2>&1 &
+
+log_remote "Startup sequence complete."
+REMOTE_EOF
+
+    # Inject deploy-time values into the remote script
+    sed -i \
+        -e "s|__LIB_DIR__|${LIB_DIR}|g" \
+        -e "s|__OUTPUT_DIR__|${OUTPUT_DIR}|g" \
+        -e "s|__RAFT_CONFIG_DIR__|${RAFT_CONFIG_DIR}|g" \
+        -e "s|__BIN_DIR__|${BIN_DIR}|g" \
+        -e "s|__LOG_DIR__|${LOG_DIR}|g" \
+        -e "s|__DB_DIR__|${DB_DIR}|g" \
+        -e "s|__RAFT_UUID__|${RAFT_UUID}|g" \
+        "$REMOTE_SCRIPT"
+    chmod +x "$REMOTE_SCRIPT"
+
+    # ---- Detect available parallel SSH tool ----
+    # Ubuntu/Debian typically have pdsh; Rocky/RHEL have pssh (from python3-pssh).
+    # Fall back to a plain SSH loop if neither is available.
+    SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=no"
+
+    if command -v pdsh &>/dev/null; then
+        log "Starting cluster via pdsh..."
+        export PDSH_SSH_ARGS="$SSH_OPTS"
+        PDSH_HOST_LIST=$(IFS=','; echo "${NODES[*]}")
+        pdsh -t 5 -R ssh -w "$PDSH_HOST_LIST" "$REMOTE_SCRIPT"
+
+    elif command -v pssh &>/dev/null; then
+        log "Starting cluster via pssh..."
+        HOST_FILE=$(mktemp)
+        printf '%s\n' "${NODES[@]}" > "$HOST_FILE"
+        pssh -i -t 30 -O "$SSH_OPTS" -h "$HOST_FILE" "$REMOTE_SCRIPT"
+        rm -f "$HOST_FILE"
+
+    elif command -v clush &>/dev/null; then
+        log "Starting cluster via clush..."
+        CLUSH_HOST_LIST=$(IFS=','; echo "${NODES[*]}")
+        clush -w "$CLUSH_HOST_LIST" -b "$REMOTE_SCRIPT"
+
+    else
+        log "No parallel SSH tool found (pdsh/pssh/clush). Using sequential SSH..."
+        for node in "${NODES[@]}"; do
+            log "  -> $node"
+            ssh $SSH_OPTS "$node" "$REMOTE_SCRIPT" &
+        done
+        wait
+    fi
+
+fi
+
+log "Deployment complete"

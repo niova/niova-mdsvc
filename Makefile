@@ -17,28 +17,28 @@ compile: vet
 	go mod tidy
 
 pmdbserver:
-	go build -o libexec/CTLPlane_pmdbServer ./controlplane/pmdbServer/
+	go build -buildvcs=false -o libexec/CTLPlane_pmdbServer ./controlplane/pmdbServer/
 
 proxyserver:
-	go build -o libexec/CTLPlane_proxy ./controlplane/proxy/
+	go build -buildvcs=false -o libexec/CTLPlane_proxy ./controlplane/proxy/
 
 ncpcclient:
-	go build -o libexec/ncpc ./controlplane/ncpc/
+	go build -buildvcs=false -o libexec/ncpc ./controlplane/ncpc/
 
 configapp:
-	go build -o libexec/cfgApp ./controlplane/configApplication/
+	go build -buildvcs=false -o libexec/cfgApp ./controlplane/configApplication/
 
 testapp:
-	go build -o libexec/testApp ./controlplane/testApplication/
+	go build -buildvcs=false -o libexec/testApp ./controlplane/testApplication/
 
 niova-ctl:
-	go build -o libexec/niova-ctl ./controlplane/niova-ctl/
+	go build -buildvcs=false -o libexec/niova-ctl ./controlplane/niova-ctl/
 
 monitor: 
-	go build -o libexec/cp-monitor ./controlplane/monitor/
+	go build -buildvcs=false -o libexec/cp-monitor ./controlplane/monitor/
 
 ccManager: 
-	go build -o libexec/cc-manager ./controlplane/containerConfigManager/
+	go build -buildvcs=false -o libexec/cc-manager ./controlplane/containerConfigManager/
 
 install:
 	cp libexec/CTLPlane_pmdbServer $(DIR)/libexec/niova/CTLPlane_pmdbServer
@@ -77,3 +77,61 @@ help:
 .PHONY: install_all install_only compile pmdbserver proxyserver ncpcclient \
         configapp testapp niova-ctl monitor ccManager install clean \
         fmt vet lint
+
+# ---------------------------------------------------------------------------
+# RPM packaging targets — build-in-place mode
+#
+# rpmbuild compiles directly inside this repo. No source tarball is needed.
+# The build machine must have git and repo access (for submodule init).
+#
+# Usage:
+#   make rpm-x86_64  VERSION=1.0.0
+#   make rpm-aarch64 VERSION=1.0.0
+#
+# Output RPMs are written to rpmbuild/RPMS/<arch>/
+# ---------------------------------------------------------------------------
+VERSION ?= 1.0.0
+
+# ---------------------------------------------------------------------------
+# niova-core RPM — must be built and installed before niova-mdsvc RPM
+# ---------------------------------------------------------------------------
+rpm-core-x86_64:
+	mkdir -p rpmbuild/{BUILD,BUILDROOT,RPMS,SOURCES,SPECS,SRPMS}
+	rpmbuild -ba packaging/niova-core-x86_64.spec \
+	    --build-in-place \
+	    --define "_topdir $(CURDIR)/rpmbuild" \
+	    --define "_builddir $(CURDIR)" \
+	    --define "version $(VERSION)"
+	@echo "RPM built: rpmbuild/RPMS/x86_64/ (niova-core)"
+
+rpm-core-aarch64:
+	mkdir -p rpmbuild/{BUILD,BUILDROOT,RPMS,SOURCES,SPECS,SRPMS}
+	rpmbuild -ba packaging/niova-core-aarch64.spec \
+	    --build-in-place \
+	    --define "_topdir $(CURDIR)/rpmbuild" \
+	    --define "_builddir $(CURDIR)" \
+	    --define "version $(VERSION)"
+	@echo "RPM built: rpmbuild/RPMS/aarch64/ (niova-core)"
+
+# ---------------------------------------------------------------------------
+# niova-mdsvc RPM — requires niova-core to be installed on the build host
+# ---------------------------------------------------------------------------
+rpm-x86_64:
+	mkdir -p rpmbuild/{BUILD,BUILDROOT,RPMS,SOURCES,SPECS,SRPMS}
+	rpmbuild -ba packaging/niova-mdsvc-x86_64.spec \
+	    --build-in-place \
+	    --define "_topdir $(CURDIR)/rpmbuild" \
+	    --define "_builddir $(CURDIR)" \
+	    --define "niova_core $(shell if [ -d $(CURDIR)/niova-core-build ]; then echo $(CURDIR)/niova-core-build; else echo /usr/local; fi)" \
+	    --define "version $(VERSION)"
+	@echo "RPM built: rpmbuild/RPMS/x86_64/ (niova-mdsvc)"
+
+rpm-aarch64:
+	mkdir -p rpmbuild/{BUILD,BUILDROOT,RPMS,SOURCES,SPECS,SRPMS}
+	rpmbuild -ba packaging/niova-mdsvc-aarch64.spec \
+	    --build-in-place \
+	    --define "_topdir $(CURDIR)/rpmbuild" \
+	    --define "_builddir $(CURDIR)" \
+	    --define "niova_core $(shell if [ -d $(CURDIR)/niova-core-build ]; then echo $(CURDIR)/niova-core-build; else echo /usr/local; fi)" \
+	    --define "version $(VERSION)"
+	@echo "RPM built: rpmbuild/RPMS/aarch64/ (niova-mdsvc)"

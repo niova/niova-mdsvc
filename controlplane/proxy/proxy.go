@@ -556,7 +556,6 @@ func (handler *proxyHandler) GetFuncHandlerCB(name string, body []byte, response
 		log.Error("RHCB:empty body")
 		return writeErrorCPResp(encType, response, fmt.Errorf("empty body"))
 	}
-
 	r := &funclib.FuncReq{Name: name, Args: *cpReq}
 	reqArgs := &pmdbClient.PmdbReq{
 		Request:  encode(r),
@@ -566,7 +565,7 @@ func (handler *proxyHandler) GetFuncHandlerCB(name string, body []byte, response
 	}
 	err = handler.pmdbClientObj.Get(reqArgs)
 	if err != nil {
-		log.Error("Error in GetEncoded and Response: ", err)
+		log.Error("RHCB:Error in GetEncoded and Response: ", err)
 		return writeErrorCPResp(encType, response, err)
 	}
 	err = EncodeResponse(encType, name, reqArgs.Reply)
@@ -574,6 +573,7 @@ func (handler *proxyHandler) GetFuncHandlerCB(name string, body []byte, response
 		log.Error("RHCB:failed to encode response: ", err)
 		return writeErrorCPResp(encType, response, err)
 	}
+	log.Tracef("RHCB: request: %s, response: %s", string(encode(r)), string(*reqArgs.Reply))
 	return nil
 }
 
@@ -791,7 +791,7 @@ func main() {
 	log.Info("Starting serf agent handler")
 	err = proxyObj.startSerfAgent()
 	if err != nil {
-		log.Error("Error while starting Serf Agent")
+		log.Error("Unable to start serf agent please provide larger port range")
 	}
 
 	//Get PMDB server config data
