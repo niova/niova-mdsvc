@@ -43,6 +43,8 @@ const (
 	PUT_HYPERVISOR      = "PutHypervisor"
 	PUT_PARTITION       = "PutPartition"
 	GET_PARTITION       = "GetPartition"
+	PUT_PFS             = "PutPFS"
+	GET_PFS             = "GetPFS"
 	GET_VDEV_INFO       = "get_vdev_info" // new
 	GET_ALL_VDEV        = "get_all_vdev"
 	GET_CHUNK_NISD      = "get_chunk_nisd"
@@ -241,6 +243,14 @@ type NisdVdevAlloc struct {
 	Ptr           *Nisd
 }
 
+// DeviceAlloc tracks a device in the hierarchy with its child NISDs.
+// AvailableSize is the sum of all child NISD AvailableSize values.
+type DeviceAlloc struct {
+	ID            string
+	AvailableSize int64
+	Nisds         []*Nisd
+}
+
 type VdevCfg struct {
 	XMLName      xml.Name `xml:"Vdev"`
 	ID           string
@@ -251,6 +261,15 @@ type VdevCfg struct {
 	NumDataBlk   uint8
 	NumParityBlk uint8
 	AuthToken    string
+	PFSID        string
+}
+
+type PFS struct {
+	XMLName xml.Name `xml:"PFS"`
+	ID      string   `xml:"ID" json:"ID"`
+	Name    string   `xml:"Name" json:"Name"`
+	Offset  int      `xml:"Offset" json:"Offset"`
+	VdevIDs []string `xml:"VdevIDs" json:"VdevIDs"`
 }
 
 type Vdev struct {
@@ -378,6 +397,8 @@ func RegisterGOBStructs() {
 	gob.Register(NetworkInfo{})
 	gob.Register(Filter{})
 	gob.Register(VdevReq{})
+	gob.Register(PFS{})
+	gob.Register([]PFS{})
 	gob.Register(DeleteVdevReq{})
 	gob.Register(CPReq{})
 	gob.Register(CPResp{})
