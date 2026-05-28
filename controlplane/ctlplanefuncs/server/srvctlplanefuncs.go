@@ -22,6 +22,7 @@ import (
 	PumiceDBServer "github.com/00pauln00/niova-pumicedb/go/pkg/pumiceserver"
 	storageiface "github.com/00pauln00/niova-pumicedb/go/pkg/utils/storage/interface"
 )
+import "math/rand"
 
 var colmfamily string
 
@@ -1831,9 +1832,13 @@ func WPPFSCfg(args ...interface{}) (interface{}, error) {
 		Success: true,
 	}
 
+	rand.Seed(time.Now().UnixNano())
+
+	offset := rand.Intn(HR.GetEntityCnt(ctlplfl.DEVICE_IDX)) + 1
+
 	commitChgs := []funclib.CommitChg{
 		{Key: []byte(fmt.Sprintf("%s/%s/nm", pfsKey, pfs.ID)), Value: []byte(pfs.Name)},
-		{Key: []byte(fmt.Sprintf("%s/%s/offset", pfsKey, pfs.ID)), Value: []byte("0")},
+		{Key: []byte(fmt.Sprintf("%s/%s/offset", pfsKey, pfs.ID)), Value: []byte(fmt.Sprintf("%d", offset))},
 	}
 
 	funcIntrm := funclib.FuncIntrm{
