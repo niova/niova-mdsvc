@@ -3,6 +3,7 @@ package srvctlplanefuncs
 import (
 	"C"
 	"fmt"
+	"math/rand"
 	"path"
 	"strconv"
 	"strings"
@@ -1831,9 +1832,11 @@ func WPPFSCfg(args ...interface{}) (interface{}, error) {
 		Success: true,
 	}
 
+	offset := rand.Intn(HR.GetEntityCnt(ctlplfl.DEVICE_IDX)) + 1
+
 	commitChgs := []funclib.CommitChg{
 		{Key: []byte(fmt.Sprintf("%s/%s/nm", pfsKey, pfs.ID)), Value: []byte(pfs.Name)},
-		{Key: []byte(fmt.Sprintf("%s/%s/offset", pfsKey, pfs.ID)), Value: []byte("0")},
+		{Key: []byte(fmt.Sprintf("%s/%s/offset", pfsKey, pfs.ID)), Value: []byte(fmt.Sprintf("%d", offset))},
 	}
 
 	funcIntrm := funclib.FuncIntrm{
