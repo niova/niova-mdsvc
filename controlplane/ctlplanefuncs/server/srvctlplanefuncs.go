@@ -3,6 +3,7 @@ package srvctlplanefuncs
 import (
 	"C"
 	"fmt"
+	"math/rand"
 	"path"
 	"strconv"
 	"strings"
@@ -22,7 +23,6 @@ import (
 	PumiceDBServer "github.com/00pauln00/niova-pumicedb/go/pkg/pumiceserver"
 	storageiface "github.com/00pauln00/niova-pumicedb/go/pkg/utils/storage/interface"
 )
-import "math/rand"
 
 var colmfamily string
 
@@ -1831,8 +1831,6 @@ func WPPFSCfg(args ...interface{}) (interface{}, error) {
 		Name:    pfs.Name,
 		Success: true,
 	}
-
-	rand.Seed(time.Now().UnixNano())
 
 	offset := rand.Intn(HR.GetEntityCnt(ctlplfl.DEVICE_IDX)) + 1
 
