@@ -67,9 +67,9 @@ func GetRespStruct(name string) any {
 	case cpLib.GET_CHUNK_NISD:
 		return &cpLib.ChunkNisd{}
 	case cpLib.GET_VDEV_INFO:
-		return &cpLib.VdevCfg{}
+		return &cpLib.VdevConfig{}
 	case cpLib.GET_ALL_VDEV:
-		return &[]cpLib.VdevCfg{}
+		return &[]cpLib.VdevConfig{}
 	case cpLib.GET_HYPERVISOR:
 		return &[]cpLib.Hypervisor{}
 	case cpLib.GET_NISD_LIST:

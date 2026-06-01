@@ -197,6 +197,7 @@ func (deviceParser) ParseField(entity Entity, parts []string, value []byte) {
 }
 func (deviceParser) GetEntity(entity Entity) Entity { return *entity.(*ctlplfl.Device) }
 */
+
 // nisd parser
 type NisdParser struct{}
 
@@ -380,10 +381,10 @@ type vdevParser struct{}
 
 func (vdevParser) GetRootKey() string { return vdevKey }
 func (vdevParser) NewEntity(id string) Entity {
-	return &ctlplfl.VdevCfg{ID: id}
+	return &ctlplfl.VdevConfig{ID: id}
 }
 func (vdevParser) ParseField(entity Entity, parts []string, value []byte) {
-	vdev := entity.(*ctlplfl.VdevCfg)
+	vdev := entity.(*ctlplfl.VdevConfig)
 	if len(parts) > KEY_LEN {
 		switch parts[VDEV_ELEMENT_KEY] {
 		case SIZE:
@@ -392,11 +393,23 @@ func (vdevParser) ParseField(entity Entity, parts []string, value []byte) {
 			}
 		case NUM_CHUNKS:
 			if nc, err := strconv.ParseUint(string(value), 10, 32); err == nil {
-				vdev.NumChunks = uint32(nc)
+				vdev.TotalChunks = uint32(nc)
 			}
 		case NUM_REPLICAS:
 			if nr, err := strconv.ParseUint(string(value), 10, 8); err == nil {
-				vdev.NumReplica = uint8(nr)
+				vdev.TotalReplicas = uint8(nr)
+			}
+		case TOTAL_DATA_BLKS:
+			if nd, err := strconv.ParseUint(string(value), 10, 8); err == nil {
+				vdev.TotalDataBlks = uint8(nd)
+			}
+		case TOTAL_PARITY_BLKS:
+			if np, err := strconv.ParseUint(string(value), 10, 8); err == nil {
+				vdev.TotalParityBlks = uint8(np)
+			}
+		case REDUNDANCY_MODE:
+			if rm, err := strconv.Atoi(string(value)); err == nil {
+				vdev.Redundancy = ctlplfl.RedundancyMode(rm)
 			}
 		case pfsKey:
 			vdev.PFSID = string(value)
@@ -406,4 +419,60 @@ func (vdevParser) ParseField(entity Entity, parts []string, value []byte) {
 	}
 }
 
-func (vdevParser) GetEntity(entity Entity) Entity { return *entity.(*ctlplfl.VdevCfg) }
+func (vdevParser) GetEntity(entity Entity) Entity { return *entity.(*ctlplfl.VdevConfig) }
+
+// Chunk parser
+// Key format: v/<vdevID>/c/<chunkIdx>/<Placement>
+// Replication: v/<vdevID>/c/0/R.0 -> nisd-1
+// EC:          v/<vdevID>/c/0/D.0 -> nisd-1
+//
+//	v/<vdevID>/c/0/P.0 -> nisd-2
+type chunkParser struct{}
+
+func (chunkParser) GetRootKey() string { return vdevKey }
+
+func (chunkParser) NewEntity(id string) Entity {
+	idx, _ := strconv.ParseUint(id, 10, 32)
+	return &ctlplfl.Chunk{
+		Index:      uint32(idx),
+		Placements: make([]ctlplfl.ChunkPlacement, 0),
+	}
+}
+
+func (chunkParser) ParseField(entity Entity, parts []string, value []byte) {
+	chunk := entity.(*ctlplfl.Chunk)
+	if len(parts) < 5 {
+		return
+	}
+
+	placementStr := parts[4] // e.g. "R.0", "D.0", "P.0"
+	pParts := strings.Split(placementStr, ".")
+	if len(pParts) != 2 {
+		return
+	}
+	seq, err := strconv.ParseUint(pParts[1], 10, 8)
+	if err != nil {
+		return
+	}
+
+	placement := ctlplfl.ChunkPlacement{
+		Sequence: uint8(seq),
+		NisdID:   string(value),
+	}
+
+	switch pParts[0] {
+	case "R":
+		placement.Type = ctlplfl.Replica
+		chunk.Redundancy = ctlplfl.RMReplica
+	case "D":
+		placement.Type = ctlplfl.Data
+		chunk.Redundancy = ctlplfl.RMEC
+	case "P":
+		placement.Type = ctlplfl.Parity
+		chunk.Redundancy = ctlplfl.RMEC
+	}
+
+	chunk.Placements = append(chunk.Placements, placement)
+}
+
+func (chunkParser) GetEntity(entity Entity) Entity { return *entity.(*ctlplfl.Chunk) }

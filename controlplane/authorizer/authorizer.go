@@ -43,7 +43,7 @@ const (
 	ReadVdevInfo                  FunctionName = "ReadVdevInfo"
 	APDeleteVdev                  FunctionName = "APDeleteVdev"
 	ReadAllVdevInfo               FunctionName = "ReadAllVdevInfo"
-	ReadChunkNisd                 FunctionName = "ReadChunkNisd"
+	ReadChunk                     FunctionName = "ReadChunk"
 	RdNisdArgs                    FunctionName = "RdNisdArgs"
 	WPPFSCfg                      FunctionName = "WPPFSCfg"
 	ReadPFSCfg                    FunctionName = "ReadPFSCfg"
@@ -123,7 +123,7 @@ var defaultPolicies = map[FunctionName]FunctionPolicy{
 	ReadAllVdevInfo: {
 		RBAC: []string{"admin"},
 	},
-	ReadChunkNisd: {
+	ReadChunk: {
 		RBAC: []string{"user", "admin"},
 		ABAC: []ABACRule{
 			{Argument: "vdev", Prefix: "v/"},

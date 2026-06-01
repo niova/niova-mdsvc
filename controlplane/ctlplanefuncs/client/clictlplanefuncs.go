@@ -560,8 +560,8 @@ func (ccf *CliCFuncs) GetNisdArgs(req ctlplfl.GetReq) (ctlplfl.NisdArgs, error) 
 	return args, nil
 }
 
-func (ccf *CliCFuncs) GetVdevCfg(req *ctlplfl.GetReq) (ctlplfl.VdevCfg, error) {
-	vdev := ctlplfl.VdevCfg{}
+func (ccf *CliCFuncs) GetVdevConfig(req *ctlplfl.GetReq) (ctlplfl.VdevConfig, error) {
+	vdev := ctlplfl.VdevConfig{}
 	cpReq := &ctlplfl.CPReq{
 		Token:   ccf.token,
 		Payload: req,
@@ -579,12 +579,12 @@ func (ccf *CliCFuncs) GetVdevCfg(req *ctlplfl.GetReq) (ctlplfl.VdevCfg, error) {
 	return vdev, nil
 }
 
-func (ccf *CliCFuncs) GetVdevCfgs(req *ctlplfl.GetReq) ([]ctlplfl.VdevCfg, error) {
+func (ccf *CliCFuncs) GetVdevConfigs(req *ctlplfl.GetReq) ([]ctlplfl.VdevConfig, error) {
 	cpReq := &ctlplfl.CPReq{
 		Token:   ccf.token,
 		Payload: req,
 	}
-	vdevs := make([]ctlplfl.VdevCfg, 0)
+	vdevs := make([]ctlplfl.VdevConfig, 0)
 	cpResp, err := ccf.get(cpReq, ctlplfl.GET_ALL_VDEV, &vdevs)
 	if err != nil {
 		log.Error("Read Vdev Cfg failed: ", err)

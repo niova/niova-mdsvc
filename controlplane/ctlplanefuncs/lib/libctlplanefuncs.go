@@ -88,6 +88,34 @@ const (
 	FD_PARTITION
 )
 
+type RedundancyMode int
+
+const (
+	RMReplica RedundancyMode = 0
+	RMEC      RedundancyMode = 1
+)
+
+type ChunkType int
+
+const (
+	Replica ChunkType = iota
+	Data
+	Parity
+)
+
+func ChunkPrefix(t ChunkType) string {
+	switch t {
+	case Replica:
+		return "R"
+	case Data:
+		return "D"
+	case Parity:
+		return "P"
+	default:
+		return "?"
+	}
+}
+
 const logFileName = "client.log"
 
 // DefaultLogPath returns an absolute path for the application log file:
@@ -251,18 +279,37 @@ type DeviceAlloc struct {
 	Nisds         []*Nisd
 }
 
-type VdevCfg struct {
-	XMLName      xml.Name `xml:"Vdev"`
-	ID           string
-	Name         string
-	Size         int64
-	NumChunks    uint32
-	NumReplica   uint8
-	NumDataBlk   uint8
-	NumParityBlk uint8
-	AuthToken    string
-	PFSID        string
+// RedundancyBlock describes a single block within a chunk's redundancy set.
+// For replication: each block has Type=Replica with Sequence 0,1,2,...
+// For EC: data blocks come first (Type=Data), then parity (Type=Parity).
+type RedundancyBlock struct {
+	Type     ChunkType `xml:"Type,attr"`
+	Sequence int       `xml:"Sequence,attr"` // 0-based index within its ChunkType
 }
+
+type VdevConfig struct {
+	XMLName         xml.Name       `xml:"Vdev"`
+	ID              string         `xml:"ID"`
+	Name            string         `xml:"Name"`
+	Size            int64          `xml:"Size"`                // Logical size in bytes.
+	Redundancy      RedundancyMode `xml:"RedundancyType,attr"` // Replica | EC
+	TotalChunks     uint32         `xml:"ChunkCount"`          // Total logical chunks.
+	TotalReplicas   uint8          `xml:"TotalReplicas"`
+	TotalDataBlks   uint8          `xml:"TotalDataBlks"`
+	TotalParityBlks uint8          `xml:"TotalParityBlks"`
+	AuthToken       string         `xml:"AuthToken"`
+	PFSID           string         `xml:"PFSID"`
+}
+
+// TotalBlocksPerChunk returns the number of blocks each chunk has based on redundancy mode.
+func (v *VdevConfig) TotalBlocksPerChunk() int {
+	if v.Redundancy == RMReplica {
+		return int(v.TotalReplicas)
+	}
+	return int(v.TotalDataBlks + v.TotalParityBlks)
+}
+
+
 
 type PFS struct {
 	XMLName xml.Name `xml:"PFS"`
@@ -272,9 +319,22 @@ type PFS struct {
 	VdevIDs []string `xml:"VdevIDs" json:"VdevIDs"`
 }
 
+type ChunkPlacement struct {
+	Sequence uint8     `xml:"Sequence,attr"` // Ordering/index within the redundancy set.
+	Type     ChunkType `xml:"Type,attr"`     // Replica | Data | Parity
+	NisdID   string    `xml:"NisdID,attr"`   // Target NISD identifier.
+}
+
+type Chunk struct {
+	XMLName    xml.Name         `xml:"Chunk"`
+	Index      uint32           `xml:"Idx,attr"`            // Logical chunk index.
+	Redundancy RedundancyMode   `xml:"RedundancyType,attr"` // Replica | EC
+	Placements []ChunkPlacement `xml:"Placement"`
+}
+
 type Vdev struct {
-	Cfg          VdevCfg
-	NisdToChkMap []NisdChunk
+	Config VdevConfig `xml:"Config"`
+	Chunks []Chunk    `xml:"Chunks>Chunk"`
 }
 
 type Filter struct {
@@ -283,7 +343,7 @@ type Filter struct {
 }
 
 type VdevReq struct {
-	Vdev   *VdevCfg
+	Vdev   *VdevConfig
 	Filter Filter
 }
 
@@ -299,7 +359,7 @@ type GetReq struct {
 	GetAll bool
 }
 
-func (vdev *VdevCfg) Init() error {
+func (vdev *VdevConfig) Init() error {
 
 	id, err := uuid.NewV7()
 	if err != nil {
@@ -307,9 +367,7 @@ func (vdev *VdevCfg) Init() error {
 		return err
 	}
 	vdev.ID = id.String()
-	vdev.NumChunks = uint32(Count8GBChunks(vdev.Size))
-	vdev.NumDataBlk = 0
-	vdev.NumParityBlk = 0
+	vdev.TotalChunks = uint32(Count8GBChunks(vdev.Size))
 	return nil
 }
 
@@ -366,7 +424,7 @@ func MatchIPs(a, b []string) bool {
 
 type ChunkNisd struct {
 	XMLName     xml.Name `xml:"ChunkNisd"`
-	NumReplicas uint8    `xml:"NREPLICAS"`
+	TotalBlocks uint8    `xml:"NBLOCKS"`
 	NisdUUIDs   string   `xml:"NISDs"`
 }
 
@@ -390,9 +448,14 @@ func RegisterGOBStructs() {
 	gob.Register(NisdChunk{})
 	gob.Register(SnapResponseXML{})
 	gob.Register(SnapXML{})
-	gob.Register(VdevCfg{})
-	gob.Register([]VdevCfg{})
+	gob.Register(VdevConfig{})
+	gob.Register([]VdevConfig{})
 	gob.Register(ChunkNisd{})
+	gob.Register(Chunk{})
+	gob.Register([]Chunk{})
+	gob.Register(ChunkPlacement{})
+	gob.Register(RedundancyBlock{})
+	gob.Register([]RedundancyBlock{})
 	gob.Register(NisdArgs{})
 	gob.Register(NetworkInfo{})
 	gob.Register(Filter{})

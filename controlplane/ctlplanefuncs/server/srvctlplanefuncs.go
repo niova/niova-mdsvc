@@ -66,12 +66,15 @@ const (
 	AVAIL_SPACE      = "as"
 	SIZE             = "sz"
 	NUM_CHUNKS       = "nc"
-	NUM_REPLICAS     = "nr"
-	ERASURE_CODE     = "e"
-	LOCATION         = "l"
-	POWER_CAP        = "pw"
-	SPEC             = "sp"
-	NAME             = "nm"
+	NUM_REPLICAS      = "nr"
+	TOTAL_DATA_BLKS   = "nd"
+	TOTAL_PARITY_BLKS = "np"
+	REDUNDANCY_MODE   = "rm"
+	ERASURE_CODE      = "e"
+	LOCATION          = "l"
+	POWER_CAP         = "pw"
+	SPEC              = "sp"
+	NAME              = "nm"
 	PORT_RANGE       = "pr"
 	SSH_PORT         = "ssh"
 	PORT             = "prt"
@@ -587,20 +590,25 @@ func WPDeviceInfo(args ...interface{}) (interface{}, error) {
 }
 
 // Generates all the Keys and Values that needs to be inserted into VDEV key space on vdev generation
-func genAllocationKV(ID, chunk string, nisd *ctlplfl.NisdVdevAlloc, i int, commitChgs *[]funclib.CommitChg) {
+
+func genAllocationKV(ID, chunk string, chunkType ctlplfl.ChunkType, nisd *ctlplfl.NisdVdevAlloc,
+	i int, commitChgs *[]funclib.CommitChg) {
 	vcKey := getVdevChunkKey(ID)
 	nKey := fmt.Sprintf("%s/%s/%s", nisdKey, nisd.Ptr.ID, ID)
 
-	// TODO: handle EC blocks
+	prefix := ctlplfl.ChunkPrefix(chunkType)
+
 	*commitChgs = append(*commitChgs, funclib.CommitChg{
-		Key:   []byte(fmt.Sprintf("%s/%s/R.%d", vcKey, chunk, i)),
+		Key:   []byte(fmt.Sprintf("%s/%s/%s.%d", vcKey, chunk, prefix, i)),
 		Value: []byte(nisd.Ptr.ID),
 	})
+
 	*commitChgs = append(*commitChgs, funclib.CommitChg{
 		Key:   []byte(nKey),
-		Value: []byte(fmt.Sprintf("R.%d.%s", i, chunk)),
+		Value: []byte(fmt.Sprintf("%s.%d.%s", prefix, i, chunk)),
 	})
-	log.Debugf("generated kv updates for chunk %s/R.%d", chunk, i)
+
+	log.Debugf("generated kv updates for chunk %s/%s.%d", chunk, prefix, i)
 }
 
 // isAlphanumeric returns true if s contains only ASCII letters and digits.
@@ -650,15 +658,21 @@ func WPCreateVdev(args ...interface{}) (interface{}, error) {
 	}
 	log.Infof("initializing vdev: %+v for user: %s", req.Vdev, tc.UserID)
 	key := getConfKey(vdevKey, req.Vdev.ID)
-	for _, field := range []string{SIZE, NUM_CHUNKS, NUM_REPLICAS, NAME} {
+	for _, field := range []string{SIZE, NUM_CHUNKS, NUM_REPLICAS, TOTAL_DATA_BLKS, TOTAL_PARITY_BLKS, REDUNDANCY_MODE, NAME} {
 		var value string
 		switch field {
 		case SIZE:
 			value = strconv.Itoa(int(req.Vdev.Size))
 		case NUM_CHUNKS:
-			value = strconv.Itoa(int(req.Vdev.NumChunks))
+			value = strconv.Itoa(int(req.Vdev.TotalChunks))
 		case NUM_REPLICAS:
-			value = strconv.Itoa(int(req.Vdev.NumReplica))
+			value = strconv.Itoa(int(req.Vdev.TotalReplicas))
+		case TOTAL_DATA_BLKS:
+			value = strconv.Itoa(int(req.Vdev.TotalDataBlks))
+		case TOTAL_PARITY_BLKS:
+			value = strconv.Itoa(int(req.Vdev.TotalParityBlks))
+		case REDUNDANCY_MODE:
+			value = strconv.Itoa(int(req.Vdev.Redundancy))
 		case NAME:
 			value = req.Vdev.Name
 		default:
@@ -733,6 +747,8 @@ func allocateNisdPerChunk(req *ctlplfl.VdevReq, fd int, chunkIdx int,
 		return fmt.Errorf("no entities available in failure domain %d", fd)
 	}
 
+	totalBlocks := req.Vdev.TotalBlocksPerChunk()
+
 	// Filtered allocation path
 	if req.Filter.ID != "" {
 		en, err := GetEntityByID(req.Filter)
@@ -740,8 +756,23 @@ func allocateNisdPerChunk(req *ctlplfl.VdevReq, fd int, chunkIdx int,
 			return err
 		}
 
-		for r := 0; r < int(req.Vdev.NumReplica); r++ {
-			devOffset := chunkIdx + offset + r
+		for i := 0; i < totalBlocks; i++ {
+			var blkType ctlplfl.ChunkType
+			var blkSeq int
+			if req.Vdev.Redundancy == ctlplfl.RMReplica {
+				blkType = ctlplfl.Replica
+				blkSeq = i
+			} else {
+				if i < int(req.Vdev.TotalDataBlks) {
+					blkType = ctlplfl.Data
+					blkSeq = i
+				} else {
+					blkType = ctlplfl.Parity
+					blkSeq = i - int(req.Vdev.TotalDataBlks)
+				}
+			}
+
+			devOffset := chunkIdx + offset + i
 			dev, err := HR.PickDevice(en, pickedDevices, deviceUsage, devOffset)
 			if err != nil {
 				log.Error("PickDevice(): failed to pick device: ", err)
@@ -752,7 +783,7 @@ func allocateNisdPerChunk(req *ctlplfl.VdevReq, fd int, chunkIdx int,
 				log.Error("PickNISDFromDevice(): failed to pick NISD: ", err)
 				return err
 			}
-			genAllocationKV(req.Vdev.ID, chunk, nisd, r, commitChgs)
+			genAllocationKV(req.Vdev.ID, chunk, blkType, nisd, blkSeq, commitChgs)
 			pickedDevices[dev.ID] = struct{}{}
 			info := deviceUsage[dev.ID]
 			if info == nil {
@@ -774,7 +805,22 @@ func allocateNisdPerChunk(req *ctlplfl.VdevReq, fd int, chunkIdx int,
 
 	entityIdx := startIdx
 
-	for r := 0; r < int(req.Vdev.NumReplica); r++ {
+	for i := 0; i < totalBlocks; i++ {
+		var blkType ctlplfl.ChunkType
+		var blkSeq int
+		if req.Vdev.Redundancy == ctlplfl.RMReplica {
+			blkType = ctlplfl.Replica
+			blkSeq = i
+		} else {
+			if i < int(req.Vdev.TotalDataBlks) {
+				blkType = ctlplfl.Data
+				blkSeq = i
+			} else {
+				blkType = ctlplfl.Parity
+				blkSeq = i - int(req.Vdev.TotalDataBlks)
+			}
+		}
+
 		var (
 			nisd    *ctlplfl.NisdVdevAlloc
 			picked        = -1
@@ -800,7 +846,7 @@ func allocateNisdPerChunk(req *ctlplfl.VdevReq, fd int, chunkIdx int,
 			}
 
 			// Phase 1: Pick optimal device within this entity
-			devOffset := chunkIdx + offset + r
+			devOffset := chunkIdx + offset + i
 			dev, devErr := HR.PickDevice(ent, pickedDevices, deviceUsage, devOffset)
 			if devErr != nil {
 				lastErr = devErr
@@ -824,14 +870,12 @@ func allocateNisdPerChunk(req *ctlplfl.VdevReq, fd int, chunkIdx int,
 		}
 
 		if picked == -1 {
-			return fmt.Errorf(
-				"failed to allocate replica %d for chunk=%s fd=%d after %d entities (startIdx=%d): lastErr=%v",
-				r, chunk, fd, treeLen, startIdx, lastErr,
-			)
+			return fmt.Errorf("failed to allocate block %d (type %v) for chunk %d: %v", i, blkType, chunkIdx, lastErr)
 		}
 
-		genAllocationKV(req.Vdev.ID, chunk, nisd, r, commitChgs)
+		genAllocationKV(req.Vdev.ID, chunk, blkType, nisd, blkSeq, commitChgs)
 		pickedEntity[picked] = struct{}{}
+		pickedNISD[nisd.Ptr.ID] = struct{}{}
 	}
 
 	return nil
@@ -842,7 +886,7 @@ func allocateNisdPerVdev(req *ctlplfl.VdevReq, fd int, nisdMap *btree.Map[string
 	// Track device usage across all chunks in this vdev
 	deviceUsage := make(map[string]*DeviceUsageInfo)
 
-	for i := 0; i < int(req.Vdev.NumChunks); i++ {
+	for i := 0; i < int(req.Vdev.TotalChunks); i++ {
 		log.Debugf("allocating nisd for chunk: %d, from fd: %d ", i, fd)
 		err := allocateNisdPerChunk(req, fd, i, &commitCh, nisdMap, deviceUsage, offset)
 		if err != nil {
@@ -860,7 +904,7 @@ func AllocNISDs(req *ctlplfl.VdevReq, allocMap *btree.Map[string, *ctlplfl.NisdV
 		return allocateNisdsAtFailureDomain(req, ctlplfl.GetFDIdx(req.Filter.Type), allocMap, txn, offset)
 	}
 
-	startFD, err := HR.GetFDLevel(int(req.Vdev.NumReplica))
+	startFD, err := HR.GetFDLevel(req.Vdev.TotalBlocksPerChunk())
 	if err != nil {
 		return fmt.Errorf("failed to resolve failure domain: %w", err)
 	}
@@ -947,7 +991,7 @@ func APCreateVdev(args ...interface{}) (interface{}, error) {
 	req, ok2 := cpreq.Payload.(ctlplfl.VdevReq)
 	cbArgs, ok3 := args[1].(*PumiceDBServer.PmdbCbArgs)
 	if !ok1 || !ok2 || !ok3 {
-		err := fmt.Errorf("invalid argument to the APCreateVdev srvctl function")
+		err := fmt.Errorf("invalid argument")
 		log.Errorf("APCreateVdev: %v", err)
 		return ctlplfl.InternalError(err)
 	}
@@ -982,7 +1026,7 @@ func APCreateVdev(args ...interface{}) (interface{}, error) {
 		return ctlplfl.FuncError(fmt.Errorf("invalid response type"))
 	}
 	req.Vdev.ID = resp.ID
-	req.Vdev.NumChunks = uint32(ctlplfl.Count8GBChunks(req.Vdev.Size))
+	req.Vdev.TotalChunks = uint32(ctlplfl.Count8GBChunks(req.Vdev.Size))
 	offset := 0
 	if req.Vdev.PFSID != "" {
 		offsetKey := fmt.Sprintf("%s/%s/offset", pfsKey, req.Vdev.PFSID)
@@ -1285,7 +1329,7 @@ func ReadVdevsInfoWithChunkMapping(args ...interface{}) (interface{}, error) {
 		log.Error("Range read failure: ", err)
 		return ctlplfl.FuncError(err)
 	}
-	// ParseEntitiesMap now returns map[string]Entity
+	// // ParseEntitiesMap now returns map[string]Entity
 	nisdEntityMap := ParseEntitiesMap(nisdResult.ResultMap, NisdParser{})
 
 	readResult, err := cbArgs.Store.RangeRead(storageiface.RangeReadArgs{
@@ -1298,99 +1342,59 @@ func ReadVdevsInfoWithChunkMapping(args ...interface{}) (interface{}, error) {
 		log.Error("Range read failure: ", err)
 		return ctlplfl.FuncError(err)
 	}
+	log.Info("nisdEntityMap: ", nisdEntityMap)
 
-	vdevMap := make(map[string]*ctlplfl.Vdev)
-	// top-level map: vdevID -> (nisdID -> *NisdChunk)
-	vdevNisdChunkMap := make(map[string]map[string]*ctlplfl.NisdChunk)
-
-	for k, value := range readResult.ResultMap {
+	// Group results by vdev ID
+	vdevResults := make(map[string]map[string][]byte)
+	for k, v := range readResult.ResultMap {
 		parts := strings.Split(strings.Trim(k, "/"), "/")
-		if len(parts) <= VDEV_CFG_C_KEY {
+		if len(parts) <= BASE_UUID_PREFIX {
 			continue
 		}
 		vdevID := parts[BASE_UUID_PREFIX]
-		// expect something like: /<root>/<vdevID>/c/<chunkIndex> -> <nisdID>
-		if _, ok := vdevMap[vdevID]; !ok {
-			vdevMap[vdevID] = &ctlplfl.Vdev{Cfg: ctlplfl.VdevCfg{
-				ID: vdevID}}
+		if vdevResults[vdevID] == nil {
+			vdevResults[vdevID] = make(map[string][]byte)
 		}
-		vdev := vdevMap[vdevID]
-		if parts[VDEV_CFG_C_KEY] == cfgkey {
-			switch parts[VDEV_ELEMENT_KEY] {
-			case SIZE:
-				if sz, err := strconv.ParseInt(string(value), 10, 64); err == nil {
-					vdev.Cfg.Size = sz
-				}
-			case NUM_CHUNKS:
-				if nc, err := strconv.ParseUint(string(value), 10, 32); err == nil {
-					vdev.Cfg.NumChunks = uint32(nc)
-				}
-			case NUM_REPLICAS:
-				if nr, err := strconv.ParseUint(string(value), 10, 8); err == nil {
-					vdev.Cfg.NumReplica = uint8(nr)
-				}
-			case pfsKey:
-				vdev.Cfg.PFSID = string(value)
-			case NAME:
-				vdev.Cfg.Name = string(value)
-			}
-
-		} else if parts[VDEV_CFG_C_KEY] == chunkKey {
-
-			nisdID := string(value)
-
-			// ensure per-vdev map exists
-			if _, ok := vdevNisdChunkMap[vdevID]; !ok {
-				vdevNisdChunkMap[vdevID] = make(map[string]*ctlplfl.NisdChunk)
-			}
-			perVdevMap := vdevNisdChunkMap[vdevID]
-
-			// if chunk index is stored in parts[3] (original code used parts[3])
-			chunkIdx := -1
-			if idx, err := strconv.Atoi(parts[3]); err == nil {
-				chunkIdx = idx
-			}
-
-			// create nisd chunk entry for this vdev if not present
-			if _, ok := perVdevMap[nisdID]; !ok {
-				// lookup nisd entity from parsed nisd map
-				if ent, ok := nisdEntityMap[nisdID]; ok {
-					// ent is Entity (interface) created by nisdParser (pointer to ctlplfl.Nisd)
-					if nisdPtr, ok := ent.(*ctlplfl.Nisd); ok {
-						perVdevMap[nisdID] = &ctlplfl.NisdChunk{
-							Nisd:  *nisdPtr,
-							Chunk: make([]int, 0),
-						}
-					} else {
-						// fallback: create minimal Nisd with ID only
-						perVdevMap[nisdID] = &ctlplfl.NisdChunk{
-							Nisd:  ctlplfl.Nisd{ID: nisdID},
-							Chunk: make([]int, 0),
-						}
-					}
-				} else {
-					// fallback: create minimal Nisd with ID only
-					perVdevMap[nisdID] = &ctlplfl.NisdChunk{
-						Nisd:  ctlplfl.Nisd{ID: nisdID},
-						Chunk: make([]int, 0),
-					}
-				}
-			}
-			if chunkIdx >= 0 {
-				perVdevMap[nisdID].Chunk = append(perVdevMap[nisdID].Chunk, chunkIdx)
-			}
-		}
+		vdevResults[vdevID][k] = v
 	}
 
-	vdevList := make([]ctlplfl.Vdev, 0, len(vdevMap))
-	// attach only the nisd chunks that belong to each vdev
-	for vid, v := range vdevMap {
-		if perVdevMap, ok := vdevNisdChunkMap[vid]; ok {
-			for _, nc := range perVdevMap {
-				v.NisdToChkMap = append(v.NisdToChkMap, *nc)
-			}
+	// Parse each vdev's config and chunks using parser interfaces
+	vp := vdevParser{}
+	cp := chunkParser{}
+	vdevList := make([]ctlplfl.Vdev, 0, len(vdevResults))
+
+	for _, res := range vdevResults {
+		vdevConfigs := ParseEntities[ctlplfl.VdevConfig](res, vp)
+		if len(vdevConfigs) == 0 {
+			continue
 		}
-		vdevList = append(vdevList, *v)
+
+		// Parse chunk placements using chunkParser interface
+		chunkMap := make(map[string]Entity)
+		for k, v := range res {
+			parts := strings.Split(strings.Trim(k, "/"), "/")
+			if len(parts) < 5 || parts[0] != cp.GetRootKey() || parts[2] != chunkKey {
+				continue
+			}
+			chunkIdx := parts[3]
+			entity, exists := chunkMap[chunkIdx]
+			if !exists {
+				entity = cp.NewEntity(chunkIdx)
+				chunkMap[chunkIdx] = entity
+			}
+			cp.ParseField(entity, parts, v)
+		}
+
+		chunks := make([]ctlplfl.Chunk, 0, len(chunkMap))
+		for _, e := range chunkMap {
+			chunks = append(chunks, cp.GetEntity(e).(ctlplfl.Chunk))
+		}
+
+		vdev := ctlplfl.Vdev{
+			Config: vdevConfigs[0],
+			Chunks: chunks,
+		}
+		vdevList = append(vdevList, vdev)
 	}
 
 	log.Debugf("ReadVdevsInfoWithChunkMapping: returning %d vdev(s) with chunk info", len(vdevList))
@@ -1470,7 +1474,7 @@ func ReadVdevInfo(args ...interface{}) (interface{}, error) {
 	}
 	log.Trace("Created AuthToken ", authtoken, " for vdev ", req.ID)
 
-	vdevInfo := ctlplfl.VdevCfg{
+	vdevInfo := ctlplfl.VdevConfig{
 		ID:        vdevID,
 		AuthToken: authtoken,
 	}
@@ -1490,11 +1494,23 @@ func ReadVdevInfo(args ...interface{}) (interface{}, error) {
 				}
 			case NUM_CHUNKS:
 				if nc, err := strconv.ParseUint(string(v), 10, 32); err == nil {
-					vdevInfo.NumChunks = uint32(nc)
+					vdevInfo.TotalChunks = uint32(nc)
 				}
 			case NUM_REPLICAS:
 				if nr, err := strconv.ParseUint(string(v), 10, 8); err == nil {
-					vdevInfo.NumReplica = uint8(nr)
+					vdevInfo.TotalReplicas = uint8(nr)
+				}
+			case TOTAL_DATA_BLKS:
+				if nd, err := strconv.ParseUint(string(v), 10, 8); err == nil {
+					vdevInfo.TotalDataBlks = uint8(nd)
+				}
+			case TOTAL_PARITY_BLKS:
+				if np, err := strconv.ParseUint(string(v), 10, 8); err == nil {
+					vdevInfo.TotalParityBlks = uint8(np)
+				}
+			case REDUNDANCY_MODE:
+				if rm, err := strconv.Atoi(string(v)); err == nil {
+					vdevInfo.Redundancy = ctlplfl.RedundancyMode(rm)
 				}
 			case NAME:
 				vdevInfo.Name = string(v)
@@ -1520,12 +1536,12 @@ func ReadAllVdevInfo(args ...interface{}) (interface{}, error) {
 	}
 
 	// TODO: move this to parsing file
-	vdevList := ParseEntities[ctlplfl.VdevCfg](rqResult.ResultMap, vdevParser{})
+	vdevList := ParseEntities[ctlplfl.VdevConfig](rqResult.ResultMap, vdevParser{})
 	log.Debugf("ReadAllVdevInfo: returning %d vdev(s)", len(vdevList))
 	return ctlplfl.EncodeResponse(vdevList)
 }
 
-func ReadChunkNisd(args ...interface{}) (interface{}, error) {
+func ReadChunk(args ...interface{}) (interface{}, error) {
 	cbargs := args[0].(*PumiceDBServer.PmdbCbArgs)
 	cpReq := args[1].(ctlplfl.CPReq)
 	req := cpReq.Payload.(ctlplfl.GetReq)
@@ -1536,7 +1552,7 @@ func ReadChunkNisd(args ...interface{}) (interface{}, error) {
 	}
 	tc, err := ValidateToken(cpReq.Token)
 	if err != nil {
-		log.Errorf("ReadChunkNisd: token validation failed: %v", err)
+		log.Errorf("ReadChunk: token validation failed: %v", err)
 		return ctlplfl.AuthError(err)
 	}
 	keys := strings.Split(strings.Trim(req.ID, "/"), "/")
@@ -1549,7 +1565,7 @@ func ReadChunkNisd(args ...interface{}) (interface{}, error) {
 	// Check authorization: ownership of the vdev implies access to its chunks
 	if authorizer != nil {
 		attributes := map[string]string{"vdev": vdevID}
-		if !authorizer.Authorize(authz.ReadChunkNisd, tc.UserID, []string{tc.Role}, attributes, cbargs.Store, colmfamily) {
+		if !authorizer.Authorize(authz.ReadChunk, tc.UserID, []string{tc.Role}, attributes, cbargs.Store, colmfamily) {
 			log.Errorf("user %s with role %s not authorized to read chunk nisd for vdev %s", tc.UserID, tc.Role, vdevID)
 			return ctlplfl.AuthError(fmt.Errorf("authorization failed"))
 		}
@@ -1570,16 +1586,35 @@ func ReadChunkNisd(args ...interface{}) (interface{}, error) {
 		return ctlplfl.FuncError(err)
 	}
 
-	var ids []string
-	for _, v := range rqResult.ResultMap {
-		ids = append(ids, string(v))
-	}
-	chunkInfo := ctlplfl.ChunkNisd{
-		NisdUUIDs:   strings.Join(ids, ","),
-		NumReplicas: uint8(len(rqResult.ResultMap)),
+	// Parse chunk placements using chunkParser interface
+	cp := chunkParser{}
+	chunkMap := make(map[string]Entity)
+	for k, v := range rqResult.ResultMap {
+		parts := strings.Split(strings.Trim(k, "/"), "/")
+		if len(parts) < 5 || parts[0] != cp.GetRootKey() || parts[2] != chunkKey {
+			continue
+		}
+		chunkIdx := parts[3]
+		entity, exists := chunkMap[chunkIdx]
+		if !exists {
+			entity = cp.NewEntity(chunkIdx)
+			chunkMap[chunkIdx] = entity
+		}
+		cp.ParseField(entity, parts, v)
 	}
 
-	log.Debugf("ReadChunkNisd: returning chunk-nisd info for vdev %s chunk %s", vdevID, chunk)
+	if len(chunkMap) == 0 {
+		return ctlplfl.FuncError(fmt.Errorf("chunk not found"))
+	}
+
+	// Return the first (and only) chunk
+	var chunkInfo ctlplfl.Chunk
+	for _, e := range chunkMap {
+		chunkInfo = cp.GetEntity(e).(ctlplfl.Chunk)
+		break
+	}
+
+	log.Debugf("ReadChunk: returning chunk info for vdev %s chunk %s", vdevID, chunk)
 	return ctlplfl.EncodeResponse(chunkInfo)
 
 }
