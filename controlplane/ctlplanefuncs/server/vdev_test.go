@@ -15,7 +15,7 @@ import (
 	"github.com/00pauln00/niova-pumicedb/go/pkg/utils/storage/memstore"
 )
 
-func TestVdevLifecycle(t *testing.T) {
+func TestVdev(t *testing.T) {
 	// 1. Setup
 	HR.Init()
 
@@ -112,7 +112,7 @@ func TestVdevLifecycle(t *testing.T) {
 			for _, chg := range intrm.Changes {
 				ds.Write(string(chg.Key), string(chg.Value), "")
 			}
-			
+
 			// Extract VdevID from WP response
 			var vdevID string
 			if cpResp, ok := intrm.Response.(ctlplfl.CPResp); ok && cpResp.Error != nil {
@@ -132,7 +132,7 @@ func TestVdevLifecycle(t *testing.T) {
 			req.Vdev.TotalChunks = uint32(ctlplfl.Count8GBChunks(req.Vdev.Size))
 
 			allocMap := btree.NewMap[string, *ctlplfl.NisdVdevAlloc](32)
-			
+
 			if err := AllocNISDs(req, allocMap, &intrm, 0); err != nil {
 				t.Fatalf("AllocNISDs failed: %v", err)
 			}
@@ -140,7 +140,7 @@ func TestVdevLifecycle(t *testing.T) {
 			if err := commitAllocChgs(&intrm, allocMap, cbArgs); err != nil {
 				t.Fatalf("commitAllocChgs failed: %v", err)
 			}
-			
+
 			applyNISDAlloc(allocMap)
 
 			// c. ReadVdevsInfoWithChunkMapping
@@ -162,7 +162,7 @@ func TestVdevLifecycle(t *testing.T) {
 			if err := pmCmn.Decoder(pmCmn.GOB, resRead.([]byte), &cpResp); err != nil {
 				t.Fatalf("Failed to decode Read response: %v", err)
 			}
-			
+
 			if cpResp.Error != nil {
 				t.Fatalf("Read response error: %s", cpResp.Err())
 			}
@@ -178,11 +178,11 @@ func TestVdevLifecycle(t *testing.T) {
 			}
 
 			v := vdevList[0]
-			if v.Config.ID != vdevID {
-				t.Errorf("ID mismatch: expected %s, got %s", vdevID, v.Config.ID)
+			if v.Cfg.ID != vdevID {
+				t.Errorf("ID mismatch: expected %s, got %s", vdevID, v.Cfg.ID)
 			}
-			if v.Config.Redundancy != sc.redundancy {
-				t.Errorf("Redundancy mismatch: expected %v, got %v", sc.redundancy, v.Config.Redundancy)
+			if v.Cfg.Redundancy != sc.redundancy {
+				t.Errorf("Redundancy mismatch: expected %v, got %v", sc.redundancy, v.Cfg.Redundancy)
 			}
 
 			expectedTotalBlocks := int(sc.totalReplicas)
@@ -190,7 +190,7 @@ func TestVdevLifecycle(t *testing.T) {
 				expectedTotalBlocks = int(sc.totalDataBlks + sc.totalParityBlks)
 			}
 
-			if len(v.Chunks) == 0 {
+			if len(v.NisdToChkMap) == 0 {
 				t.Fatalf("No chunks found for vdev")
 			}
 
@@ -198,7 +198,30 @@ func TestVdevLifecycle(t *testing.T) {
 			parityCount := 0
 			replicaCount := 0
 
-			for _, chunk := range v.Chunks {
+			for i := uint32(0); i < v.Cfg.TotalChunks; i++ {
+				getReqChunk := ctlplfl.GetReq{
+					ID: fmt.Sprintf("%s/%d", vdevID, i),
+				}
+				cpReqChunk := ctlplfl.CPReq{
+					Token:   token,
+					Payload: getReqChunk,
+				}
+				resChunk, err := ReadChunk(cbArgs, cpReqChunk)
+				if err != nil {
+					t.Fatalf("ReadChunk failed: %v", err)
+				}
+				var cpRespChunk ctlplfl.CPResp
+				if err := pmCmn.Decoder(pmCmn.GOB, resChunk.([]byte), &cpRespChunk); err != nil {
+					t.Fatalf("Failed to decode ReadChunk response: %v", err)
+				}
+				if cpRespChunk.Error != nil {
+					t.Fatalf("ReadChunk response error: %s", cpRespChunk.Err())
+				}
+				chunk, ok := cpRespChunk.Payload.(ctlplfl.Chunk)
+				if !ok {
+					t.Fatalf("Expected ctlplfl.Chunk in Payload, got %T", cpRespChunk.Payload)
+				}
+
 				if len(chunk.Placements) != expectedTotalBlocks {
 					t.Errorf("Chunk %d placement count mismatch: expected %d, got %d", chunk.Index, expectedTotalBlocks, len(chunk.Placements))
 				}
@@ -215,7 +238,7 @@ func TestVdevLifecycle(t *testing.T) {
 						parityCount++
 					}
 				}
-				
+
 				if sc.redundancy == ctlplfl.RMReplica {
 					if replicaCount != int(sc.totalReplicas) {
 						t.Errorf("Replica count mismatch: expected %d, got %d", sc.totalReplicas, replicaCount)
