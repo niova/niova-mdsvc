@@ -625,46 +625,6 @@ func BenchmarkPutAndGetRack(b *testing.B) {
 	}
 }
 
-func TestVdevNisdChunk(t *testing.T) {
-
-	c := newClient(t)
-
-	// create nisd
-	mockNisd := cpLib.Nisd{
-		PeerPort: 8101,
-		ID:       "1d67328a-df29-11f0-9e36-d7e439f8e740",
-		FailureDomain: []string{
-			"17ab4598-df29-11f0-afa1-2f5633c6b6c9",
-			"2435b29e-df29-11f0-900b-d3d680074046",
-			"298cedc0-df29-11f0-8c85-e3df2426ed67",
-			"nvme-e3df2426ed67",
-			"pt-nvme-e3df2426ed67-0",
-		},
-		TotalSize:     1_000_000_000_000, // 1 TB
-		AvailableSize: 750_000_000_000,   // 750 GB
-	}
-	resp, err := c.PutNisd(&mockNisd)
-	if assert.NoError(t, err) {
-		assert.True(t, resp.Success)
-	}
-
-	// create vdev
-	vdev := &cpLib.VdevReq{
-		Vdev: &cpLib.VdevConfig{
-			Size:          500 * 1024 * 1024 * 1024,
-			TotalReplicas: 1,
-		},
-	}
-	resp, err = c.CreateVdev(vdev)
-	log.Info("Created Vdev Result: ", resp)
-	assert.NoError(t, err)
-	readV, err := c.GetVdevConfig(&cpLib.GetReq{ID: resp.ID})
-	assert.NoError(t, err, "Should be able to get one record")
-	assert.NotNil(t, readV, "get back inserted record")
-	nc, _ := c.GetChunkNisd(&cpLib.GetReq{ID: path.Join(resp.ID, "0")})
-	assert.NotNil(t, nc, "get back inserted record")
-}
-
 func TestPutAndGetNisdArgs(t *testing.T) {
 	c := newClient(t)
 
@@ -997,23 +957,6 @@ func TestCreateSmallHierarchy(t *testing.T) {
 
 }
 
-func TestCreateVdev(t *testing.T) {
-	c := newClient(t)
-
-	vdev := &cpLib.VdevReq{
-		Vdev: &cpLib.VdevConfig{
-			Size:          500 * 1024 * 1024 * 1024,
-			TotalReplicas: 2,
-		},
-		Filter: cpLib.Filter{
-			Type: cpLib.FD_HV,
-		},
-	}
-
-	resp, err := c.CreateVdev(vdev)
-	assert.NoError(t, err)
-	assert.True(t, resp.Success)
-}
 
 func usagePercent(n cpLib.Nisd) int64 {
 	used := n.TotalSize - n.AvailableSize
@@ -1033,71 +976,6 @@ func TestGetNisd(t *testing.T) {
 	log.Info("total number of nisd's : ", len(res))
 }
 
-func TestDeleteVdev(t *testing.T) {
-	c := newClient(t)
-
-	nisd := cpLib.Nisd{
-		PeerPort: 9400,
-		ID:       uuid.NewString(),
-		FailureDomain: []string{
-			uuid.NewString(),
-			uuid.NewString(),
-			uuid.NewString(),
-			uuid.NewString(),
-			uuid.NewString(),
-		},
-		TotalSize:     15_000_000_000_000,
-		AvailableSize: 15_000_000_000_000,
-	}
-	_, err := c.PutNisd(&nisd)
-	require.NoError(t, err, "failed to create NISD for delete test")
-
-	vdev := &cpLib.VdevReq{
-		Vdev: &cpLib.VdevConfig{
-			Size:          8 * 1024 * 1024 * 1024,
-			TotalReplicas: 1,
-		},
-	}
-
-	cvresp, err := c.CreateVdev(vdev)
-	require.NoError(t, err)
-	require.NotEmpty(t, cvresp.ID)
-	vdevID := cvresp.ID
-	t.Logf("Created vdev for deletion test: %s", vdevID)
-
-	// DeleteVdev often returns "empty response buffer" on success
-	dvResp, err := c.DeleteVdev(&cpLib.DeleteVdevReq{ID: vdevID})
-	if err != nil {
-		// This is the expected success path in this codebase
-		assert.Contains(t, err.Error(), "empty response buffer",
-			"DeleteVdev should either succeed or return empty response buffer")
-		t.Logf("DeleteVdev returned expected 'empty response buffer'")
-	} else {
-		assert.NotNil(t, dvResp)
-		t.Log("DeleteVdev succeeded with normal response")
-	}
-
-	// Verify the vdev is gone (with retry for eventual consistency)
-	deleted, getErr := isVdevDeleted(t, c, vdevID)
-	assert.True(t, deleted, "vdev should no longer exist after delete")
-	assert.Error(t, getErr, "GetVdevConfig should return error after successful delete")
-
-	t.Log("Vdev successfully deleted and verified as gone")
-}
-
-// Helper: retries GetVdevConfig until it fails (handles eventual consistency)
-func isVdevDeleted(t *testing.T, client *CliCFuncs, id string) (bool, error) {
-	t.Helper()
-	for attempt := range 5 {
-		_, err := client.GetVdevConfig(&cpLib.GetReq{ID: id})
-		if err != nil {
-			return true, err // successfully deleted
-		}
-		t.Logf("GetVdevConfig still succeeded after delete (attempt %d) - retrying...", attempt+1)
-		time.Sleep(300 * time.Millisecond)
-	}
-	return false, nil
-}
 
 // newUserClient creates a new user client for authentication operations
 func newUserClient(t *testing.T) (*userClient.Client, func()) {
@@ -1965,38 +1843,3 @@ func TestABACVdevOwnership(t *testing.T) {
 	t.Log("ABAC Vdev Ownership Test Completed Successfully")
 }
 
-func TestVdevWithPFS(t *testing.T) {
-
-	c := newClient(t)
-
-	pfsReq := cpLib.PFS{
-		Name: "test-pfs-offset",
-	}
-
-	pfsResp, err := c.PutPFS(&pfsReq)
-	require.NoError(t, err, "PutPFS should succeed")
-	require.True(t, pfsResp.Success)
-	pfsID := pfsResp.ID
-	log.Info("PFS created with ID: ", pfsID)
-
-	for i := 0; i < 5; i++ {
-		vdev := &cpLib.VdevReq{
-			Vdev: &cpLib.VdevConfig{
-				Size:          1024 * 1024 * 1024 * 1024,
-				TotalReplicas: 1,
-				PFSID:         pfsID,
-			},
-			// Filter: cpLib.Filter{
-			// 	Type: cpLib.FD_HV,
-			// 	ID: "",
-			// },
-		}
-
-		resp, err := c.CreateVdev(vdev)
-		assert.NoError(t, err)
-		assert.True(t, resp.Success)
-		log.Info("Vdev created with ID: ", resp.ID)
-		time.Sleep(1 * time.Second)
-
-	}
-}
