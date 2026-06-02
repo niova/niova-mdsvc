@@ -195,7 +195,9 @@ func main() {
 	cpAPI.RegisterWritePrepFunc(cpLib.PUT_NISD_ARGS, srvctlplanefuncs.WPNisdArgs)
 	cpAPI.RegisterReadFunc(cpLib.GET_VDEV_INFO, srvctlplanefuncs.ReadVdevInfo)
 	cpAPI.RegisterReadFunc(cpLib.GET_ALL_VDEV, srvctlplanefuncs.ReadAllVdevInfo)
-	cpAPI.RegisterReadFunc(cpLib.GET_CHUNK_NISD, srvctlplanefuncs.ReadChunk)
+	cpAPI.RegisterReadFunc(cpLib.GET_CHUNK, srvctlplanefuncs.ReadChunk)
+	cpAPI.RegisterReadFunc(cpLib.GET_CHUNK_NISD, srvctlplanefuncs.ReadChunkNisd)
+
 	cpAPI.RegisterApplyFunc(cpLib.DELETE_VDEV, srvctlplanefuncs.APDeleteVdev)
 
 	cpAPI.RegisterWritePrepFunc(userlib.PutUserAPI, userserver.PutUser)

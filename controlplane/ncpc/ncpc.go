@@ -745,7 +745,7 @@ func isSingleWriteReqValid(cli *clientHandler) bool {
 	return true
 }
 
-func DumpVdevCfgsToJSON(vdevs []cpLib.VdevCfg, filePath string) error {
+func DumpVdevConfigsToJSON(vdevs []cpLib.VdevConfig, filePath string) error {
 	dir := filepath.Dir(filePath)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return err
@@ -1109,7 +1109,7 @@ func main() {
 		log.Debug("WriteDevice successful", resp)
 	case "CreateVdev":
 		// Step 1: Create first Vdev
-		vdev := cpLib.Vdev{Cfg: cpLib.VdevCfg{
+		vdev := cpLib.Vdev{Cfg: cpLib.VdevConfig{
 			Size: vdevSize,
 		}}
 		req := &cpLib.VdevReq{
@@ -1121,15 +1121,15 @@ func main() {
 			os.Exit(-1)
 		}
 		log.Info("Vdev created successfully with UUID:", resp)
-	case "GetVdevCfgs":
+	case "GetVdevConfigs":
 		req := &cpLib.GetReq{}
-		vdevs, err := c.GetVdevCfgs(req)
+		vdevs, err := c.GetVdevConfigs(req)
 		if err != nil {
 			log.Errorf("Failed to fetch Vdev configurations: %v", err)
 			os.Exit(1)
 		}
 		log.Infof("Successfully retrieved %d Vdev configurations", len(vdevs))
-		DumpVdevCfgsToJSON(vdevs, vdevOutputFile)
+		DumpVdevConfigsToJSON(vdevs, vdevOutputFile)
 	case "PopulateTopology":
 		err = clientObj.populateTopology(clientObj.requestValue)
 		if err != nil {

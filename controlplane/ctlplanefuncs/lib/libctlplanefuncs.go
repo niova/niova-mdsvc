@@ -48,7 +48,9 @@ const (
 	GET_VDEV_INFO       = "get_vdev_info" // new
 	GET_ALL_VDEV        = "get_all_vdev"
 	GET_CHUNK_NISD      = "get_chunk_nisd"
-	GET_NISD_INFO       = "get_nisd_info"
+	GET_CHUNK           = "get_chunk"
+
+	GET_NISD_INFO = "get_nisd_info"
 
 	PUT_NISD_ARGS  = "PutNisdArgs"
 	GET_NISD_ARGS  = "GetNisdArgs"
@@ -309,8 +311,6 @@ func (v *VdevConfig) TotalBlocksPerChunk() int {
 	return int(v.TotalDataBlks + v.TotalParityBlks)
 }
 
-
-
 type PFS struct {
 	XMLName xml.Name `xml:"PFS"`
 	ID      string   `xml:"ID" json:"ID"`
@@ -333,8 +333,8 @@ type Chunk struct {
 }
 
 type Vdev struct {
-	Config VdevConfig `xml:"Config"`
-	Chunks []Chunk    `xml:"Chunks>Chunk"`
+	Cfg          VdevConfig  `xml:"Config"`
+	NisdToChkMap []NisdChunk `xml:"NisdChunks>Chunk"`
 }
 
 type Filter struct {
@@ -423,9 +423,9 @@ func MatchIPs(a, b []string) bool {
 }
 
 type ChunkNisd struct {
-	XMLName     xml.Name `xml:"ChunkNisd"`
-	TotalBlocks uint8    `xml:"NBLOCKS"`
-	NisdUUIDs   string   `xml:"NISDs"`
+	XMLName       xml.Name `xml:"ChunkNisd"`
+	TotalReplicas uint8    `xml:"NREPLICAS"`
+	NisdUUIDs     string   `xml:"NISDs"`
 }
 
 func RegisterGOBStructs() {

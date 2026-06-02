@@ -66,6 +66,8 @@ func GetRespStruct(name string) any {
 		return &[]cpLib.Device{}
 	case cpLib.GET_CHUNK_NISD:
 		return &cpLib.ChunkNisd{}
+	case cpLib.GET_CHUNK:
+		return &cpLib.Chunk{}
 	case cpLib.GET_VDEV_INFO:
 		return &cpLib.VdevConfig{}
 	case cpLib.GET_ALL_VDEV:
