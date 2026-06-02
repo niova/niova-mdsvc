@@ -957,7 +957,6 @@ func TestCreateSmallHierarchy(t *testing.T) {
 
 }
 
-
 func usagePercent(n cpLib.Nisd) int64 {
 	used := n.TotalSize - n.AvailableSize
 	return (used * 100) / n.TotalSize
@@ -975,7 +974,6 @@ func TestGetNisd(t *testing.T) {
 	}
 	log.Info("total number of nisd's : ", len(res))
 }
-
 
 // newUserClient creates a new user client for authentication operations
 func newUserClient(t *testing.T) (*userClient.Client, func()) {
@@ -1842,4 +1840,3 @@ func TestABACVdevOwnership(t *testing.T) {
 
 	t.Log("ABAC Vdev Ownership Test Completed Successfully")
 }
-

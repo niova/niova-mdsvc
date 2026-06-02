@@ -274,8 +274,8 @@ func TestVdevOwnershipABAC(t *testing.T) {
 
 	adminClient := newClientWithToken(t, adminToken)
 	nisd := cpLib.Nisd{
-		PeerPort: 9300,
-		ID:       uuid.NewString(),
+		PeerPort:      9300,
+		ID:            uuid.NewString(),
 		FailureDomain: []string{uuid.NewString(), uuid.NewString(), uuid.NewString(), "dev-abac", "dev-abac-p"},
 		TotalSize:     100 * cpLib.CHUNK_SIZE,
 		AvailableSize: 100 * cpLib.CHUNK_SIZE,
@@ -298,8 +298,8 @@ func TestVdevNisdChunkQuery(t *testing.T) {
 	c := newClient(t)
 	nisdID := uuid.NewString()
 	nisd := cpLib.Nisd{
-		PeerPort: 8101,
-		ID:       nisdID,
+		PeerPort:      8101,
+		ID:            nisdID,
 		FailureDomain: []string{uuid.NewString(), uuid.NewString(), uuid.NewString(), "dev-q", "dev-q-p"},
 		TotalSize:     100 * cpLib.CHUNK_SIZE,
 		AvailableSize: 100 * cpLib.CHUNK_SIZE,
@@ -307,7 +307,7 @@ func TestVdevNisdChunkQuery(t *testing.T) {
 	c.PutNisd(&nisd)
 
 	resp, _ := c.CreateVdev(&cpLib.VdevReq{Vdev: &cpLib.VdevConfig{Size: cpLib.CHUNK_SIZE, TotalReplicas: 1}})
-	
+
 	readV, err := c.GetVdevConfig(&cpLib.GetReq{ID: resp.ID})
 	assert.NoError(t, err)
 	assert.NotNil(t, readV)
@@ -485,6 +485,8 @@ func checkIsVdevDeleted(t *testing.T, client *CliCFuncs, id string) (bool, error
 }
 
 func calcUsagePercent(total, available int64) int64 {
-	if total == 0 { return 0 }
+	if total == 0 {
+		return 0
+	}
 	return ((total - available) * 100) / total
 }

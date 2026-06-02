@@ -226,8 +226,8 @@ func TestWPCreateVdev(t *testing.T) {
 				Token: tc.setupToken(),
 				Payload: ctlplfl.VdevReq{
 					Vdev: &ctlplfl.VdevConfig{
-						Size:       tc.vdevSize,
-						TotalChunks:  uint32(tc.numChunks),
+						Size:          tc.vdevSize,
+						TotalChunks:   uint32(tc.numChunks),
 						TotalReplicas: uint8(tc.numReplica),
 					},
 				},
@@ -311,8 +311,8 @@ func TestWPCreateVdev_NilAuthorizer(t *testing.T) {
 		Token: token,
 		Payload: ctlplfl.VdevReq{
 			Vdev: &ctlplfl.VdevConfig{
-				Size:       1073741824,
-				TotalChunks:  4,
+				Size:          1073741824,
+				TotalChunks:   4,
 				TotalReplicas: 3,
 			},
 		},

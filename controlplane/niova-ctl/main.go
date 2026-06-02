@@ -240,7 +240,7 @@ type model struct {
 	vdevEntityUUIDInput    textinput.Model
 	vdevFilterTypeInput    textinput.Model
 	vdevFormActiveField    inputField              // Track which field is currently active
-	createdVdevs           []ctlplfl.VdevConfig       // Store created Vdevs for summary
+	createdVdevs           []ctlplfl.VdevConfig    // Store created Vdevs for summary
 	nisdCache              map[string]ctlplfl.Nisd // NISD UUID → NISD info, populated on device view entry
 	vdevCreationProgress   int                     // Track creation progress
 	vdevCreationTotal      int                     // Total Vdevs to create
@@ -9085,8 +9085,8 @@ func (m model) createSingleVdev(size int64, replica int, index int) VdevCreation
 	}
 	vdev := &ctlplfl.VdevReq{
 		Vdev: &ctlplfl.VdevConfig{
-			Name:       name,
-			Size:       size,
+			Name:          name,
+			Size:          size,
 			TotalReplicas: uint8(replica),
 		},
 		Filter: filter,
