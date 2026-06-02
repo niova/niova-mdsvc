@@ -1373,6 +1373,18 @@ func ReadVdevsInfoWithChunkMapping(args ...interface{}) (interface{}, error) {
 				if nr, err := strconv.ParseUint(string(value), 10, 8); err == nil {
 					vdev.Cfg.TotalReplicas = uint8(nr)
 				}
+			case TOTAL_DATA_BLKS:
+				if tdb, err := strconv.ParseUint(string(value), 10, 64); err == nil {
+					vdev.Cfg.TotalDataBlks = uint8(tdb)
+				}
+			case TOTAL_PARITY_BLKS:
+				if tpb, err := strconv.ParseUint(string(value), 10, 64); err == nil {
+					vdev.Cfg.TotalParityBlks = uint8(tpb)
+				}
+			case REDUNDANCY_MODE:
+				if rm, err := strconv.ParseUint(string(value), 10, 8); err == nil {
+					vdev.Cfg.Redundancy = ctlplfl.RedundancyMode(rm)
+				}
 			case pfsKey:
 				vdev.Cfg.PFSID = string(value)
 			case NAME:
