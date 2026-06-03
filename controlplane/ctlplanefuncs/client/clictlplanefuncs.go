@@ -622,8 +622,8 @@ func (ccf *CliCFuncs) GetChunkNisd(req *ctlplfl.GetReq) (ctlplfl.ChunkNisd, erro
 	return cn, nil
 }
 
-func (ccf *CliCFuncs) GetChunk(req *ctlplfl.GetReq) (ctlplfl.ChunkNisd, error) {
-	cn := ctlplfl.ChunkNisd{}
+func (ccf *CliCFuncs) GetChunk(req *ctlplfl.GetReq) (ctlplfl.Chunk, error) {
+	cn := ctlplfl.Chunk{}
 	log.Info("fetching chunk Info for:", req.ID)
 	cpReq := &ctlplfl.CPReq{
 		Token:   ccf.token,
@@ -631,7 +631,7 @@ func (ccf *CliCFuncs) GetChunk(req *ctlplfl.GetReq) (ctlplfl.ChunkNisd, error) {
 	}
 	cpResp, err := ccf.get(cpReq, ctlplfl.GET_CHUNK, &cn)
 	if err != nil {
-		log.Error("GetHypervisor failed: ", err)
+		log.Error("GetChunk failed: ", err)
 		return cn, err
 	}
 
@@ -640,6 +640,26 @@ func (ccf *CliCFuncs) GetChunk(req *ctlplfl.GetReq) (ctlplfl.ChunkNisd, error) {
 	}
 
 	return cn, nil
+}
+
+func (ccf *CliCFuncs) GetChunks(req *ctlplfl.GetReq) ([]ctlplfl.Chunk, error) {
+	var chunks []ctlplfl.Chunk
+	log.Info("fetching bulk chunks for:", req.ID)
+	cpReq := &ctlplfl.CPReq{
+		Token:   ccf.token,
+		Payload: req,
+	}
+	cpResp, err := ccf.get(cpReq, ctlplfl.GET_CHUNK, &chunks)
+	if err != nil {
+		log.Error("GetChunks failed: ", err)
+		return nil, err
+	}
+
+	if err := cpResp.Err(); err != nil {
+		return nil, err
+	}
+
+	return chunks, nil
 }
 
 func (ccf *CliCFuncs) DeleteVdev(req *ctlplfl.DeleteVdevReq) (*ctlplfl.ResponseXML, error) {

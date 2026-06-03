@@ -30,17 +30,17 @@ type ParseEntity interface {
 	GetEntity(entity Entity) Entity
 }
 
-func ParseEntitiesRR[T Entity](readResult []map[string][]byte, pe ParseEntity) []T {
+func ParseEntitiesRR[T Entity](readResult []map[string][]byte, pe ParseEntity, idIdx int) []T {
 	entityMap := make(map[string]Entity)
 
 	for i := range readResult {
 		for k, v := range readResult[i] {
 			parts := strings.Split(strings.Trim(k, "/"), "/")
-			if len(parts) < ELEMENT_KEY || parts[BASE_KEY] != pe.GetRootKey() {
+			if len(parts) <= idIdx || parts[BASE_KEY] != pe.GetRootKey() {
 				continue
 			}
 
-			id := parts[BASE_UUID_PREFIX]
+			id := parts[idIdx]
 			entity, exists := entityMap[id]
 			if !exists {
 				entity = pe.NewEntity(id)
@@ -58,16 +58,16 @@ func ParseEntitiesRR[T Entity](readResult []map[string][]byte, pe ParseEntity) [
 	return result
 }
 
-func ParseEntities[T Entity](readResult map[string][]byte, pe ParseEntity) []T {
+func ParseEntities[T Entity](readResult map[string][]byte, pe ParseEntity, idIdx int) []T {
 	entityMap := make(map[string]Entity)
 
 	for k, v := range readResult {
 		parts := strings.Split(strings.Trim(k, "/"), "/")
-		if len(parts) < ELEMENT_KEY || parts[BASE_KEY] != pe.GetRootKey() {
+		if len(parts) <= idIdx || parts[BASE_KEY] != pe.GetRootKey() {
 			continue
 		}
 
-		id := parts[BASE_UUID_PREFIX]
+		id := parts[idIdx]
 		entity, exists := entityMap[id]
 		if !exists {
 			entity = pe.NewEntity(id)
@@ -83,17 +83,17 @@ func ParseEntities[T Entity](readResult map[string][]byte, pe ParseEntity) []T {
 	return result
 }
 
-func ParseEntitiesMap(readResult map[string][]byte, pe ParseEntity) map[string]Entity {
+func ParseEntitiesMap(readResult map[string][]byte, pe ParseEntity, idIdx int) map[string]Entity {
 	entityMap := make(map[string]Entity)
 
 	for k, v := range readResult {
 		parts := strings.Split(strings.Trim(k, "/"), "/")
 		// require at least ELEMENT_KEY to be present and that base key matches parser root
-		if len(parts) <= ELEMENT_KEY || parts[BASE_KEY] != pe.GetRootKey() {
+		if len(parts) <= idIdx || parts[BASE_KEY] != pe.GetRootKey() {
 			continue
 		}
 
-		id := parts[BASE_UUID_PREFIX]
+		id := parts[idIdx]
 		entity, exists := entityMap[id]
 		if !exists {
 			entity = pe.NewEntity(id)

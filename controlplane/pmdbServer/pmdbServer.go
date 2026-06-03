@@ -101,7 +101,7 @@ func PopulateHierarchy() error {
 		key = readResult.LastKey
 		prefix = filepath.Dir(readResult.LastKey)
 	}
-	nisdList := srvctlplanefuncs.ParseEntitiesRR[cpLib.Nisd](rangeReadContOut, srvctlplanefuncs.NisdParser{})
+	nisdList := srvctlplanefuncs.ParseEntitiesRR[cpLib.Nisd](rangeReadContOut, srvctlplanefuncs.NisdParser{}, srvctlplanefuncs.BASE_UUID_PREFIX)
 	for i := 0; i < len(nisdList); i++ {
 		err := srvctlplanefuncs.HR.AddNisd(&nisdList[i])
 		if err != nil {

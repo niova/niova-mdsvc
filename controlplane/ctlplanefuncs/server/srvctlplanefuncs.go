@@ -449,7 +449,7 @@ func ReadAllNisdConfigs(args ...interface{}) (interface{}, error) {
 		log.Error("Range read failure ", err)
 		return ctlplfl.FuncError(err)
 	}
-	nisdList := ParseEntities[ctlplfl.Nisd](readResult.ResultMap, NisdParser{})
+	nisdList := ParseEntities[ctlplfl.Nisd](readResult.ResultMap, NisdParser{}, BASE_UUID_PREFIX)
 	log.Debugf("ReadAllNisdConfigs: returning %d nisd configs", len(nisdList))
 	return ctlplfl.EncodeResponse(nisdList)
 }
@@ -481,7 +481,7 @@ func ReadNisdConfig(args ...interface{}) (interface{}, error) {
 		log.Error("Range read failure ", err)
 		return ctlplfl.FuncError(err)
 	}
-	nisdList := ParseEntities[ctlplfl.Nisd](readResult.ResultMap, NisdParser{})
+	nisdList := ParseEntities[ctlplfl.Nisd](readResult.ResultMap, NisdParser{}, BASE_UUID_PREFIX)
 	log.Debugf("ReadNisdConfig: returning nisd config for key %s", key)
 	return ctlplfl.EncodeResponse(nisdList[0])
 }
@@ -498,7 +498,7 @@ func getNisdList(cbArgs *PumiceDBServer.PmdbCbArgs) ([]ctlplfl.Nisd, error) {
 		log.Error("Range read failure ", err)
 		return nil, err
 	}
-	nisdList := ParseEntities[ctlplfl.Nisd](readResult.ResultMap, NisdParser{})
+	nisdList := ParseEntities[ctlplfl.Nisd](readResult.ResultMap, NisdParser{}, BASE_UUID_PREFIX)
 	return nisdList, nil
 }
 
@@ -558,7 +558,7 @@ func RdDeviceInfo(args ...interface{}) (interface{}, error) {
 		log.Error("Range read failure ", err)
 		return ctlplfl.FuncError(err)
 	}
-	deviceList := ParseEntities[ctlplfl.Device](readResult.ResultMap, deviceWithPartitionParser{})
+	deviceList := ParseEntities[ctlplfl.Device](readResult.ResultMap, deviceWithPartitionParser{}, BASE_UUID_PREFIX)
 	log.Debugf("RdDeviceInfo: returning device info for key %s", key)
 	return ctlplfl.EncodeResponse(deviceList)
 }
@@ -1114,7 +1114,7 @@ func ReadPartition(args ...interface{}) (interface{}, error) {
 		log.Error("Range read failure ", err)
 		return ctlplfl.FuncError(err)
 	}
-	pt := ParseEntities[ctlplfl.DevicePartition](readResult.ResultMap, ptParser{})
+	pt := ParseEntities[ctlplfl.DevicePartition](readResult.ResultMap, ptParser{}, BASE_UUID_PREFIX)
 	log.Debugf("ReadPartition: returning %d partition(s) for key %s", len(pt), key)
 	return ctlplfl.EncodeResponse(pt)
 }
@@ -1161,7 +1161,7 @@ func ReadPDUCfg(args ...interface{}) (interface{}, error) {
 		log.Error("Range read failure: ", err)
 		return ctlplfl.FuncError(err)
 	}
-	pduList := ParseEntities[ctlplfl.PDU](readResult.ResultMap, pduParser{})
+	pduList := ParseEntities[ctlplfl.PDU](readResult.ResultMap, pduParser{}, BASE_UUID_PREFIX)
 
 	log.Debugf("ReadPDUCfg: returning %d PDU config(s) for key %s", len(pduList), key)
 	return ctlplfl.EncodeResponse(pduList)
@@ -1210,7 +1210,7 @@ func ReadRackCfg(args ...interface{}) (interface{}, error) {
 		log.Error("Range read failure ", err)
 		return ctlplfl.FuncError(err)
 	}
-	rackList := ParseEntities[ctlplfl.Rack](readResult.ResultMap, rackParser{})
+	rackList := ParseEntities[ctlplfl.Rack](readResult.ResultMap, rackParser{}, BASE_UUID_PREFIX)
 	log.Debugf("ReadRackCfg: returning %d rack config(s) for key %s", len(rackList), key)
 	return ctlplfl.EncodeResponse(rackList)
 }
@@ -1260,7 +1260,7 @@ func ReadHyperVisorCfg(args ...interface{}) (interface{}, error) {
 		return ctlplfl.FuncError(err)
 	}
 
-	hvList := ParseEntities[ctlplfl.Hypervisor](readResult.ResultMap, hvParser{})
+	hvList := ParseEntities[ctlplfl.Hypervisor](readResult.ResultMap, hvParser{}, BASE_UUID_PREFIX)
 
 	log.Debugf("ReadHyperVisorCfg: returning %d hypervisor config(s) for key %s", len(hvList), key)
 	return ctlplfl.EncodeResponse(hvList)
@@ -1330,7 +1330,7 @@ func ReadVdevsInfoWithChunkMapping(args ...interface{}) (interface{}, error) {
 		return ctlplfl.FuncError(err)
 	}
 	// ParseEntitiesMap now returns map[string]Entity
-	nisdEntityMap := ParseEntitiesMap(nisdResult.ResultMap, NisdParser{})
+	nisdEntityMap := ParseEntitiesMap(nisdResult.ResultMap, NisdParser{}, BASE_UUID_PREFIX)
 
 	readResult, err := cbArgs.Store.RangeRead(storageiface.RangeReadArgs{
 		Selector: colmfamily,
@@ -1588,7 +1588,7 @@ func ReadAllVdevInfo(args ...interface{}) (interface{}, error) {
 	}
 
 	// TODO: move this to parsing file
-	vdevList := ParseEntities[ctlplfl.VdevConfig](rqResult.ResultMap, vdevParser{})
+	vdevList := ParseEntities[ctlplfl.VdevConfig](rqResult.ResultMap, vdevParser{}, BASE_UUID_PREFIX)
 	log.Debugf("ReadAllVdevInfo: returning %d vdev(s)", len(vdevList))
 	return ctlplfl.EncodeResponse(vdevList)
 }
@@ -1608,22 +1608,33 @@ func ReadChunk(args ...interface{}) (interface{}, error) {
 		return ctlplfl.AuthError(err)
 	}
 	keys := strings.Split(strings.Trim(req.ID, "/"), "/")
-	if len(keys) < 2 {
-		log.Errorf("invalid request ID format %q: expected vdevID/chunkIndex", req.ID)
-		return ctlplfl.FuncError(fmt.Errorf("invalid request ID format: expected vdevID/chunkIndex"))
+	if len(keys) < 1 {
+		log.Errorf("invalid request ID format %q: expected vdevID[/chunkIndex]", req.ID)
+		return ctlplfl.FuncError(fmt.Errorf("invalid request ID format: expected vdevID[/chunkIndex]"))
 	}
-	vdevID, chunk := keys[0], keys[1]
+	vdevID := keys[0]
+	var chunk string
+	if len(keys) > 1 {
+		chunk = keys[1]
+	}
 
 	// Check authorization: ownership of the vdev implies access to its chunks
 	if authorizer != nil {
 		attributes := map[string]string{"vdev": vdevID}
 		if !authorizer.Authorize(authz.ReadChunk, tc.UserID, []string{tc.Role}, attributes, cbargs.Store, colmfamily) {
-			log.Errorf("user %s with role %s not authorized to read chunk nisd for vdev %s", tc.UserID, tc.Role, vdevID)
+			log.Errorf("user %s with role %s not authorized to read chunk info for vdev %s", tc.UserID, tc.Role, vdevID)
 			return ctlplfl.AuthError(fmt.Errorf("authorization failed"))
 		}
 	}
 
-	vcKey := path.Clean(getConfKey(vdevKey, path.Join(vdevID, chunkKey, chunk))) + "/"
+	var vcKey string
+	if chunk == "" {
+		// Fetch all chunks for the vdev
+		vcKey = path.Clean(getConfKey(vdevKey, path.Join(vdevID, chunkKey))) + "/"
+	} else {
+		// Fetch a specific chunk
+		vcKey = path.Clean(getConfKey(vdevKey, path.Join(vdevID, chunkKey, chunk))) + "/"
+	}
 
 	log.Info("searching for key:", vcKey)
 
@@ -1638,37 +1649,25 @@ func ReadChunk(args ...interface{}) (interface{}, error) {
 		return ctlplfl.FuncError(err)
 	}
 
-	// Parse chunk placements using chunkParser interface
-	cp := chunkParser{}
-	chunkMap := make(map[string]Entity)
-	for k, v := range rqResult.ResultMap {
-		parts := strings.Split(strings.Trim(k, "/"), "/")
-		if len(parts) < 5 || parts[0] != cp.GetRootKey() || parts[2] != chunkKey {
-			continue
+	// Parse chunk placements using chunkParser interface and ParseEntities
+	chunkList := ParseEntities[ctlplfl.Chunk](rqResult.ResultMap, chunkParser{}, 3)
+
+	if len(chunkList) == 0 {
+		if chunk != "" {
+			return ctlplfl.FuncError(fmt.Errorf("chunk not found"))
 		}
-		chunkIdx := parts[3]
-		entity, exists := chunkMap[chunkIdx]
-		if !exists {
-			entity = cp.NewEntity(chunkIdx)
-			chunkMap[chunkIdx] = entity
-		}
-		cp.ParseField(entity, parts, v)
+		// Bulk request returning empty list is fine
+		return ctlplfl.EncodeResponse(chunkList)
 	}
 
-	if len(chunkMap) == 0 {
-		return ctlplfl.FuncError(fmt.Errorf("chunk not found"))
+	if chunk != "" {
+		// Return the requested single chunk
+		log.Debugf("ReadChunk: returning chunk info for vdev %s chunk %s", vdevID, chunk)
+		return ctlplfl.EncodeResponse(chunkList[0])
 	}
 
-	// Return the first (and only) chunk
-	var chunkInfo ctlplfl.Chunk
-	for _, e := range chunkMap {
-		chunkInfo = cp.GetEntity(e).(ctlplfl.Chunk)
-		break
-	}
-
-	log.Debugf("ReadChunk: returning chunk info for vdev %s chunk %s", vdevID, chunk)
-	return ctlplfl.EncodeResponse(chunkInfo)
-
+	log.Debugf("ReadChunk: returning %d chunks info for vdev %s", len(chunkList), vdevID)
+	return ctlplfl.EncodeResponse(chunkList)
 }
 
 func WPNisdArgs(args ...interface{}) (interface{}, error) {
@@ -1825,7 +1824,7 @@ func APDeleteVdev(args ...interface{}) (interface{}, error) {
 						log.Error("Range read failure ", err)
 						return ctlplfl.FuncError(err)
 					}
-					nisdList := ParseEntities[ctlplfl.Nisd](nisdRR.ResultMap, NisdParser{})
+					nisdList := ParseEntities[ctlplfl.Nisd](nisdRR.ResultMap, NisdParser{}, BASE_UUID_PREFIX)
 					if len(nisdList) > 0 {
 						nisdRefundMap[nisdID] = &nisdList[0]
 					}
