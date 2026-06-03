@@ -1049,7 +1049,7 @@ func APCreateVdev(args ...interface{}) (interface{}, error) {
 	}
 
 	if req.Vdev.PFSID != "" {
-		offset++
+		offset += req.Vdev.TotalBlocksPerChunk()
 		intrm.Changes = append(intrm.Changes, funclib.CommitChg{
 			Key:   []byte(fmt.Sprintf("%s/%s/offset", pfsKey, req.Vdev.PFSID)),
 			Value: []byte(strconv.Itoa(offset)),
