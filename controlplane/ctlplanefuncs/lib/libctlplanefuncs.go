@@ -423,9 +423,12 @@ func MatchIPs(a, b []string) bool {
 }
 
 type ChunkNisd struct {
-	XMLName       xml.Name `xml:"ChunkNisd"`
-	TotalReplicas uint8    `xml:"NREPLICAS"`
-	NisdUUIDs     string   `xml:"NISDs"`
+	XMLName         xml.Name       `xml:"ChunkNisd"`
+	Redundancy      RedundancyMode `xml:"RedundancyType,attr"` // Replica | EC
+	TotalDataBlks   uint8          `xml:"TotalDataBlks"`
+	TotalParityBlks uint8          `xml:"TotalParityBlks"`
+	TotalReplicas   uint8          `xml:"NREPLICAS"` // remove
+	NisdUUIDs       string         `xml:"NISDs"`
 }
 
 func RegisterGOBStructs() {

@@ -1992,12 +1992,12 @@ func ReadChunkNisd(args ...interface{}) (interface{}, error) {
 	req := cpReq.Payload.(ctlplfl.GetReq)
 
 	if err := req.ValidateRequest(); err != nil {
-		log.Error("failed to validate request:", err)
+		log.Error("ValidateRequest: failed to validate request:", err)
 		return ctlplfl.FuncError(err)
 	}
 	tc, err := ValidateToken(cpReq.Token)
 	if err != nil {
-		log.Errorf("ReadChunkNisd: token validation failed: %v", err)
+		log.Errorf("ValidateToken: token validation failed: %v", err)
 		return ctlplfl.AuthError(err)
 	}
 	keys := strings.Split(strings.Trim(req.ID, "/"), "/")
@@ -2027,20 +2027,20 @@ func ReadChunkNisd(args ...interface{}) (interface{}, error) {
 		Prefix:   vcKey,
 	})
 	if err != nil {
-		log.Error("RangeReadKV failure: ", err)
+		log.Error("chunk range read failure: ", err)
 		return ctlplfl.FuncError(err)
 	}
 
-	var ids []string
-	for _, v := range rqResult.ResultMap {
-		ids = append(ids, string(v))
+	entities := ParseEntities[ctlplfl.ChunkNisd](rqResult.ResultMap, chunkNisdParser{}, 3)
+	if len(entities) == 0 {
+		log.Errorf("ReadChunkNisd: no metadata found for vdev %s chunk %s", vdevID, chunk)
+		return ctlplfl.FuncError(fmt.Errorf("chunk not found"))
 	}
-	chunkInfo := ctlplfl.ChunkNisd{
-		NisdUUIDs:     strings.Join(ids, ","),
-		TotalReplicas: uint8(len(rqResult.ResultMap)),
-	}
+	log.Trace("successfully parsed chunk: ", entities)
+	chunkInfo := entities[0]
 
-	log.Debugf("ReadChunkNisd: returning chunk-nisd info for vdev %s chunk %s", vdevID, chunk)
+
+	log.Debugf("ReadChunkNisd: returning chunk-nisd info for vdev %s chunk %s: %+v", vdevID, chunk, chunkInfo)
 	return ctlplfl.EncodeResponse(chunkInfo)
 
 }

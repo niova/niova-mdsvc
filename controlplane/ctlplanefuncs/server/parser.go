@@ -476,3 +476,101 @@ func (chunkParser) ParseField(entity Entity, parts []string, value []byte) {
 }
 
 func (chunkParser) GetEntity(entity Entity) Entity { return *entity.(*ctlplfl.Chunk) }
+type cnInternal struct {
+	cn      ctlplfl.ChunkNisd
+	replica map[uint8]string
+	data    map[uint8]string
+	parity  map[uint8]string
+}
+
+type chunkNisdParser struct{}
+
+func (chunkNisdParser) GetRootKey() string { return vdevKey }
+
+func (chunkNisdParser) NewEntity(id string) Entity {
+	return &cnInternal{
+		replica: make(map[uint8]string),
+		data:    make(map[uint8]string),
+		parity:  make(map[uint8]string),
+	}
+}
+
+func (chunkNisdParser) ParseField(entity Entity, parts []string, value []byte) {
+	in := entity.(*cnInternal)
+
+	if len(parts) < 5 {
+		return
+	}
+
+	placement := strings.Split(parts[4], ".")
+	if len(placement) != 2 {
+		return
+	}
+
+	seq, err := strconv.ParseUint(placement[1], 10, 8)
+	if err != nil {
+		return
+	}
+
+	idx := uint8(seq)
+	nisdID := string(value)
+
+	switch placement[0] {
+	case "R":
+		in.replica[idx] = nisdID
+		in.cn.Redundancy = ctlplfl.RMReplica
+
+		if idx+1 > in.cn.TotalReplicas {
+			in.cn.TotalReplicas = idx + 1
+		}
+
+	case "D":
+		in.data[idx] = nisdID
+		in.cn.Redundancy = ctlplfl.RMEC
+
+		if idx+1 > in.cn.TotalDataBlks {
+			in.cn.TotalDataBlks = idx + 1
+		}
+
+	case "P":
+		in.parity[idx] = nisdID
+		in.cn.Redundancy = ctlplfl.RMEC
+
+		if idx+1 > in.cn.TotalParityBlks {
+			in.cn.TotalParityBlks = idx + 1
+		}
+	}
+}
+
+func (chunkNisdParser) GetEntity(entity Entity) Entity {
+	in := entity.(*cnInternal)
+
+	var ids []string
+
+	if in.cn.Redundancy == ctlplfl.RMReplica {
+		for i := uint8(0); i < in.cn.TotalReplicas; i++ {
+			if id, ok := in.replica[i]; ok {
+				ids = append(ids, id)
+			}
+		}
+		log.Info("rm replica: ", ids)
+	} else {
+		for i := uint8(0); i < in.cn.TotalDataBlks; i++ {
+			if id, ok := in.data[i]; ok {
+				ids = append(ids, id)
+			}
+		}
+
+		for i := uint8(0); i < in.cn.TotalParityBlks; i++ {
+			if id, ok := in.parity[i]; ok {
+				ids = append(ids, id)
+			}
+		}
+
+		log.Info("rm ec: ", ids)
+
+	}
+
+	in.cn.NisdUUIDs = strings.Join(ids, ",")
+	return in.cn
+}
