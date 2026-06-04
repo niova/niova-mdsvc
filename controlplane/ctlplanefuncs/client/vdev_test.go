@@ -318,7 +318,105 @@ func TestVdevNisdChunkQuery(t *testing.T) {
 }
 
 // Helpers
+func setupSmallHierarchy(t *testing.T, c *CliCFuncs) {
+	adminToken := getAdminToken(t)
+	pdus := []string{
+		"9bc244bc-df29-11f0-a93b-277aec17e401",
+	}
 
+	// 1 RACKS
+	racks := []string{
+		"3f082930-df29-11f0-ab7b-4bd430991101",
+	}
+
+	// 2 HVs
+	hvs := []string{
+		"bde1f08a-df63-11f0-88ef-430ddec19901",
+		"bde1f08a-df63-11f0-88ef-430ddec19902",
+	}
+
+	// 12 Devices
+	devices := []string{
+		"nvme-fb6358163001",
+		"nvme-fb6358163002",
+		"nvme-fb6358163003",
+		"nvme-fb6358163004",
+		"nvme-fb6358163005",
+		"nvme-fb6358163006",
+		"nvme-fb6358163007",
+		"nvme-fb6358163008",
+		"nvme-fb6358163009",
+		"nvme-fb6358163010",
+		"nvme-fb6358163011",
+		"nvme-fb6358163012",
+	}
+
+	mockNisd := make([]cpLib.Nisd, 0, 16)
+
+	pduCount := 1
+	rackPerPdu := 1
+	hvPerRack := 2
+	devPerHv := 2
+	nisdPerDev := 4 
+
+	rackIdx := 0
+	hvIdx := 0
+	devIdx := 0
+
+	nisdID := 1
+
+	c.SetToken(adminToken)
+	for p := 0; p < pduCount; p++ {
+		pdu := pdus[p]
+
+		for r := 0; r < rackPerPdu; r++ {
+			rack := racks[rackIdx]
+			rackIdx++
+
+			for h := 0; h < hvPerRack; h++ {
+				hv := hvs[hvIdx]
+				hvIdx++
+
+				for d := 0; d < devPerHv; d++ {
+					dev := devices[devIdx]
+					devIdx++
+
+					for n := 0; n < nisdPerDev; n++ {
+						nisd := cpLib.Nisd{
+							PeerPort: 8000 + uint16(nisdID),
+							ID:       fmt.Sprintf("ed7914c3-2e96-4f3e-8e0d-%012x", nisdID),
+							FailureDomain: []string{
+								pdu,
+								rack,
+								hv,
+								dev,
+								fmt.Sprintf("%s-%d", dev, n),
+							},
+							TotalSize:     1869169767219,
+							AvailableSize: 1869169767219,
+						}
+
+						mockNisd = append(mockNisd, nisd)
+						nisdID++
+					}
+				}
+			}
+		}
+	}
+	for _, n := range mockNisd {
+		resp, err := c.PutNisd(&n)
+		if assert.NoError(t, err) {
+			assert.True(t, resp.Success)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+
+
+
+
+// Helpers
 func setupLargeHierarchy(t *testing.T, c *CliCFuncs) {
 	adminToken := getAdminToken(t)
 	pdus := []string{
