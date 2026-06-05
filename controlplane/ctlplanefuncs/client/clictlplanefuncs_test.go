@@ -2145,3 +2145,52 @@ func TestCreateMountDeleteVdevClient(t *testing.T) {
 	_, err = c.GetVdevCfg(&cpLib.GetReq{ID: vdevID})
 	assert.Error(t, err)
 }
+
+func setupVdevByName(t *testing.T, c *CliCFuncs, size int64) string {
+	vdevReq := &cpLib.VdevReq{
+		Vdev: &cpLib.VdevCfg{
+			Name:       "vdev2",
+			ID:         uuid.NewString(),
+			Size:       size,
+			NumReplica: 1,
+		},
+	}
+
+	vdevResp, err := c.CreateVdev(vdevReq)
+	require.NoError(t, err)
+	require.True(t, vdevResp.Success)
+
+	return vdevResp.ID
+}
+
+func TestMountVdevByName(t *testing.T) {
+	c := newClient(t)
+
+	setupNisd(t, c, 8001, 15_000_000_000_000)
+	vdevID := setupVdevByName(t, c, 100*1024*1024*1024)
+
+	t.Run("Successful Mount", func(t *testing.T) {
+		req := &cpLib.MountVdevRequest{VdevID: "vdev2"}
+		info, err := c.MountVdev(req)
+
+		assert.NoError(t, err)
+		assert.Equal(t, vdevID, info.Vdev.ID)
+		assert.Equal(t, uint64(1), info.MountCounter)
+		assert.NotEmpty(t, info.AccessToken)
+		assert.False(t, info.LastUpdatedLTS.IsZero())
+	})
+
+	t.Run("Cooldown Limit", func(t *testing.T) {
+		_, err := c.MountVdev(&cpLib.MountVdevRequest{VdevID: "vdev2"})
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "mount request within active window")
+	})
+
+	t.Run("Successful Mount After cool down period", func(t *testing.T) {
+		time.Sleep(30 * time.Second)
+
+		info, err := c.MountVdev(&cpLib.MountVdevRequest{VdevID: "vdev2"})
+		assert.NoError(t, err)
+		assert.Equal(t, uint64(2), info.MountCounter)
+	})
+}

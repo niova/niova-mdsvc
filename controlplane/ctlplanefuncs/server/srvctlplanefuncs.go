@@ -1471,7 +1471,7 @@ func WPMountVdev(args ...interface{}) (interface{}, error) {
 	if !ok {
 		return nil, fmt.Errorf("invalid request type")
 	}
-	req, _ :=cpReq.Payload.(ctlplfl.MountVdevRequest)
+	req, _ := cpReq.Payload.(ctlplfl.MountVdevRequest)
 	if !ok {
 		return nil, fmt.Errorf("invalid payload type")
 	}
@@ -1520,11 +1520,31 @@ func APMountVdev(args ...interface{}) (interface{}, error) {
 		log.Errorf("token validation failed: %v", err)
 		return ctlplfl.AuthError(err)
 	}
-
+	vdevID := req.VdevID
+	if !isUUID(req.VdevID) {
+		vnKey := getConfKey(vnameKey, req.VdevID)
+		var rqResult *storageiface.RangeReadResult
+		rqResult, err = cbArgs.Store.RangeRead(storageiface.RangeReadArgs{
+			Selector: colmfamily,
+			Key:      vnKey,
+			BufSize:  cbArgs.ReplySize,
+			Prefix:   vnKey,
+		})
+		if err != nil {
+			log.Error("RangeReadKV failure: ", err)
+			return ctlplfl.FuncError(err)
+		}
+		for k, v := range rqResult.ResultMap {
+			parts := strings.Split(strings.Trim(k, "/"), "/")
+			if len(parts) == ELEMENT_KEY {
+				vdevID = string(v)
+			}
+		}
+	}
 	if authorizer != nil {
-		attributes := map[string]string{"vdev": req.VdevID}
+		attributes := map[string]string{"vdev": vdevID}
 		if !authorizer.Authorize(authz.APMountVdev, tc.UserID, []string{tc.Role}, attributes, cbArgs.Store, colmfamily) {
-			log.Errorf("user %s with role %s not authorized for vdev %s", tc.UserID, tc.Role, req.VdevID)
+			log.Errorf("user %s with role %s not authorized for vdev %s", tc.UserID, tc.Role, vdevID)
 			return ctlplfl.AuthError(fmt.Errorf("User is not authorized"))
 		}
 	}
@@ -1542,14 +1562,14 @@ func APMountVdev(args ...interface{}) (interface{}, error) {
 	}
 	currentTime := mntResp.LastUpdatedLTS
 
-	mcKey := fmt.Sprintf("%s/%s/%s/%s", vdevKey, req.VdevID, ctlplfl.MntKey, ctlplfl.MOUNT_COUNTER)
-	luKey := fmt.Sprintf("%s/%s/%s/%s", vdevKey, req.VdevID, ctlplfl.MntKey, ctlplfl.LAST_UPDATED_LTS)
+	mcKey := fmt.Sprintf("%s/%s/%s/%s", vdevKey, vdevID, ctlplfl.MntKey, ctlplfl.MOUNT_COUNTER)
+	luKey := fmt.Sprintf("%s/%s/%s/%s", vdevKey, vdevID, ctlplfl.MntKey, ctlplfl.LAST_UPDATED_LTS)
 	// TODO add mount keys as well
 
 	var counter uint64 = 0
 	var lastUpdated time.Time
 	// Fetch current state using RangeRead
-	vdevKey := fmt.Sprintf("%s/%s/", vdevKey, req.VdevID)
+	vdevKey := fmt.Sprintf("%s/%s/", vdevKey, vdevID)
 	mntStateRR, err := cbArgs.Store.RangeRead(storageiface.RangeReadArgs{
 		Selector: colmfamily,
 		Key:      vdevKey,
@@ -1557,7 +1577,7 @@ func APMountVdev(args ...interface{}) (interface{}, error) {
 		Prefix:   vdevKey,
 	})
 	if err != nil {
-		log.Errorf("failed to read mount state for vdev %s: %v", req.VdevID, err)
+		log.Errorf("failed to read mount state for vdev %s: %v", vdevID, err)
 		return ctlplfl.FuncError(err)
 	}
 
@@ -1570,12 +1590,11 @@ func APMountVdev(args ...interface{}) (interface{}, error) {
 		}
 
 		if currentTime.Sub(lastUpdated) < ctlplfl.VDEV_MOUNT_LIMIT {
-			log.Errorf("vdev %s mount request within active window", req.VdevID)
+			log.Errorf("vdev %s mount request within active window", vdevID)
 			return ctlplfl.FuncError(fmt.Errorf("mount request within active window"))
 		}
 		counter++
 	}
-
 
 	// Generate Token
 	authtc := &auth.Token{
@@ -1583,7 +1602,7 @@ func APMountVdev(args ...interface{}) (interface{}, error) {
 		TTL:    time.Minute * 30, // Mount tokens last longer
 	}
 	claims := map[string]any{
-		"vdevID":       req.VdevID,
+		"vdevID":       vdevID,
 		"mountCounter": counter,
 		"issuedAt":     currentTime.Format(time.RFC3339),
 	}
@@ -1593,7 +1612,7 @@ func APMountVdev(args ...interface{}) (interface{}, error) {
 		return ctlplfl.FuncError(err)
 	}
 
-	log.Debugf("vdev token gen successfull with vdev %v, mc %v, time %v, token %v", req.VdevID, counter, currentTime, token)
+	log.Debugf("vdev token gen successfull with vdev %v, mc %v, time %v, token %v", vdevID, counter, currentTime, token)
 
 	vdevList := ParseEntities[ctlplfl.VdevCfg](mntStateRR.ResultMap, vdevParser{})
 	if len(vdevList) == 0 {
@@ -1602,7 +1621,7 @@ func APMountVdev(args ...interface{}) (interface{}, error) {
 	}
 	vdevCfg := vdevList[0]
 
-	log.Debugf("vdev cfg parsing succesfull %s", req.VdevID)
+	log.Debugf("vdev cfg parsing succesfull %s", vdevID)
 
 	// Commit changes
 	commitChgs := []funclib.CommitChg{
@@ -1621,7 +1640,7 @@ func APMountVdev(args ...interface{}) (interface{}, error) {
 		AccessToken:    token,
 	}
 
-	log.Debugf("vdev %s mounted successfully, counter=%d", req.VdevID, counter)
+	log.Debugf("vdev %s mounted successfully, counter=%d", vdevID, counter)
 	return ctlplfl.EncodeResponse(resp)
 }
 
