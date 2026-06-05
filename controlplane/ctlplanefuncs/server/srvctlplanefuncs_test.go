@@ -642,7 +642,7 @@ func TestAPDeleteVdev(t *testing.T) {
 			},
 			setupHR: func() {
 				HR.Init()
-				HR.AddNisd(&ctlplfl.Nisd{
+				nisd := &ctlplfl.Nisd{
 					ID:            testNisdUUID,
 					AvailableSize: 500000000000,
 					FailureDomain: []string{testPDU, testRack, testHV, testDev, testPT},
