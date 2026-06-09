@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -226,6 +227,7 @@ func TestCreateVdevWithFilters(t *testing.T) {
 			c.SetToken(adminToken)
 			vdevReq := &cpLib.VdevReq{
 				Vdev: &cpLib.VdevCfg{
+					Name:       "filtervdev" + uuid.NewString()[:8],
 					Size:       16 * 1024 * 1024 * 1024,
 					NumReplica: 1,
 				},
@@ -368,6 +370,7 @@ func TestCreateVdevWithInvalidFilters(t *testing.T) {
 
 			vdevReq := &cpLib.VdevReq{
 				Vdev: &cpLib.VdevCfg{
+					Name:       "invfiltervdev" + uuid.NewString()[:8],
 					Size:       1 * 1024 * 1024 * 1024, // 1 GiB
 					NumReplica: 2,
 				},

@@ -6,19 +6,21 @@ set -euo pipefail
 # ---- Defaults ----
 MODE="restart"
 TYPE="localhost"
+MP_PORT="9701"
 
 log() { echo "[deploy][$(date '+%Y-%m-%d %H:%M:%S')] $*"; }
 
 usage() {
-    echo "Usage: $0 [-m init|restart] [-t localhost|multinode] <config.yaml>"
+    echo "Usage: $0 [-m init|restart] [-t localhost|multinode] [-p port] <config.yaml>"
     exit 1
 }
 
 # ---- Parse args ----
-while getopts ":m:t:" opt; do
+while getopts ":m:t:p:" opt; do
     case $opt in
         m) MODE="$OPTARG" ;;
         t) TYPE="$OPTARG" ;;
+        p) MP_PORT="$OPTARG" ;;
         :) echo "Option -${OPTARG} requires an argument."; usage ;;
         *) usage ;;
     esac
@@ -183,6 +185,7 @@ if [ "$TYPE" = "localhost" ]; then
         -u "$PROXY_UUID" \
         -pa "${RAFT_CONFIG_DIR}/gossipNodes" \
         -n "Node" \
+        -mp "${MP_PORT}" \
         -l "${LOG_DIR}/proxy_${PROXY_UUID}.log" -ll Trace > "${LOG_DIR}/proxy_${PROXY_UUID}_stdout.log" 2>&1 &
 fi
 
@@ -216,6 +219,7 @@ BIN_DIR="__BIN_DIR__"
 LOG_DIR="__LOG_DIR__"
 DB_DIR="__DB_DIR__"
 RAFT_UUID="__RAFT_UUID__"
+MP_PORT="__MP_PORT__"
 
 # ---- Detect local IP addresses (works on both Ubuntu and Rocky) ----
 log_remote "Detecting identity..."
@@ -257,6 +261,7 @@ PROXY_UUID=$(uuidgen)
 nohup "${BIN_DIR}/CTLPlane_proxy" -r "${RAFT_UUID}" -u "$PROXY_UUID" \
     -pa "${RAFT_CONFIG_DIR}/gossipNodes" \
     -n "Node" \
+    -mp "${MP_PORT}" \
     -l "${LOG_DIR}/proxy_${PROXY_UUID}.log" -ll Trace \
     > "${LOG_DIR}/proxy_${PROXY_UUID}_stdout.log" 2>&1 &
 
@@ -272,6 +277,7 @@ REMOTE_EOF
         -e "s|__LOG_DIR__|${LOG_DIR}|g" \
         -e "s|__DB_DIR__|${DB_DIR}|g" \
         -e "s|__RAFT_UUID__|${RAFT_UUID}|g" \
+        -e "s|__MP_PORT__|${MP_PORT}|g" \
         "$REMOTE_SCRIPT"
     chmod +x "$REMOTE_SCRIPT"
 

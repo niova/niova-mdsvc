@@ -79,6 +79,12 @@ type proxyHandler struct {
 	ServicePortRangeS uint16
 	ServicePortRangeE uint16
 	portRange         []uint16
+
+	//Metrics
+	metrics         proxyMetrics
+	metricsPort     int
+	metricsInterval time.Duration
+	metricsEnabled  bool
 }
 
 var MaxPort = 60000
@@ -114,6 +120,9 @@ func (handler *proxyHandler) getCmdParams() {
 	flag.StringVar(&handler.requireStat, "s", "0", "HTTP server stat : provides status of requests, If needed provide 1")
 	flag.StringVar(&handler.serfPeersFilePath, "pa", "NULL", "Path to pmdb server serf configuration file")
 	flag.StringVar(&handler.coverageOutDir, "cov", "", "Path to write code coverage data")
+	flag.IntVar(&handler.metricsPort, "mp", 9701, "Prometheus metrics HTTP port")
+	flag.DurationVar(&handler.metricsInterval, "mi", 15*time.Second, "Metrics poll interval (e.g. 15s, 1m)")
+	flag.BoolVar(&handler.metricsEnabled, "metrics", true, "Enable Prometheus metrics server")
 	flag.Parse()
 	handler.raftUUID, _ = uuid.FromString(tempRaftUUID)
 	//FIXME: For testing purpose
@@ -424,6 +433,7 @@ func (handler *proxyHandler) dumpConfigToFile(outfilepath string) error {
 }
 
 func (handler *proxyHandler) PutLeaseHandlerCB(rncui string, wsn int64, request []byte, response *[]byte) error {
+	handler.metrics.incPutLease()
 	reqArgs := &pmdbClient.PmdbReq{
 		Rncui:       rncui,
 		ReqType:     PumiceDBCommon.LEASE_REQ,
@@ -448,6 +458,7 @@ func (handler *proxyHandler) PutLeaseHandlerCB(rncui string, wsn int64, request 
 }
 
 func (handler *proxyHandler) GetLeaseHandlerCB(request []byte, response *[]byte) error {
+	handler.metrics.incGetLease()
 	reqArgs := &pmdbClient.PmdbReq{
 		Rncui:   "",
 		ReqType: PumiceDBCommon.LEASE_REQ,
@@ -458,7 +469,8 @@ func (handler *proxyHandler) GetLeaseHandlerCB(request []byte, response *[]byte)
 	return res
 }
 
-func (handler *proxyHandler) PutKVHandlerCB(rncui string, wsn int64, request []byte, response *[]byte) error {
+func (handler *proxyHandler) PutKVHandlerCB(rncui string, wsn int64, request []byte, response *[]byte) (retErr error) {
+	handler.metrics.incPutKV()
 	reqArgs := &pmdbClient.PmdbReq{
 		Rncui:       rncui,
 		ReqType:     PumiceDBCommon.APP_REQ,
@@ -479,21 +491,22 @@ func (handler *proxyHandler) PutKVHandlerCB(rncui string, wsn int64, request []b
 
 	var responseBuffer bytes.Buffer
 	enc := gob.NewEncoder(&responseBuffer)
-	err = enc.Encode(responseObj)
+	retErr = enc.Encode(responseObj)
 	*response = responseBuffer.Bytes()
 
-	return err
+	return retErr
 }
 
-func (handler *proxyHandler) GetKVHandlerCB(request []byte, response *[]byte) error {
+func (handler *proxyHandler) GetKVHandlerCB(request []byte, response *[]byte) (retErr error) {
+	handler.metrics.incGetKV()
 	reqArgs := &pmdbClient.PmdbReq{
 		Rncui:   "",
 		ReqType: PumiceDBCommon.APP_REQ,
 		Request: request,
 		Reply:   response,
 	}
-	res := handler.pmdbClientObj.Get(reqArgs)
-	return res
+	retErr = handler.pmdbClientObj.Get(reqArgs)
+	return retErr
 }
 
 func encode(data interface{}) []byte {
@@ -537,11 +550,11 @@ Return(s) : error
 
 Description : Call back for PMDB read func requests to HTTP server.
 */
-func (handler *proxyHandler) GetFuncHandlerCB(name string, body []byte, response *[]byte, reader *http.Request) error {
+func (handler *proxyHandler) GetFuncHandlerCB(name string, body []byte, response *[]byte, reader *http.Request) (retErr error) {
+	handler.metrics.incGetFunc()
+	defer func() { <-limiter }()
 	limiter <- 1
-	defer func() {
-		<-limiter
-	}()
+
 	log.Info("ReadFuncHandlerCB called with name: ", name, string(body))
 	encType := GetEncodingType(reader)
 	var cpReq *cpLib.CPReq
@@ -586,11 +599,11 @@ Return(s) : error
 Description : Call back for PMDB write func requests to HTTP server.
 */
 func (handler *proxyHandler) PutFuncHandlerCB(name string, rncui string, wsn int64,
-	body []byte, response *[]byte, reader *http.Request) error {
+	body []byte, response *[]byte, reader *http.Request) (retErr error) {
+	handler.metrics.incPutFunc()
+	defer func() { <-limiter }()
 	limiter <- 1
-	defer func() {
-		<-limiter
-	}()
+
 	log.Tracef("FuncHandlerCB called | name=%s rncui=%s wsn=%d bodySize=%d",
 		name, rncui, wsn, len(body))
 
@@ -617,7 +630,6 @@ func (handler *proxyHandler) PutFuncHandlerCB(name string, rncui string, wsn int
 	err = handler.pmdbClientObj.Put(reqArgs)
 	if err != nil {
 		log.Error("Error in WriteEncoded and Response:", err)
-
 		// Encode structured error so client can decode it
 		encErr := writeErrorCPResp(encType, response, err)
 		if encErr != nil {
@@ -821,6 +833,11 @@ func main() {
 
 	//Wait till http server is up and running
 	proxyObj.checkHTTPLiveness()
+
+	//Start Prometheus metrics server
+	if proxyObj.metricsEnabled {
+		go proxyObj.startMetricsServer(proxyObj.metricsPort)
+	}
 
 	//Start the gossip
 	proxyObj.setSerfGossipData()

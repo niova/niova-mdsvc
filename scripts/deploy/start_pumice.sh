@@ -11,6 +11,9 @@ log() {
 CFG_FILE="$(readlink -f "$1")"
 [ -f "$CFG_FILE" ] || { echo "Config file not found"; exit 1; }
 
+# Optional second argument: proxy metrics port (default 9701)
+MP_PORT="${2:-9701}"
+
 log "Using config file: $CFG_FILE"
 
 # ---- Parse YAML ----
@@ -102,6 +105,7 @@ log "Starting CTLPlane_proxy with client UUID=${CUUID}"
     -u "${CUUID}" \
     -pa "${CONFIGS_DIR}/gossipNodes" \
     -n "Node_${CUUID}" \
+    -mp "${MP_PORT}" \
     -l "${LOG_DIR}/pmdb_client_${CUUID}.log" \
     -ll "Trace" \
     > "${LOG_DIR}/pmdb_client_${CUUID}_stdouterr" 2>&1 &
