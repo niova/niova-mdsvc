@@ -1820,7 +1820,7 @@ func APDeleteVdev(args ...interface{}) (interface{}, error) {
 	commitChgs := make([]funclib.CommitChg, 0)
 	deleteChgs := make([]funclib.CommitChg, 0)
 	nisdRefundMap := make(map[string]*ctlplfl.Nisd)
-	var vdevName string
+	var vdevName, vdevPFSID string
 
 	log.Infof("APDeleteVdev: deleting vdev %q", req.ID)
 	// Validate Vdev exists
@@ -1845,6 +1845,10 @@ func APDeleteVdev(args ...interface{}) (interface{}, error) {
 			// Capture vdev name so we can remove the reverse-index entry.
 			if strings.HasSuffix(k, "/"+cfgkey+"/"+NAME) {
 				vdevName = string(v)
+			}
+			// Capture PFSID so we can remove the pfs-vdev reverse-index entry.
+			if strings.HasSuffix(k, "/"+cfgkey+"/"+pfsKey) {
+				vdevPFSID = string(v)
 			}
 			// Delete
 			deleteChgs = append(deleteChgs, funclib.CommitChg{
@@ -1914,6 +1918,14 @@ func APDeleteVdev(args ...interface{}) (interface{}, error) {
 	if vdevName != "" {
 		deleteChgs = append(deleteChgs, funclib.CommitChg{
 			Key:   []byte(fmt.Sprintf("%s/%s", vnameKey, vdevName)),
+			Value: nil,
+		})
+	}
+
+	// Remove pfs-vdev reverse-index entry.
+	if vdevPFSID != "" {
+		deleteChgs = append(deleteChgs, funclib.CommitChg{
+			Key:   []byte(fmt.Sprintf("%s/%s/v/%s", pfsKey, vdevPFSID, req.ID)),
 			Value: nil,
 		})
 	}
