@@ -726,6 +726,29 @@ func TestAPDeleteVdev(t *testing.T) {
 			},
 		},
 		{
+			name: "SuccessfulDelete_WithPFS",
+			setupData: func(ds storageiface.DataStore) {
+				testPFSUUID := "a1b2c3d4-0000-0000-0000-000000000001"
+				setupBasicVdevAndNisd(ds, testVdevUUID, testNisdUUID)
+				// pfs cfg key inside vdev namespace
+				ds.Write(fmt.Sprintf("v/%s/cfg/pfs", testVdevUUID), testPFSUUID, "")
+				// pfs-vdev reverse mapping
+				ds.Write(fmt.Sprintf("pfs/%s/v/%s", testPFSUUID, testVdevUUID), "1", "")
+			},
+			setupHR:     func() { setupHRWithNisd(testNisdUUID, 1073741824) },
+			vdevID:      testVdevUUID,
+			expectError: false,
+			verify: func(t *testing.T, ds storageiface.DataStore) {
+				testPFSUUID := "a1b2c3d4-0000-0000-0000-000000000001"
+				if _, err := ds.Read(fmt.Sprintf("v/%s/cfg/pfs", testVdevUUID), ""); err == nil {
+					t.Error("vdev cfg/pfs key should be deleted")
+				}
+				if _, err := ds.Read(fmt.Sprintf("pfs/%s/v/%s", testPFSUUID, testVdevUUID), ""); err == nil {
+					t.Error("pfs-vdev reverse mapping key should be deleted")
+				}
+			},
+		},
+		{
 			name:          "Error_MissingToken",
 			setupData:     func(ds storageiface.DataStore) { setupBasicVdevAndNisd(ds, testVdevUUID, testNisdUUID) },
 			setupHR:       func() { setupHRWithNisd(testNisdUUID, 1073741824) },
