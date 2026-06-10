@@ -303,8 +303,8 @@ type VdevConfig struct {
 	PFSID           string         `xml:"PFSID"`
 }
 
-// TotalBlocksPerChunk returns the number of blocks each chunk has based on redundancy mode.
-func (v *VdevConfig) TotalBlocksPerChunk() int {
+// TotalRedundancyBlocksPerChunk returns the number of blocks each chunk has based on redundancy mode.
+func (v *VdevConfig) TotalRedundancyBlocksPerChunk() int {
 	if v.Redundancy == RMReplica {
 		return int(v.TotalReplicas)
 	}

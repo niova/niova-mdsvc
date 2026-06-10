@@ -32,7 +32,7 @@ func validateVdevDistribution(t *testing.T, filter *cpLib.Filter, v *cpLib.Vdev)
 		}
 	}
 
-	expectedTotalBlocks := v.Cfg.TotalBlocksPerChunk()
+	expectedTotalBlocks := v.Cfg.TotalRedundancyBlocksPerChunk()
 	if expectedTotalBlocks == 0 {
 		t.Errorf("Vdev %s has 0 expected blocks per chunk", v.Cfg.ID)
 		return false

@@ -21,6 +21,16 @@ const ( // Key Prefixes
 	NET_IDX = 3
 )
 
+const (	
+	CHUNK_REDUNDANCY = 0
+	CHUNK_SEQ = 1
+	CHUNK_PLACMENT = 4
+
+	MIN_CHUNK_KEY_LEN = 5
+	MIN_CHUNK_PLACEMENT_KEY_LEN = 2
+
+)
+
 type Entity interface{}
 
 type ParseEntity interface {
@@ -425,8 +435,7 @@ func (vdevParser) GetEntity(entity Entity) Entity { return *entity.(*ctlplfl.Vde
 // Key format: v/<vdevID>/c/<chunkIdx>/<Placement>
 // Replication: v/<vdevID>/c/0/R.0 -> nisd-1
 // EC:          v/<vdevID>/c/0/D.0 -> nisd-1
-//
-//	v/<vdevID>/c/0/P.0 -> nisd-2
+//		v/<vdevID>/c/0/P.0 -> nisd-2
 type chunkParser struct{}
 
 func (chunkParser) GetRootKey() string { return vdevKey }
@@ -441,16 +450,16 @@ func (chunkParser) NewEntity(id string) Entity {
 
 func (chunkParser) ParseField(entity Entity, parts []string, value []byte) {
 	chunk := entity.(*ctlplfl.Chunk)
-	if len(parts) < 5 {
+	if len(parts) < MIN_CHUNK_KEY_LEN {
 		return
 	}
 
-	placementStr := parts[4] // e.g. "R.0", "D.0", "P.0"
+	placementStr := parts[CHUNK_PLACMENT] // e.g. "R.0", "D.0", "P.0"
 	pParts := strings.Split(placementStr, ".")
-	if len(pParts) != 2 {
+	if len(pParts) != MIN_CHUNK_PLACEMENT_KEY_LEN {
 		return
 	}
-	seq, err := strconv.ParseUint(pParts[1], 10, 8)
+	seq, err := strconv.ParseUint(pParts[CHUNK_SEQ], 10, 8)
 	if err != nil {
 		return
 	}
@@ -460,7 +469,7 @@ func (chunkParser) ParseField(entity Entity, parts []string, value []byte) {
 		NisdID:   string(value),
 	}
 
-	switch pParts[0] {
+	switch pParts[CHUNK_REDUNDANCY] {
 	case "R":
 		placement.Type = ctlplfl.Replica
 		chunk.Redundancy = ctlplfl.RMReplica
@@ -498,16 +507,16 @@ func (chunkNisdParser) NewEntity(id string) Entity {
 func (chunkNisdParser) ParseField(entity Entity, parts []string, value []byte) {
 	in := entity.(*cnInternal)
 
-	if len(parts) < 5 {
+	if len(parts) < MIN_CHUNK_KEY_LEN {
 		return
 	}
 
-	placement := strings.Split(parts[4], ".")
-	if len(placement) != 2 {
+	placement := strings.Split(parts[CHUNK_PLACMENT], ".")
+	if len(placement) != MIN_CHUNK_PLACEMENT_KEY_LEN {
 		return
 	}
 
-	seq, err := strconv.ParseUint(placement[1], 10, 8)
+	seq, err := strconv.ParseUint(placement[CHUNK_SEQ], 10, 8)
 	if err != nil {
 		return
 	}
@@ -515,7 +524,7 @@ func (chunkNisdParser) ParseField(entity Entity, parts []string, value []byte) {
 	idx := uint8(seq)
 	nisdID := string(value)
 
-	switch placement[0] {
+	switch placement[CHUNK_REDUNDANCY] {
 	case "R":
 		in.replica[idx] = nisdID
 		in.cn.Redundancy = ctlplfl.RMReplica
@@ -553,7 +562,6 @@ func (chunkNisdParser) GetEntity(entity Entity) Entity {
 				ids = append(ids, id)
 			}
 		}
-		log.Info("rm replica: ", ids)
 	} else {
 		for i := uint8(0); i < in.cn.TotalDataBlks; i++ {
 			if id, ok := in.data[i]; ok {
@@ -566,8 +574,6 @@ func (chunkNisdParser) GetEntity(entity Entity) Entity {
 				ids = append(ids, id)
 			}
 		}
-
-		log.Info("rm ec: ", ids)
 
 	}
 

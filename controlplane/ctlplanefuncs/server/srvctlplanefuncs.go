@@ -596,19 +596,19 @@ func genAllocationKV(ID, chunk string, chunkType ctlplfl.ChunkType, nisd *ctlplf
 	vcKey := getVdevChunkKey(ID)
 	nKey := fmt.Sprintf("%s/%s/%s", nisdKey, nisd.Ptr.ID, ID)
 
-	prefix := ctlplfl.ChunkPrefix(chunkType)
+	rmode := ctlplfl.ChunkPrefix(chunkType)
 
 	*commitChgs = append(*commitChgs, funclib.CommitChg{
-		Key:   []byte(fmt.Sprintf("%s/%s/%s.%d", vcKey, chunk, prefix, i)),
+		Key:   []byte(fmt.Sprintf("%s/%s/%s.%d", vcKey, chunk, rmode, i)),
 		Value: []byte(nisd.Ptr.ID),
 	})
 
 	*commitChgs = append(*commitChgs, funclib.CommitChg{
 		Key:   []byte(nKey),
-		Value: []byte(fmt.Sprintf("%s.%d.%s", prefix, i, chunk)),
+		Value: []byte(fmt.Sprintf("%s.%d.%s", rmode, i, chunk)),
 	})
 
-	log.Debugf("generated kv updates for chunk %s/%s.%d", chunk, prefix, i)
+	log.Debugf("generated kv updates for chunk %s/%s.%d", chunk, rmode, i)
 }
 
 // isAlphanumeric returns true if s contains only ASCII letters and digits.
@@ -747,7 +747,7 @@ func allocateNisdPerChunk(req *ctlplfl.VdevReq, fd int, chunkIdx int,
 		return fmt.Errorf("no entities available in failure domain %d", fd)
 	}
 
-	totalBlocks := req.Vdev.TotalBlocksPerChunk()
+	totalBlocks := req.Vdev.TotalRedundancyBlocksPerChunk()
 
 	// Filtered allocation path
 	if req.Filter.ID != "" {
@@ -904,7 +904,7 @@ func AllocNISDs(req *ctlplfl.VdevReq, allocMap *btree.Map[string, *ctlplfl.NisdV
 		return allocateNisdsAtFailureDomain(req, ctlplfl.GetFDIdx(req.Filter.Type), allocMap, txn, offset)
 	}
 
-	startFD, err := HR.GetFDLevel(req.Vdev.TotalBlocksPerChunk())
+	startFD, err := HR.GetFDLevel(req.Vdev.TotalRedundancyBlocksPerChunk())
 	if err != nil {
 		return fmt.Errorf("failed to resolve failure domain: %w", err)
 	}
@@ -1049,7 +1049,7 @@ func APCreateVdev(args ...interface{}) (interface{}, error) {
 	}
 
 	if req.Vdev.PFSID != "" {
-		offset += req.Vdev.TotalBlocksPerChunk()
+		offset += req.Vdev.TotalRedundancyBlocksPerChunk()
 		intrm.Changes = append(intrm.Changes, funclib.CommitChg{
 			Key:   []byte(fmt.Sprintf("%s/%s/offset", pfsKey, req.Vdev.PFSID)),
 			Value: []byte(strconv.Itoa(offset)),
