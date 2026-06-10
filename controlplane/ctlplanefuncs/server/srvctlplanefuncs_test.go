@@ -27,13 +27,14 @@ const (
 	testHV   = "b726b99a-1ea3-11f1-95da-436ff27bf77e"
 	testDev  = "nvme-001"
 	testPT   = "nvme-001-01"
+	LOG_FILE = "/tmp/test.log"
 )
 
 // TestMain initializes the test environment
 func TestMain(m *testing.M) {
 	// Initialize xlog to prevent nil pointer errors
 	logLevel := "INFO"
-	log.InitXlog("client.log", &logLevel)
+	log.InitXlog(LOG_FILE, &logLevel)
 
 	ctlplfl.RegisterGOBStructs()
 

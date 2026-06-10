@@ -46,14 +46,18 @@ const (
 	GET_PARTITION       = "GetPartition"
 	PUT_PFS             = "PutPFS"
 	GET_PFS             = "GetPFS"
+	PUT_NISD_ARGS  	    = "PutNisdArgs"
+	GET_NISD_ARGS  = "GetNisdArgs"
+
+
+	// niova-client methods
+	MOUNT_VDEV          = "mount_vdev"
 	GET_VDEV_INFO       = "get_vdev_info" // new
 	GET_ALL_VDEV        = "get_all_vdev"
 	GET_CHUNK_NISD      = "get_chunk_nisd"
 	GET_NISD_INFO       = "get_nisd_info"
-	MOUNT_VDEV          = "MountVdev"
 
-	PUT_NISD_ARGS  = "PutNisdArgs"
-	GET_NISD_ARGS  = "GetNisdArgs"
+
 	CHUNK_SIZE     = 8 * 1024 * 1024 * 1024
 	MAX_REPLY_SIZE = 4 * 1024 * 1024
 	NAME           = "name"
