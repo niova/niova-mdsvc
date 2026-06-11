@@ -300,10 +300,8 @@ type VdevCfg struct {
 	VdevMountInfo VdevMountInfo `xml:"VdevMountInfo" json:"VdevMountInfo"`
 	PFSID         string        `xml:"PFSID" json:"PFSID"`
 	AccessToken   string        `xml:"AccessToken" json:"AccessToken"`
-	FilterType   string // failure domain level used at creation (e.g. "rack", "hv", "any")
-	FilterID     string // specific entity UUID scoped at creation (empty = no scope)
-	XMLName      xml.Name `xml:"Vdev"`
-
+	FilterType    string        // failure domain level used at creation (e.g. "rack", "hv", "any")
+	FilterID      string        // specific entity UUID scoped at creation (empty = no scope)
 }
 
 type PFS struct {

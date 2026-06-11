@@ -2690,7 +2690,7 @@ func TestMountVdev(t *testing.T) {
 	})
 }
 
-func TestMultiClientMount(t *testing.T) {
+func TestMountMultiClient(t *testing.T) {
 	c1 := newClient(t)
 	c2 := newClient(t)
 
@@ -2728,7 +2728,7 @@ func TestMultiClientMount(t *testing.T) {
 	}
 }
 
-func TestMultipleVdevMount(t *testing.T) {
+func TestMountMultipleVdev(t *testing.T) {
 	c := newClient(t)
 
 	setupNisd(t, c, 8003, 20*1024*1024*1024)
@@ -2745,7 +2745,7 @@ func TestMultipleVdevMount(t *testing.T) {
 	assert.Equal(t, uint64(1), info2.VdevMountInfo.MountCounter)
 }
 
-func TestCreateMountDeleteVdevClient(t *testing.T) {
+func TestMountCreateAndDeleteVdevClient(t *testing.T) {
 	c := newClient(t)
 
 	// Step 0: Setup NISD for allocation
