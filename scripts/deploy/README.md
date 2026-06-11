@@ -56,7 +56,7 @@ The `deploy.sh` script automates the generation of Raft configurations and proce
 ### Usage
 
 ```bash
-sudo ./deploy.sh [-m init|restart] [-t localhost|multinode] <config.yaml>
+sudo ./deploy.sh [-m init|restart] [-t localhost|multinode] [-p port] <config.yaml>
 ```
 
 ### Options
@@ -67,6 +67,7 @@ sudo ./deploy.sh [-m init|restart] [-t localhost|multinode] <config.yaml>
 * **`-t <type>`**:
   - `localhost`: Runs all processes on the current machine (useful for dev).
   - `multinode`: Distributes processes across nodes listed in `config.yaml`. Requires SSH access and shared `output_dir` (NFS).
+* **`-p <port>`**: Proxy metrics port passed as `-mp` to `CTLPlane_proxy`. Defaults to `9701`.
 
 ### Example
 

@@ -198,6 +198,8 @@ func main() {
 	cpAPI.RegisterReadFunc(cpLib.GET_CHUNK, srvctlplanefuncs.ReadChunk)
 	cpAPI.RegisterReadFunc(cpLib.GET_CHUNK_NISD, srvctlplanefuncs.ReadChunkNisd)
 
+	cpAPI.RegisterReadFunc(cpLib.GET_NISD_AVAILABLE_SIZES, srvctlplanefuncs.ReadAllNisdConfigs)
+	cpAPI.RegisterReadFunc(cpLib.GET_ALL_RESOURCES, srvctlplanefuncs.ReadAllResources)
 	cpAPI.RegisterApplyFunc(cpLib.DELETE_VDEV, srvctlplanefuncs.APDeleteVdev)
 
 	cpAPI.RegisterWritePrepFunc(userlib.PutUserAPI, userserver.PutUser)

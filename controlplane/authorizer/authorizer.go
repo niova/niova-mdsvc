@@ -34,6 +34,7 @@ const (
 	WPNisdArgs                    FunctionName = "WPNisdArgs"
 	ReadAllNisdConfigs            FunctionName = "ReadAllNisdConfigs"
 	ReadNisdConfig                FunctionName = "ReadNisdConfig"
+	ReadAllResources              FunctionName = "ReadAllResources"
 	RdDeviceInfo                  FunctionName = "RdDeviceInfo"
 	ReadPartition                 FunctionName = "ReadPartition"
 	ReadPDUCfg                    FunctionName = "ReadPDUCfg"
@@ -145,6 +146,9 @@ var defaultPolicies = map[FunctionName]FunctionPolicy{
 	},
 	ReadPFSCfg: {
 		RBAC: []string{"admin", "user"},
+	},
+	ReadAllResources: {
+		RBAC: []string{"admin"},
 	},
 	PutUser: {
 		RBAC: []string{"admin"},

@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# port defaults to 9701
+MP_PORT="${3:-9701}"
+
 #Create configuration files
 if [ "$2" = "init" ]; then
     ./raft-config.sh $1
@@ -34,4 +37,5 @@ CUUID="$(uuidgen)"
     -u "${CUUID}" \
     -pa /controlplane/configs/gossipNodes \
     -n "Node_${CUUID}" \
+    -mp "${MP_PORT}" \
     -l "/controlplane/logs/pmdb_client_${CUUID}.log" > "./logs/pmdb_client_${CUUID}_stdouterr" 2>&1
