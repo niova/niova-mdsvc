@@ -602,6 +602,25 @@ func (ccf *CliCFuncs) PutDeviceInfo(device *ctlplfl.Device) (*ctlplfl.ResponseXM
 	return ccf.PutDevice(device)
 }
 
+func (ccf *CliCFuncs) GetNisdListWithAvailSize(req *ctlplfl.GetReq) ([]ctlplfl.NisdListAvailSize, error) {
+	req.Fields = ctlplfl.NisdAvailSizeFields
+	cpReq := &ctlplfl.CPReq{
+		Token:   ccf.token,
+		Payload: *req,
+	}
+	nl := make([]ctlplfl.NisdListAvailSize, 0)
+	cpResp, err := ccf.get(cpReq, ctlplfl.GET_NISD_AVAILABLE_SIZES, &nl)
+	if err != nil {
+		log.Error("Read nisd list with available size failed: ", err)
+		return nil, err
+	}
+
+	if err := cpResp.Err(); err != nil {
+		return nil, err
+	}
+	return nl, nil
+}
+
 func (ccf *CliCFuncs) GetChunkNisd(req *ctlplfl.GetReq) (ctlplfl.ChunkNisd, error) {
 	cn := ctlplfl.ChunkNisd{}
 	log.Info("fetching chunk Info for:", req.ID)
@@ -620,6 +639,23 @@ func (ccf *CliCFuncs) GetChunkNisd(req *ctlplfl.GetReq) (ctlplfl.ChunkNisd, erro
 	}
 
 	return cn, nil
+}
+
+func (ccf *CliCFuncs) GetResources(req *ctlplfl.GetResourceReq) (*ctlplfl.ResourceListResp, error) {
+	cpReq := &ctlplfl.CPReq{
+		Token:   ccf.token,
+		Payload: req,
+	}
+	resp := &ctlplfl.ResourceListResp{}
+	cpResp, err := ccf.get(cpReq, ctlplfl.GET_ALL_RESOURCES, resp)
+	if err != nil {
+		log.Errorf("GetResources failed for resource type %q: %v", req.ResourceType, err)
+		return nil, err
+	}
+	if err := cpResp.Err(); err != nil {
+		return nil, err
+	}
+	return resp, nil
 }
 
 func (ccf *CliCFuncs) DeleteVdev(req *ctlplfl.DeleteVdevReq) (*ctlplfl.ResponseXML, error) {

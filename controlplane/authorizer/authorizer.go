@@ -34,6 +34,7 @@ const (
 	WPNisdArgs                    FunctionName = "WPNisdArgs"
 	ReadAllNisdConfigs            FunctionName = "ReadAllNisdConfigs"
 	ReadNisdConfig                FunctionName = "ReadNisdConfig"
+	ReadAllResources              FunctionName = "ReadAllResources"
 	RdDeviceInfo                  FunctionName = "RdDeviceInfo"
 	ReadPartition                 FunctionName = "ReadPartition"
 	ReadPDUCfg                    FunctionName = "ReadPDUCfg"
@@ -148,6 +149,9 @@ var defaultPolicies = map[FunctionName]FunctionPolicy{
 		ABAC: []ABACRule{
 			{Argument: "vdev", Prefix: "v/"},
 		},
+	},
+	ReadAllResources: {
+		RBAC: []string{"admin"},
 	},
 	PutUser: {
 		RBAC: []string{"admin"},

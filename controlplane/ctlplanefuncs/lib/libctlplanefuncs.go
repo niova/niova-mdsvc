@@ -24,37 +24,39 @@ import (
 )
 
 const (
-	PUT_DEVICE          = "PutDevice"
-	GET_DEVICE          = "GetDevice"
-	PUT_NISD            = "PutNisd"
-	GET_NISD            = "GetNisd"
-	GET_NISD_LIST       = "GetAllNisd"
-	CREATE_VDEV         = "CreateVdev"
-	DELETE_VDEV         = "DeleteVdev"
-	GET_VDEV_CHUNK_INFO = "GetVdevsWithChunkInfo"
-	GET_VDEV            = "GetVdevs"
-	CREATE_SNAP         = "CreateSnap"
-	READ_SNAP_NAME      = "ReadSnapByName"
-	READ_SNAP_VDEV      = "ReadSnapForVdev"
-	PUT_PDU             = "PutPDU"
-	GET_PDU             = "GetPDU"
-	GET_RACK            = "GetRack"
-	PUT_RACK            = "PutRack"
-	GET_HYPERVISOR      = "GetHypervisor"
-	PUT_HYPERVISOR      = "PutHypervisor"
-	PUT_PARTITION       = "PutPartition"
-	GET_PARTITION       = "GetPartition"
-	PUT_PFS             = "PutPFS"
-	GET_PFS             = "GetPFS"
+	PUT_DEVICE               = "PutDevice"
+	GET_DEVICE               = "GetDevice"
+	PUT_NISD                 = "PutNisd"
+	GET_NISD                 = "GetNisd"
+	GET_NISD_LIST            = "GetAllNisd"
+	CREATE_VDEV              = "CreateVdev"
+	DELETE_VDEV              = "DeleteVdev"
+	GET_VDEV_CHUNK_INFO      = "GetVdevsWithChunkInfo"
+	GET_VDEV                 = "GetVdevs"
+	CREATE_SNAP              = "CreateSnap"
+	READ_SNAP_NAME           = "ReadSnapByName"
+	READ_SNAP_VDEV           = "ReadSnapForVdev"
+	PUT_PDU                  = "PutPDU"
+	GET_PDU                  = "GetPDU"
+	GET_RACK                 = "GetRack"
+	PUT_RACK                 = "PutRack"
+	GET_HYPERVISOR           = "GetHypervisor"
+	PUT_HYPERVISOR           = "PutHypervisor"
+	PUT_PARTITION            = "PutPartition"
+	GET_PARTITION            = "GetPartition"
+	PUT_PFS                  = "PutPFS"
+	GET_PFS                  = "GetPFS"
 	PUT_NISD_ARGS       = "PutNisdArgs"
 	GET_NISD_ARGS       = "GetNisdArgs"
 
 	// niova-client methods
 	MOUNT_VDEV     = "mount_vdev"
-	GET_VDEV_INFO  = "get_vdev_info" // new
-	GET_ALL_VDEV   = "get_all_vdev"
-	GET_CHUNK_NISD = "get_chunk_nisd"
-	GET_NISD_INFO  = "get_nisd_info"
+	GET_VDEV_INFO       = "get_vdev_info" // new
+	GET_ALL_VDEV        = "get_all_vdev"
+	GET_CHUNK_NISD      = "get_chunk_nisd"
+	GET_NISD_INFO       = "get_nisd_info"
+	GET_NISD_AVAILABLE_SIZES = "GetNisdAvailableSizes"
+	GET_ALL_RESOURCES        = "GetAllResources"
 
 	CHUNK_SIZE     = 8 * 1024 * 1024 * 1024
 	MAX_REPLY_SIZE = 4 * 1024 * 1024
@@ -142,6 +144,23 @@ func GetFDIdx(t FD) int {
 		return PARTITION_IDX
 	default:
 		return -1
+	}
+}
+
+func FDName(t FD) string {
+	switch t {
+	case FD_PDU:
+		return "pdu"
+	case FD_RACK:
+		return "rack"
+	case FD_HV:
+		return "hv"
+	case FD_DEVICE:
+		return "device"
+	case FD_PARTITION:
+		return "partition"
+	default:
+		return "any"
 	}
 }
 
@@ -281,6 +300,10 @@ type VdevCfg struct {
 	VdevMountInfo VdevMountInfo `xml:"VdevMountInfo" json:"VdevMountInfo"`
 	PFSID         string        `xml:"PFSID" json:"PFSID"`
 	AccessToken   string        `xml:"AccessToken" json:"AccessToken"`
+	FilterType   string // failure domain level used at creation (e.g. "rack", "hv", "any")
+	FilterID     string // specific entity UUID scoped at creation (empty = no scope)
+	XMLName      xml.Name `xml:"Vdev"`
+
 }
 
 type PFS struct {
@@ -306,6 +329,15 @@ type VdevReq struct {
 	Filter Filter
 }
 
+type NisdListAvailSize struct {
+	ID            string `json:"id"`
+	PDU           string `json:"pdu,omitempty"`
+	Rack          string `json:"rack,omitempty"`
+	HV            string `json:"hv,omitempty"`
+	TotalSize     int64  `json:"total_size"`
+	AvailableSize int64  `json:"available_size"`
+}
+
 // DeleteVdevReq is the request structure for deleting a Vdev.
 // UserToken is a JWT token used to authenticate and authorize the caller
 // before the delete operation is allowed to proceed.
@@ -313,9 +345,50 @@ type DeleteVdevReq struct {
 	ID string
 }
 
+// NisdField constants define the projection keys clients pass in GetReq.Fields
+// to request a subset of NISD attributes instead of the full Nisd struct.
+const (
+	NisdFieldID            = "id"
+	NisdFieldTotalSize     = "total_size"
+	NisdFieldAvailableSize = "available_size"
+)
+
+// NisdAvailSizeFields is the canonical field set for capacity-only queries.
+var NisdAvailSizeFields = []string{NisdFieldID, NisdFieldTotalSize, NisdFieldAvailableSize}
+
 type GetReq struct {
 	ID     string
 	GetAll bool
+	// Fields restricts the response to a named subset of attributes.
+	// Use the NisdField* constants. Empty means return all fields.
+	Fields []string
+}
+
+type ResourceType string
+
+const (
+	ResourceNisd       ResourceType = "nisd"
+	ResourceRack       ResourceType = "rack"
+	ResourcePDU        ResourceType = "pdu"
+	ResourceHypervisor ResourceType = "hypervisor"
+	ResourceDevice     ResourceType = "device"
+	ResourcePartition  ResourceType = "partition"
+)
+
+type GetResourceReq struct {
+	ResourceType ResourceType
+	ID           string
+	GetAll       bool
+}
+
+type ResourceListResp struct {
+	ResourceType ResourceType
+	Nisds        []Nisd
+	Racks        []Rack
+	PDUs         []PDU
+	Hypervisors  []Hypervisor
+	Devices      []Device
+	Partitions   []DevicePartition
 }
 
 type MountVdevRequest struct {
@@ -427,6 +500,11 @@ func RegisterGOBStructs() {
 	gob.Register(VdevReq{})
 	gob.Register(PFS{})
 	gob.Register([]PFS{})
+	gob.Register(NisdListAvailSize{})
+	gob.Register([]NisdListAvailSize{})
+	gob.Register(GetResourceReq{})
+	gob.Register(ResourceListResp{})
+	gob.Register(ResourceType(""))
 	gob.Register(DeleteVdevReq{})
 	gob.Register(CPReq{})
 	gob.Register(CPResp{})

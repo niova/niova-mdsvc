@@ -403,6 +403,10 @@ func (vdevParser) ParseField(entity Entity, parts []string, value []byte) {
 			vdev.PFSID = string(value)
 		case NAME:
 			vdev.Name = string(value)
+		case FD_TYPE_KEY:
+			vdev.FilterType = string(value)
+		case FD_ID_KEY:
+			vdev.FilterID = string(value)
 		}
 	} else if len(parts) > VDEV_ELEMENT_KEY && parts[VDEV_CFG_C_KEY] == ctlplfl.MntKey {
 		switch parts[VDEV_ELEMENT_KEY] {

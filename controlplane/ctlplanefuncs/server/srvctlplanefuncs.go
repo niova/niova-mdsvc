@@ -91,6 +91,9 @@ const (
 	DSYNC                   = "ds"
 	ALLOW_DEFRAG_MCIB_CACHE = "admc"
 
+	FD_TYPE_KEY = "fdt"
+	FD_ID_KEY   = "fdi"
+
 	cfgkey       = "cfg"
 	NisdCfgKey   = "n_cfg"
 	deviceCfgKey = "d_cfg"
@@ -433,22 +436,50 @@ func ReadAllNisdConfigs(args ...interface{}) (interface{}, error) {
 		log.Errorf("ReadAllNisdConfigs: auth failure: %v", err)
 		return ctlplfl.AuthError(err)
 	}
+
+	var fields []string
+	if req, ok := cpReq.Payload.(ctlplfl.GetReq); ok {
+		fields = req.Fields
+	}
+
 	log.Trace("fetching nisd details for key : ", NisdCfgKey)
-	rrargs := storageiface.RangeReadArgs{
+	readResult, err := cbArgs.Store.RangeRead(storageiface.RangeReadArgs{
 		Selector:   colmfamily,
 		Key:        NisdCfgKey,
 		BufSize:    cbArgs.ReplySize,
 		Consistent: false,
 		Prefix:     NisdCfgKey,
-	}
-	readResult, err := cbArgs.Store.RangeRead(rrargs)
+	})
 	if err != nil {
 		log.Error("Range read failure ", err)
 		return ctlplfl.FuncError(err)
 	}
 	nisdList := ParseEntities[ctlplfl.Nisd](readResult.ResultMap, NisdParser{})
+
+	if len(fields) > 0 {
+		log.Debugf("ReadAllNisdConfigs: returning %d nisd configs (projected fields)", len(nisdList))
+		return ctlplfl.EncodeResponse(nisdToAvailSize(nisdList))
+	}
 	log.Debugf("ReadAllNisdConfigs: returning %d nisd configs", len(nisdList))
 	return ctlplfl.EncodeResponse(nisdList)
+}
+
+func nisdToAvailSize(nisds []ctlplfl.Nisd) []ctlplfl.NisdListAvailSize {
+	result := make([]ctlplfl.NisdListAvailSize, 0, len(nisds))
+	for _, n := range nisds {
+		entry := ctlplfl.NisdListAvailSize{
+			ID:            n.ID,
+			TotalSize:     n.TotalSize,
+			AvailableSize: n.AvailableSize,
+		}
+		if len(n.FailureDomain) > ctlplfl.HV_IDX {
+			entry.PDU = n.FailureDomain[ctlplfl.PDU_IDX]
+			entry.Rack = n.FailureDomain[ctlplfl.RACK_IDX]
+			entry.HV = n.FailureDomain[ctlplfl.HV_IDX]
+		}
+		result = append(result, entry)
+	}
+	return result
 }
 
 func ReadNisdConfig(args ...interface{}) (interface{}, error) {
@@ -676,6 +707,19 @@ func WPCreateVdev(args ...interface{}) (interface{}, error) {
 		Key:   []byte(reverseNameKey),
 		Value: []byte(req.Vdev.ID),
 	})
+
+	// Persist the failure domain filter so it can be surfaced in metrics/dashboards.
+	fdTypeName := ctlplfl.FDName(req.Filter.Type)
+	commitChgs = append(commitChgs, funclib.CommitChg{
+		Key:   fmt.Appendf(nil, "%s/%s/%s", key, cfgkey, FD_TYPE_KEY),
+		Value: []byte(fdTypeName),
+	})
+	if req.Filter.ID != "" {
+		commitChgs = append(commitChgs, funclib.CommitChg{
+			Key:   fmt.Appendf(nil, "%s/%s/%s", key, cfgkey, FD_ID_KEY),
+			Value: []byte(req.Filter.ID),
+		})
+	}
 
 	// Add ownership key to mark user as owner of this vdev
 	ownershipKey := fmt.Sprintf("/u/%s/v/%s", tc.UserID, req.Vdev.ID)
@@ -1220,6 +1264,95 @@ func ReadHyperVisorCfg(args ...interface{}) (interface{}, error) {
 
 	log.Debugf("ReadHyperVisorCfg: returning %d hypervisor config(s) for key %s", len(hvList), key)
 	return ctlplfl.EncodeResponse(hvList)
+}
+
+func ReadAllResources(args ...any) (any, error) {
+	cbArgs := args[0].(*PumiceDBServer.PmdbCbArgs)
+	cpReq := args[1].(ctlplfl.CPReq)
+	req := cpReq.Payload.(ctlplfl.GetResourceReq)
+
+	if _, err := validateAndAuthorizeRBAC(cpReq.Token, authz.ReadAllResources); err != nil {
+		log.Errorf("ReadAllResources: auth failure: %v", err)
+		return ctlplfl.AuthError(err)
+	}
+
+	resp := ctlplfl.ResourceListResp{ResourceType: req.ResourceType}
+
+	rangeRead := func(rootKey string) (map[string][]byte, error) {
+		key := rootKey
+		if !req.GetAll {
+			key = getConfKey(rootKey, req.ID)
+		}
+		result, err := cbArgs.Store.RangeRead(storageiface.RangeReadArgs{
+			Selector: colmfamily,
+			Key:      key,
+			BufSize:  cbArgs.ReplySize,
+			Prefix:   key,
+		})
+		if err != nil {
+			if strings.Contains(err.Error(), "Failed to lookup for key") {
+				return map[string][]byte{}, nil
+			}
+			return nil, err
+		}
+		return result.ResultMap, nil
+	}
+
+	switch req.ResourceType {
+	case ctlplfl.ResourceNisd:
+		rm, err := rangeRead(NisdCfgKey)
+		if err != nil {
+			log.Errorf("ReadAllResources: range read failed for nisd: %v", err)
+			return ctlplfl.FuncError(err)
+		}
+		resp.Nisds = ParseEntities[ctlplfl.Nisd](rm, NisdParser{})
+
+	case ctlplfl.ResourceRack:
+		rm, err := rangeRead(rackKey)
+		if err != nil {
+			log.Errorf("ReadAllResources: range read failed for rack: %v", err)
+			return ctlplfl.FuncError(err)
+		}
+		resp.Racks = ParseEntities[ctlplfl.Rack](rm, rackParser{})
+
+	case ctlplfl.ResourcePDU:
+		rm, err := rangeRead(pduKey)
+		if err != nil {
+			log.Errorf("ReadAllResources: range read failed for pdu: %v", err)
+			return ctlplfl.FuncError(err)
+		}
+		resp.PDUs = ParseEntities[ctlplfl.PDU](rm, pduParser{})
+
+	case ctlplfl.ResourceHypervisor:
+		rm, err := rangeRead(hvKey)
+		if err != nil {
+			log.Errorf("ReadAllResources: range read failed for hypervisor: %v", err)
+			return ctlplfl.FuncError(err)
+		}
+		resp.Hypervisors = ParseEntities[ctlplfl.Hypervisor](rm, hvParser{})
+
+	case ctlplfl.ResourceDevice:
+		rm, err := rangeRead(deviceCfgKey)
+		if err != nil {
+			log.Errorf("ReadAllResources: range read failed for device: %v", err)
+			return ctlplfl.FuncError(err)
+		}
+		resp.Devices = ParseEntities[ctlplfl.Device](rm, deviceWithPartitionParser{})
+
+	case ctlplfl.ResourcePartition:
+		rm, err := rangeRead(ptKey)
+		if err != nil {
+			log.Errorf("ReadAllResources: range read failed for partition: %v", err)
+			return ctlplfl.FuncError(err)
+		}
+		resp.Partitions = ParseEntities[ctlplfl.DevicePartition](rm, ptParser{})
+
+	default:
+		return ctlplfl.FuncError(fmt.Errorf("unknown resource type: %q", req.ResourceType))
+	}
+
+	log.Debugf("ReadAllResources: returning result for resource type %q", req.ResourceType)
+	return ctlplfl.EncodeResponse(resp)
 }
 
 func ReadVdevsInfoWithChunkMapping(args ...interface{}) (interface{}, error) {
@@ -1832,7 +1965,7 @@ func APDeleteVdev(args ...interface{}) (interface{}, error) {
 	commitChgs := make([]funclib.CommitChg, 0)
 	deleteChgs := make([]funclib.CommitChg, 0)
 	nisdRefundMap := make(map[string]*ctlplfl.Nisd)
-	var vdevName string
+	var vdevName, vdevPFSID string
 
 	log.Infof("APDeleteVdev: deleting vdev %q", req.ID)
 	// Validate Vdev exists
@@ -1857,6 +1990,10 @@ func APDeleteVdev(args ...interface{}) (interface{}, error) {
 			// Capture vdev name so we can remove the reverse-index entry.
 			if strings.HasSuffix(k, "/"+cfgkey+"/"+NAME) {
 				vdevName = string(v)
+			}
+			// Capture PFSID so we can remove the pfs-vdev reverse-index entry.
+			if strings.HasSuffix(k, "/"+cfgkey+"/"+pfsKey) {
+				vdevPFSID = string(v)
 			}
 			// Delete
 			deleteChgs = append(deleteChgs, funclib.CommitChg{
@@ -1926,6 +2063,14 @@ func APDeleteVdev(args ...interface{}) (interface{}, error) {
 	if vdevName != "" {
 		deleteChgs = append(deleteChgs, funclib.CommitChg{
 			Key:   []byte(fmt.Sprintf("%s/%s", vnameKey, vdevName)),
+			Value: nil,
+		})
+	}
+
+	// Remove pfs-vdev reverse-index entry.
+	if vdevPFSID != "" {
+		deleteChgs = append(deleteChgs, funclib.CommitChg{
+			Key:   []byte(fmt.Sprintf("%s/%s/v/%s", pfsKey, vdevPFSID, req.ID)),
 			Value: nil,
 		})
 	}
