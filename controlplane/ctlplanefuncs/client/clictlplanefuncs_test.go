@@ -2042,10 +2042,10 @@ func TestMountVdev(t *testing.T) {
 		info, err := c.MountVdev(req)
 
 		assert.NoError(t, err)
-		assert.Equal(t, vdevID, info.Vdev.ID)
-		assert.Equal(t, uint64(1), info.MountCounter)
+		assert.Equal(t, vdevID, info.ID)
+		assert.Equal(t, uint64(1), info.VdevMountInfo.MountCounter)
 		assert.NotEmpty(t, info.AccessToken)
-		assert.False(t, info.LastUpdatedLTS.IsZero())
+		assert.False(t, info.VdevMountInfo.LastUpdatedLTS.IsZero())
 	})
 
 	t.Run("Cooldown Limit", func(t *testing.T) {
@@ -2059,7 +2059,7 @@ func TestMountVdev(t *testing.T) {
 
 		info, err := c.MountVdev(&cpLib.MountVdevRequest{VdevID: vdevID})
 		assert.NoError(t, err)
-		assert.Equal(t, uint64(2), info.MountCounter)
+		assert.Equal(t, uint64(2), info.VdevMountInfo.MountCounter)
 	})
 }
 
@@ -2075,7 +2075,7 @@ func TestMultiClientMount(t *testing.T) {
 	wg.Add(2)
 
 	var err1, err2 error
-	var info1, info2 cpLib.VdevMountInfo
+	var info1, info2 cpLib.VdevCfg
 
 	go func() {
 		defer wg.Done()
@@ -2093,10 +2093,10 @@ func TestMultiClientMount(t *testing.T) {
 	wg.Wait()
 
 	if err1 == nil {
-		assert.Equal(t, uint64(1), info1.MountCounter)
+		assert.Equal(t, uint64(1), info1.VdevMountInfo.MountCounter)
 		assert.Error(t, err2)
 	} else {
-		assert.Equal(t, uint64(1), info2.MountCounter)
+		assert.Equal(t, uint64(1), info2.VdevMountInfo.MountCounter)
 		assert.Error(t, err1)
 	}
 }
@@ -2111,11 +2111,11 @@ func TestMultipleVdevMount(t *testing.T) {
 
 	info1, err := c.MountVdev(&cpLib.MountVdevRequest{VdevID: vdev1})
 	assert.NoError(t, err)
-	assert.Equal(t, uint64(1), info1.MountCounter)
+	assert.Equal(t, uint64(1), info1.VdevMountInfo.MountCounter)
 
 	info2, err := c.MountVdev(&cpLib.MountVdevRequest{VdevID: vdev2})
 	assert.NoError(t, err)
-	assert.Equal(t, uint64(1), info2.MountCounter)
+	assert.Equal(t, uint64(1), info2.VdevMountInfo.MountCounter)
 }
 
 func TestCreateMountDeleteVdevClient(t *testing.T) {
@@ -2132,8 +2132,8 @@ func TestCreateMountDeleteVdevClient(t *testing.T) {
 	mountReq := &cpLib.MountVdevRequest{VdevID: vdevID}
 	mountInfo, err := c.MountVdev(mountReq)
 	assert.NoError(t, err)
-	assert.Equal(t, vdevID, mountInfo.Vdev.ID)
-	assert.Equal(t, uint64(1), mountInfo.MountCounter)
+	assert.Equal(t, vdevID, mountInfo.ID)
+	assert.Equal(t, uint64(1), mountInfo.VdevMountInfo.MountCounter)
 
 	// Step 3: Delete Vdev
 	deleteReq := &cpLib.DeleteVdevReq{ID: vdevID}
@@ -2174,10 +2174,10 @@ func TestMountVdevByName(t *testing.T) {
 		info, err := c.MountVdev(req)
 
 		assert.NoError(t, err)
-		assert.Equal(t, vdevID, info.Vdev.ID)
-		assert.Equal(t, uint64(1), info.MountCounter)
+		assert.Equal(t, vdevID, info.ID)
+		assert.Equal(t, uint64(1), info.VdevMountInfo.MountCounter)
 		assert.NotEmpty(t, info.AccessToken)
-		assert.False(t, info.LastUpdatedLTS.IsZero())
+		assert.False(t, info.VdevMountInfo.LastUpdatedLTS.IsZero())
 	})
 
 	t.Run("Cooldown Limit", func(t *testing.T) {
@@ -2191,6 +2191,6 @@ func TestMountVdevByName(t *testing.T) {
 
 		info, err := c.MountVdev(&cpLib.MountVdevRequest{VdevID: "vdev2"})
 		assert.NoError(t, err)
-		assert.Equal(t, uint64(2), info.MountCounter)
+		assert.Equal(t, uint64(2), info.VdevMountInfo.MountCounter)
 	})
 }

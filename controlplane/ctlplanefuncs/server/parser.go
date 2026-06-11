@@ -3,6 +3,7 @@ package srvctlplanefuncs
 import (
 	"strconv"
 	"strings"
+	"time"
 
 	log "github.com/sirupsen/logrus"
 
@@ -402,6 +403,17 @@ func (vdevParser) ParseField(entity Entity, parts []string, value []byte) {
 			vdev.PFSID = string(value)
 		case NAME:
 			vdev.Name = string(value)
+		}
+	} else if len(parts) > VDEV_ELEMENT_KEY && parts[VDEV_CFG_C_KEY] == ctlplfl.MntKey {
+		switch parts[VDEV_ELEMENT_KEY] {
+		case ctlplfl.MOUNT_COUNTER:
+			if mc, err := strconv.ParseUint(string(value), 10, 64); err == nil {
+				vdev.VdevMountInfo.MountCounter = mc
+			}
+		case ctlplfl.LAST_UPDATED_LTS:
+			if lu, err := time.Parse(time.RFC3339, string(value)); err == nil {
+				vdev.VdevMountInfo.LastUpdatedLTS = lu
+			}
 		}
 	}
 }

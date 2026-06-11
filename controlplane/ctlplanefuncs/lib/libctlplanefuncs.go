@@ -46,17 +46,15 @@ const (
 	GET_PARTITION       = "GetPartition"
 	PUT_PFS             = "PutPFS"
 	GET_PFS             = "GetPFS"
-	PUT_NISD_ARGS  	    = "PutNisdArgs"
-	GET_NISD_ARGS  = "GetNisdArgs"
-
+	PUT_NISD_ARGS       = "PutNisdArgs"
+	GET_NISD_ARGS       = "GetNisdArgs"
 
 	// niova-client methods
-	MOUNT_VDEV          = "mount_vdev"
-	GET_VDEV_INFO       = "get_vdev_info" // new
-	GET_ALL_VDEV        = "get_all_vdev"
-	GET_CHUNK_NISD      = "get_chunk_nisd"
-	GET_NISD_INFO       = "get_nisd_info"
-
+	MOUNT_VDEV     = "mount_vdev"
+	GET_VDEV_INFO  = "get_vdev_info" // new
+	GET_ALL_VDEV   = "get_all_vdev"
+	GET_CHUNK_NISD = "get_chunk_nisd"
+	GET_NISD_INFO  = "get_nisd_info"
 
 	CHUNK_SIZE     = 8 * 1024 * 1024 * 1024
 	MAX_REPLY_SIZE = 4 * 1024 * 1024
@@ -272,16 +270,17 @@ type DeviceAlloc struct {
 }
 
 type VdevCfg struct {
-	XMLName      xml.Name `xml:"Vdev"`
-	ID           string
-	Name         string
-	Size         int64
-	NumChunks    uint32
-	NumReplica   uint8
-	NumDataBlk   uint8
-	NumParityBlk uint8
-	AuthToken    string
-	PFSID        string
+	XMLName       xml.Name      `xml:"Vdev" json:"-"`
+	ID            string        `xml:"ID" json:"ID"`
+	Name          string        `xml:"Name" json:"Name"`
+	Size          int64         `xml:"Size" json:"Size"`
+	NumChunks     uint32        `xml:"NumChunks" json:"NumChunks"`
+	NumReplica    uint8         `xml:"NumReplica" json:"NumReplica"`
+	NumDataBlk    uint8         `xml:"NumDataBlk" json:"NumDataBlk"`
+	NumParityBlk  uint8         `xml:"NumParityBlk" json:"NumParityBlk"`
+	VdevMountInfo VdevMountInfo `xml:"VdevMountInfo" json:"VdevMountInfo"`
+	PFSID         string        `xml:"PFSID" json:"PFSID"`
+	AccessToken   string        `xml:"AccessToken" json:"AccessToken"`
 }
 
 type PFS struct {
@@ -324,10 +323,8 @@ type MountVdevRequest struct {
 }
 
 type VdevMountInfo struct {
-	Vdev           VdevCfg
 	MountCounter   uint64
 	LastUpdatedLTS time.Time
-	AccessToken    string
 }
 
 func (vdev *VdevCfg) Init() error {

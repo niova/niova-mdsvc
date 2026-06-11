@@ -1334,7 +1334,17 @@ func ReadVdevsInfoWithChunkMapping(args ...interface{}) (interface{}, error) {
 			case NAME:
 				vdev.Cfg.Name = string(value)
 			}
-
+		} else if parts[VDEV_CFG_C_KEY] == ctlplfl.MntKey {
+			switch parts[VDEV_ELEMENT_KEY] {
+			case ctlplfl.MOUNT_COUNTER:
+				if mc, err := strconv.ParseUint(string(value), 10, 64); err == nil {
+					vdev.Cfg.VdevMountInfo.MountCounter = mc
+				}
+			case ctlplfl.LAST_UPDATED_LTS:
+				if lu, err := time.Parse(time.RFC3339, string(value)); err == nil {
+					vdev.Cfg.VdevMountInfo.LastUpdatedLTS = lu
+				}
+			}
 		} else if parts[VDEV_CFG_C_KEY] == chunkKey {
 
 			nisdID := string(value)
@@ -1633,15 +1643,12 @@ func APMountVdev(args ...interface{}) (interface{}, error) {
 		return ctlplfl.FuncError(err)
 	}
 
-	resp := ctlplfl.VdevMountInfo{
-		Vdev:           vdevCfg,
-		MountCounter:   counter,
-		LastUpdatedLTS: currentTime,
-		AccessToken:    token,
-	}
+	vdevCfg.VdevMountInfo.MountCounter = counter
+	vdevCfg.VdevMountInfo.LastUpdatedLTS = currentTime
+	vdevCfg.AccessToken = token
 
 	log.Debugf("vdev %s mounted successfully, counter=%d", vdevID, counter)
-	return ctlplfl.EncodeResponse(resp)
+	return ctlplfl.EncodeResponse(vdevCfg)
 }
 
 func ReadAllVdevInfo(args ...interface{}) (interface{}, error) {
