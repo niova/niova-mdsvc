@@ -317,7 +317,6 @@ type VdevConfig struct {
 	TotalChunks     uint32         `xml:"ChunkCount"`          // Total logical chunks.
 	FilterType      string         // failure domain level used at creation (e.g. "rack", "hv", "any")
 	FilterID        string         // specific entity UUID scoped at creation (empty = no scope)
-	TotalReplicas   uint8          `xml:"TotalReplicas"`
 	TotalDataBlks   uint8          `xml:"TotalDataBlks"`
 	TotalParityBlks uint8          `xml:"TotalParityBlks"`
 	AuthToken       string         `xml:"AuthToken"`
@@ -327,7 +326,7 @@ type VdevConfig struct {
 // TotalRedundancyBlocksPerChunk returns the number of blocks each chunk has based on redundancy mode.
 func (v *VdevConfig) TotalRedundancyBlocksPerChunk() int {
 	if v.Redundancy == RMReplica {
-		return int(v.TotalReplicas)
+		return int(v.TotalDataBlks)
 	}
 	return int(v.TotalDataBlks + v.TotalParityBlks)
 }
@@ -498,7 +497,6 @@ type ChunkNisd struct {
 	Redundancy      RedundancyMode `xml:"RedundancyType,attr"` // Replica | EC
 	TotalDataBlks   uint8          `xml:"TotalDataBlks"`
 	TotalParityBlks uint8          `xml:"TotalParityBlks"`
-	TotalReplicas   uint8          `xml:"NREPLICAS"` // remove
 	NisdUUIDs       string         `xml:"NISDs"`
 }
 

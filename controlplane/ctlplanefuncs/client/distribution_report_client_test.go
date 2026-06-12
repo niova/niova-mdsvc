@@ -50,7 +50,7 @@ func TestGenerateDistributionReport(t *testing.T) {
 				Name:          name,
 				Size:          16 * cpLib.CHUNK_SIZE,
 				Redundancy:    cpLib.RMReplica,
-				TotalReplicas: 3,
+				TotalDataBlks: 3,
 				PFSID:         pfs1ID,
 			},
 		}
@@ -90,7 +90,7 @@ func TestGenerateDistributionReport(t *testing.T) {
 				Name:          name,
 				Size:          8 * cpLib.CHUNK_SIZE,
 				Redundancy:    cpLib.RMReplica,
-				TotalReplicas: 2,
+				TotalDataBlks: 2,
 			},
 		}
 		resp, err := c.CreateVdev(vdevReq)

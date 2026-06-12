@@ -446,7 +446,7 @@ func TestVdevLifecycleByName(t *testing.T) {
 			Name:          vdev1Name,
 			ID:            uuid.NewString(),
 			Size:          500 * 1024 * 1024 * 1024,
-			TotalReplicas: 1,
+			TotalDataBlks: 1,
 		},
 	}
 
@@ -463,7 +463,7 @@ func TestVdevLifecycleByName(t *testing.T) {
 			Name:          vdev2Name,
 			ID:            uuid.NewString(),
 			Size:          500 * 1024 * 1024 * 1024,
-			TotalReplicas: 1,
+			TotalDataBlks: 1,
 		},
 	}
 
@@ -731,7 +731,7 @@ func TestParallelVdevCreation(t *testing.T) {
 				Vdev: &cpLib.VdevConfig{
 					Name:          fmt.Sprintf("pvdev%d%s", i, uuid.NewString()[:6]),
 					Size:          100 * 1024 * 1024 * 1024,
-					TotalReplicas: 1,
+					TotalDataBlks: 1,
 				},
 			}
 			resp, err := c.CreateVdev(vdev)
@@ -856,7 +856,7 @@ func TestEvenChunkDistribution(t *testing.T) {
 		resp, err := c.CreateVdev(&cpLib.VdevReq{
 			Vdev: &cpLib.VdevConfig{
 				Size:          vdevSize,
-				TotalReplicas: 1,
+				TotalDataBlks: 1,
 			},
 		})
 		if !assert.NoError(t, err) || !assert.NotNil(t, resp) {
@@ -1087,7 +1087,7 @@ func TestVdevAuthorizationWithUsers(t *testing.T) {
 		user1Client := newClientWithToken(t, user1AccessToken)
 
 		// User1 creates vdev1
-		vdevResp, err := user1Client.CreateVdev(&cpLib.VdevReq{Vdev: &cpLib.VdevConfig{Name: "authvdev1" + uuid.NewString()[:8], Size: 500 * 1024 * 1024 * 1024, TotalReplicas: 1}})
+		vdevResp, err := user1Client.CreateVdev(&cpLib.VdevReq{Vdev: &cpLib.VdevConfig{Name: "authvdev1" + uuid.NewString()[:8], Size: 500 * 1024 * 1024 * 1024, TotalDataBlks: 1}})
 		assert.NoError(t, err, "user1 should be able to create vdev")
 		require.NotNil(t, vdevResp)
 		assert.True(t, vdevResp.Success)
@@ -1117,7 +1117,7 @@ func TestVdevAuthorizationWithUsers(t *testing.T) {
 		t.Log("User2 correctly denied access to user1's vdev")
 
 		// User2 creates own vdev
-		vdev2Resp, err := user2Client.CreateVdev(&cpLib.VdevReq{Vdev: &cpLib.VdevConfig{Name: "authvdev2" + uuid.NewString()[:8], Size: 300 * 1024 * 1024 * 1024, TotalReplicas: 1}})
+		vdev2Resp, err := user2Client.CreateVdev(&cpLib.VdevReq{Vdev: &cpLib.VdevConfig{Name: "authvdev2" + uuid.NewString()[:8], Size: 300 * 1024 * 1024 * 1024, TotalDataBlks: 1}})
 		assert.NoError(t, err, "user2 should be able to create their own vdev")
 		require.NotNil(t, vdev2Resp)
 		assert.True(t, vdev2Resp.Success)
@@ -1138,7 +1138,7 @@ func TestVdevAuthorizationWithUsers(t *testing.T) {
 		noTokenClient := newClientWithToken(t, "")
 		_, err = noTokenClient.GetVdevConfig(&cpLib.GetReq{ID: vdevID})
 		assert.EqualError(t, err, "Invalid Token")
-		_, err = noTokenClient.CreateVdev(&cpLib.VdevReq{Vdev: &cpLib.VdevConfig{Name: "notokenvdev" + uuid.NewString()[:8], Size: 100 * 1024 * 1024 * 1024, TotalReplicas: 1}})
+		_, err = noTokenClient.CreateVdev(&cpLib.VdevReq{Vdev: &cpLib.VdevConfig{Name: "notokenvdev" + uuid.NewString()[:8], Size: 100 * 1024 * 1024 * 1024, TotalDataBlks: 1}})
 		assert.EqualError(t, err, "user token is required")
 		t.Log("No-token requests correctly rejected")
 	} else {
@@ -1147,12 +1147,12 @@ func TestVdevAuthorizationWithUsers(t *testing.T) {
 		_, err := ctlClient.PutNisd(&nisd)
 		assert.NoError(t, err, "PutNisd should succeed when auth is disabled")
 
-		vdev1Resp, err := ctlClient.CreateVdev(&cpLib.VdevReq{Vdev: &cpLib.VdevConfig{Name: "disabledvdev1" + uuid.NewString()[:8], Size: 500 * 1024 * 1024 * 1024, TotalReplicas: 1}})
+		vdev1Resp, err := ctlClient.CreateVdev(&cpLib.VdevReq{Vdev: &cpLib.VdevConfig{Name: "disabledvdev1" + uuid.NewString()[:8], Size: 500 * 1024 * 1024 * 1024, TotalDataBlks: 1}})
 		require.NoError(t, err, "CreateVdev should succeed when auth is disabled")
 		assert.True(t, vdev1Resp.Success)
 		vdev1ID := vdev1Resp.ID
 
-		vdev2Resp, err := ctlClient.CreateVdev(&cpLib.VdevReq{Vdev: &cpLib.VdevConfig{Name: "disabledvdev2" + uuid.NewString()[:8], Size: 300 * 1024 * 1024 * 1024, TotalReplicas: 1}})
+		vdev2Resp, err := ctlClient.CreateVdev(&cpLib.VdevReq{Vdev: &cpLib.VdevConfig{Name: "disabledvdev2" + uuid.NewString()[:8], Size: 300 * 1024 * 1024 * 1024, TotalDataBlks: 1}})
 		require.NoError(t, err, "CreateVdev should succeed when auth is disabled")
 		assert.True(t, vdev2Resp.Success)
 		vdev2ID := vdev2Resp.ID
@@ -1838,7 +1838,7 @@ func TestABACVdevOwnership(t *testing.T) {
 
 	// User1 creates vdev
 	vdev1Resp, err := user1Client.CreateVdev(&cpLib.VdevReq{
-		Vdev: &cpLib.VdevConfig{Name: "abacvdev1" + uuid.NewString()[:8], Size: 500 * 1024 * 1024 * 1024, TotalReplicas: 1},
+		Vdev: &cpLib.VdevConfig{Name: "abacvdev1" + uuid.NewString()[:8], Size: 500 * 1024 * 1024 * 1024, TotalDataBlks: 1},
 	})
 	require.NoError(t, err, "user1 should be able to create vdev")
 	require.NotNil(t, vdev1Resp)
@@ -1847,7 +1847,7 @@ func TestABACVdevOwnership(t *testing.T) {
 
 	// User2 creates vdev
 	vdev2Resp, err := user2Client.CreateVdev(&cpLib.VdevReq{
-		Vdev: &cpLib.VdevConfig{Name: "abacvdev2" + uuid.NewString()[:8], Size: 300 * 1024 * 1024 * 1024, TotalReplicas: 1},
+		Vdev: &cpLib.VdevConfig{Name: "abacvdev2" + uuid.NewString()[:8], Size: 300 * 1024 * 1024 * 1024, TotalDataBlks: 1},
 	})
 	require.NoError(t, err, "user2 should be able to create vdev")
 	require.NotNil(t, vdev2Resp)
@@ -2071,7 +2071,7 @@ func TestCreateVdevForBlockTest(t *testing.T) {
 		Vdev: &cpLib.VdevConfig{
 			Size:          107374182400, // 100 GiB
 			Name:          "blocktestVdev",
-			TotalReplicas: 1,
+			TotalDataBlks: 1,
 		},
 	})
 	require.NoError(t, err, "CreateVdev should succeed — run TestE2EInfraHierarchy first to register NISDs")

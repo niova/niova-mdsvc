@@ -111,7 +111,7 @@ func vdevConfigCollector() metricCollector {
 				vl := fmt.Sprintf(`proxy="%s",vdev="%s"`, proxyStr, v.ID)
 				fmt.Fprintf(b, "proxy_vdev_size_bytes{%s} %d\n", vl, v.Size)
 				fmt.Fprintf(b, "proxy_vdev_num_chunks{%s} %d\n", vl, uint64(v.TotalChunks))
-				fmt.Fprintf(b, "proxy_vdev_num_replicas{%s} %d\n", vl, uint64(v.TotalReplicas))
+				fmt.Fprintf(b, "proxy_vdev_num_replicas{%s} %d\n", vl, uint64(v.TotalDataBlks))
 				fdType := v.FilterType
 				if fdType == "" {
 					fdType = "any"

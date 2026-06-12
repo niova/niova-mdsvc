@@ -21,14 +21,13 @@ const ( // Key Prefixes
 	NET_IDX = 3
 )
 
-const (	
+const (
 	CHUNK_REDUNDANCY = 0
-	CHUNK_SEQ = 1
-	CHUNK_PLACMENT = 4
+	CHUNK_SEQ        = 1
+	CHUNK_PLACMENT   = 4
 
-	MIN_CHUNK_KEY_LEN = 5
+	MIN_CHUNK_KEY_LEN           = 5
 	MIN_CHUNK_PLACEMENT_KEY_LEN = 2
-
 )
 
 type Entity interface{}
@@ -405,10 +404,6 @@ func (vdevParser) ParseField(entity Entity, parts []string, value []byte) {
 			if nc, err := strconv.ParseUint(string(value), 10, 32); err == nil {
 				vdev.TotalChunks = uint32(nc)
 			}
-		case NUM_REPLICAS:
-			if nr, err := strconv.ParseUint(string(value), 10, 8); err == nil {
-				vdev.TotalReplicas = uint8(nr)
-			}
 		case TOTAL_DATA_BLKS:
 			if nd, err := strconv.ParseUint(string(value), 10, 8); err == nil {
 				vdev.TotalDataBlks = uint8(nd)
@@ -437,9 +432,10 @@ func (vdevParser) GetEntity(entity Entity) Entity { return *entity.(*ctlplfl.Vde
 
 // Chunk parser
 // Key format: v/<vdevID>/c/<chunkIdx>/<Placement>
-// Replication: v/<vdevID>/c/0/R.0 -> nisd-1
+// Replication: v/<vdevID>/c/0/D.0 -> nisd-1
 // EC:          v/<vdevID>/c/0/D.0 -> nisd-1
-//		v/<vdevID>/c/0/P.0 -> nisd-2
+//
+//	v/<vdevID>/c/0/P.0 -> nisd-2
 type chunkParser struct{}
 
 func (chunkParser) GetRootKey() string { return vdevKey }
@@ -489,6 +485,7 @@ func (chunkParser) ParseField(entity Entity, parts []string, value []byte) {
 }
 
 func (chunkParser) GetEntity(entity Entity) Entity { return *entity.(*ctlplfl.Chunk) }
+
 type cnInternal struct {
 	cn      ctlplfl.ChunkNisd
 	replica map[uint8]string
@@ -533,8 +530,8 @@ func (chunkNisdParser) ParseField(entity Entity, parts []string, value []byte) {
 		in.replica[idx] = nisdID
 		in.cn.Redundancy = ctlplfl.RMReplica
 
-		if idx+1 > in.cn.TotalReplicas {
-			in.cn.TotalReplicas = idx + 1
+		if idx+1 > in.cn.TotalDataBlks {
+			in.cn.TotalDataBlks = idx + 1
 		}
 
 	case "D":
@@ -561,7 +558,7 @@ func (chunkNisdParser) GetEntity(entity Entity) Entity {
 	var ids []string
 
 	if in.cn.Redundancy == ctlplfl.RMReplica {
-		for i := uint8(0); i < in.cn.TotalReplicas; i++ {
+		for i := uint8(0); i < in.cn.TotalDataBlks; i++ {
 			if id, ok := in.replica[i]; ok {
 				ids = append(ids, id)
 			}

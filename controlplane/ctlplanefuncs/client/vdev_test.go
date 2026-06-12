@@ -107,13 +107,13 @@ func TestVdevLifecycle(t *testing.T) {
 	scenarios := []struct {
 		name            string
 		redundancy      cpLib.RedundancyMode
-		totalReplicas   uint8
+		TotalDataBlks   uint8
 		totalDataBlks   uint8
 		totalParityBlks uint8
 		size            int64
 	}{
-		{name: "Replica1", redundancy: cpLib.RMReplica, totalReplicas: 1, size: 8 * cpLib.CHUNK_SIZE},
-		{name: "Replica3", redundancy: cpLib.RMReplica, totalReplicas: 3, size: 8 * cpLib.CHUNK_SIZE},
+		{name: "Replica1", redundancy: cpLib.RMReplica, totalDataBlks: 1, size: 8 * cpLib.CHUNK_SIZE},
+		{name: "Replica3", redundancy: cpLib.RMReplica, totalDataBlks: 3, size: 8 * cpLib.CHUNK_SIZE},
 		{name: "EC43", redundancy: cpLib.RMEC, totalDataBlks: 4, totalParityBlks: 3, size: 8 * cpLib.CHUNK_SIZE},
 	}
 
@@ -124,7 +124,6 @@ func TestVdevLifecycle(t *testing.T) {
 					Name:            sc.name,
 					Size:            sc.size,
 					Redundancy:      sc.redundancy,
-					TotalReplicas:   sc.totalReplicas,
 					TotalDataBlks:   sc.totalDataBlks,
 					TotalParityBlks: sc.totalParityBlks,
 				},
@@ -168,7 +167,7 @@ func TestVdevCreationWithFilters(t *testing.T) {
 			vdevReq := &cpLib.VdevReq{
 				Vdev: &cpLib.VdevConfig{
 					Size:          16 * cpLib.CHUNK_SIZE,
-					TotalReplicas: 1,
+					TotalDataBlks: 1,
 				},
 				Filter: cpLib.Filter{Type: tc.filterType, ID: tc.filterID},
 			}
@@ -207,7 +206,7 @@ func TestVdevCreationWithInvalidFilters(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			c.SetToken(adminToken)
 			_, err := c.CreateVdev(&cpLib.VdevReq{
-				Vdev:   &cpLib.VdevConfig{Size: cpLib.CHUNK_SIZE, TotalReplicas: 2},
+				Vdev:   &cpLib.VdevConfig{Size: cpLib.CHUNK_SIZE, TotalDataBlks: 2},
 				Filter: tc.filter,
 			})
 			require.Error(t, err)
@@ -232,7 +231,7 @@ func TestVdevDeletion(t *testing.T) {
 	c.PutNisd(&nisd)
 
 	resp, err := c.CreateVdev(&cpLib.VdevReq{
-		Vdev: &cpLib.VdevConfig{Size: cpLib.CHUNK_SIZE, TotalReplicas: 1},
+		Vdev: &cpLib.VdevConfig{Size: cpLib.CHUNK_SIZE, TotalDataBlks: 1},
 	})
 	require.NoError(t, err)
 	vdevID := resp.ID
@@ -255,7 +254,7 @@ func TestVdevCreationWithPFS(t *testing.T) {
 
 	for i := 0; i < 3; i++ {
 		resp, err := c.CreateVdev(&cpLib.VdevReq{
-			Vdev: &cpLib.VdevConfig{Size: cpLib.CHUNK_SIZE, TotalReplicas: 1, PFSID: pfsID},
+			Vdev: &cpLib.VdevConfig{Size: cpLib.CHUNK_SIZE, TotalDataBlks: 1, PFSID: pfsID},
 		})
 		assert.NoError(t, err)
 		assert.True(t, resp.Success)
@@ -284,7 +283,7 @@ func TestVdevOwnershipABAC(t *testing.T) {
 
 	u1Token := createRegularUserAndLogin(t, authClient, adminToken)
 	c1 := newClientWithToken(t, u1Token)
-	v1Resp, _ := c1.CreateVdev(&cpLib.VdevReq{Vdev: &cpLib.VdevConfig{Size: cpLib.CHUNK_SIZE, TotalReplicas: 1}})
+	v1Resp, _ := c1.CreateVdev(&cpLib.VdevReq{Vdev: &cpLib.VdevConfig{Size: cpLib.CHUNK_SIZE, TotalDataBlks: 1}})
 
 	u2Token := createRegularUserAndLogin(t, authClient, adminToken)
 	c2 := newClientWithToken(t, u2Token)
@@ -306,7 +305,7 @@ func TestVdevNisdChunkQuery(t *testing.T) {
 	}
 	c.PutNisd(&nisd)
 
-	resp, _ := c.CreateVdev(&cpLib.VdevReq{Vdev: &cpLib.VdevConfig{Size: cpLib.CHUNK_SIZE, TotalReplicas: 1}})
+	resp, _ := c.CreateVdev(&cpLib.VdevReq{Vdev: &cpLib.VdevConfig{Size: cpLib.CHUNK_SIZE, TotalDataBlks: 1}})
 
 	readV, err := c.GetVdevConfig(&cpLib.GetReq{ID: resp.ID})
 	assert.NoError(t, err)
@@ -357,7 +356,7 @@ func setupSmallHierarchy(t *testing.T, c *CliCFuncs) {
 	rackPerPdu := 1
 	hvPerRack := 2
 	devPerHv := 2
-	nisdPerDev := 4 
+	nisdPerDev := 4
 
 	rackIdx := 0
 	hvIdx := 0
@@ -411,10 +410,6 @@ func setupSmallHierarchy(t *testing.T, c *CliCFuncs) {
 		time.Sleep(10 * time.Millisecond)
 	}
 }
-
-
-
-
 
 // Helpers
 func setupLargeHierarchy(t *testing.T, c *CliCFuncs) {

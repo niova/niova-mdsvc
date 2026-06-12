@@ -231,7 +231,7 @@ func TestWPCreateVdev(t *testing.T) {
 						Name:          "wpvdev" + uuid.NewString()[:8],
 						Size:          tc.vdevSize,
 						TotalChunks:   uint32(tc.numChunks),
-						TotalReplicas: uint8(tc.numReplica),
+						TotalDataBlks: uint8(tc.numReplica),
 					},
 				},
 			}
@@ -316,7 +316,7 @@ func TestWPCreateVdev_NilAuthorizer(t *testing.T) {
 			Vdev: &ctlplfl.VdevConfig{
 				Size:          1073741824,
 				TotalChunks:   4,
-				TotalReplicas: 3,
+				TotalDataBlks: 3,
 			},
 		},
 	}

@@ -66,7 +66,6 @@ const (
 	AVAIL_SPACE       = "as"
 	SIZE              = "sz"
 	NUM_CHUNKS        = "nc"
-	NUM_REPLICAS      = "nr"
 	TOTAL_DATA_BLKS   = "nd"
 	TOTAL_PARITY_BLKS = "np"
 	REDUNDANCY_MODE   = "rm"
@@ -689,15 +688,13 @@ func WPCreateVdev(args ...interface{}) (interface{}, error) {
 	}
 	log.Infof("initializing vdev: %+v for user: %s", req.Vdev, tc.UserID)
 	key := getConfKey(vdevKey, req.Vdev.ID)
-	for _, field := range []string{SIZE, NUM_CHUNKS, NUM_REPLICAS, TOTAL_DATA_BLKS, TOTAL_PARITY_BLKS, REDUNDANCY_MODE, NAME} {
+	for _, field := range []string{SIZE, NUM_CHUNKS, TOTAL_DATA_BLKS, TOTAL_PARITY_BLKS, REDUNDANCY_MODE, NAME} {
 		var value string
 		switch field {
 		case SIZE:
 			value = strconv.Itoa(int(req.Vdev.Size))
 		case NUM_CHUNKS:
 			value = strconv.Itoa(int(req.Vdev.TotalChunks))
-		case NUM_REPLICAS:
-			value = strconv.Itoa(int(req.Vdev.TotalReplicas))
 		case TOTAL_DATA_BLKS:
 			value = strconv.Itoa(int(req.Vdev.TotalDataBlks))
 		case TOTAL_PARITY_BLKS:
@@ -1502,10 +1499,6 @@ func ReadVdevsInfoWithChunkMapping(args ...interface{}) (interface{}, error) {
 				if nc, err := strconv.ParseUint(string(value), 10, 32); err == nil {
 					vdev.Cfg.TotalChunks = uint32(nc)
 				}
-			case NUM_REPLICAS:
-				if nr, err := strconv.ParseUint(string(value), 10, 8); err == nil {
-					vdev.Cfg.TotalReplicas = uint8(nr)
-				}
 			case TOTAL_DATA_BLKS:
 				if tdb, err := strconv.ParseUint(string(value), 10, 64); err == nil {
 					vdev.Cfg.TotalDataBlks = uint8(tdb)
@@ -1680,10 +1673,6 @@ func ReadVdevInfo(args ...interface{}) (interface{}, error) {
 			case NUM_CHUNKS:
 				if nc, err := strconv.ParseUint(string(v), 10, 32); err == nil {
 					vdevInfo.TotalChunks = uint32(nc)
-				}
-			case NUM_REPLICAS:
-				if nr, err := strconv.ParseUint(string(v), 10, 8); err == nil {
-					vdevInfo.TotalReplicas = uint8(nr)
 				}
 			case TOTAL_DATA_BLKS:
 				if nd, err := strconv.ParseUint(string(v), 10, 8); err == nil {
