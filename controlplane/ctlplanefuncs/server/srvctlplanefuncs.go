@@ -1995,10 +1995,35 @@ func ReadPFSCfg(args ...interface{}) (interface{}, error) {
 	cbArgs := args[0].(*PumiceDBServer.PmdbCbArgs)
 	cpReq := args[1].(ctlplfl.CPReq)
 	req := cpReq.Payload.(ctlplfl.GetReq)
+	pfsID := req.ID
+	if !isUUID(req.ID) && !req.GetAll {
+		pKey := getConfKey(pfsKey, req.ID)
+		var rqResult *storageiface.RangeReadResult
+		// TODO: fetch info using read instead of range read
+		rqResult, err := cbArgs.Store.RangeRead(storageiface.RangeReadArgs{
+			Selector: colmfamily,
+			Key:      pKey,
+			BufSize:  cbArgs.ReplySize,
+			Prefix:   pKey,
+		})
+		if err != nil {
+			log.Error("RangeReadKV failure: ", err)
+			return ctlplfl.FuncError(err)
+		}
+		for k, v := range rqResult.ResultMap {
+			parts := strings.Split(strings.Trim(k, "/"), "/")
+			if len(parts) == ELEMENT_KEY {
+				pfsID = string(v)
+				break
+			}
+		}
+	}
+
 	key := pfsKey
 	if !req.GetAll {
-		key = fmt.Sprintf("%s/%s", pfsKey, req.ID)
+		key = fmt.Sprintf("%s/%s", pfsKey, pfsID)
 	}
+
 	if _, err := validateAndAuthorizeRBAC(cpReq.Token, authz.ReadPFSCfg); err != nil {
 		log.Errorf("ReadPFSCfg: auth failure: %v", err)
 		return ctlplfl.AuthError(err)
