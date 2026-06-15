@@ -1977,11 +1977,12 @@ func WPPFSCfg(args ...interface{}) (interface{}, error) {
 		Success: true,
 	}
 
-	offset := rand.Intn(HR.GetEntityCnt(ctlplfl.DEVICE_IDX)) + 1
+	offset := rand.Intn(HR.GetEntityCnt(ctlplfl.DEVICE_IDX) + 1)
 
 	commitChgs := []funclib.CommitChg{
 		{Key: []byte(fmt.Sprintf("%s/%s/nm", pfsKey, pfs.ID)), Value: []byte(pfs.Name)},
 		{Key: []byte(fmt.Sprintf("%s/%s/offset", pfsKey, pfs.ID)), Value: []byte(fmt.Sprintf("%d", offset))},
+		{Key: []byte(fmt.Sprintf("%s/%s", pfsKey, pfs.Name)), Value: []byte(pfs.ID)},
 	}
 
 	funcIntrm := funclib.FuncIntrm{
@@ -1998,25 +1999,12 @@ func ReadPFSCfg(args ...interface{}) (interface{}, error) {
 	pfsID := req.ID
 	if !isUUID(req.ID) && !req.GetAll {
 		pKey := getConfKey(pfsKey, req.ID)
-		var rqResult *storageiface.RangeReadResult
-		// TODO: fetch info using read instead of range read
-		rqResult, err := cbArgs.Store.RangeRead(storageiface.RangeReadArgs{
-			Selector: colmfamily,
-			Key:      pKey,
-			BufSize:  cbArgs.ReplySize,
-			Prefix:   pKey,
-		})
+		val, err := cbArgs.Store.Read(pKey, colmfamily)
 		if err != nil {
-			log.Error("RangeReadKV failure: ", err)
+			log.Errorf("ReadPFSCfg: name lookup failed for %s: %v", req.ID, err)
 			return ctlplfl.FuncError(err)
 		}
-		for k, v := range rqResult.ResultMap {
-			parts := strings.Split(strings.Trim(k, "/"), "/")
-			if len(parts) == ELEMENT_KEY {
-				pfsID = string(v)
-				break
-			}
-		}
+		pfsID = string(val)
 	}
 
 	key := pfsKey
