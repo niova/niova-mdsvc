@@ -1977,11 +1977,12 @@ func WPPFSCfg(args ...interface{}) (interface{}, error) {
 		Success: true,
 	}
 
-	offset := rand.Intn(HR.GetEntityCnt(ctlplfl.DEVICE_IDX)) + 1
+	offset := rand.Intn(HR.GetEntityCnt(ctlplfl.DEVICE_IDX) + 1)
 
 	commitChgs := []funclib.CommitChg{
 		{Key: []byte(fmt.Sprintf("%s/%s/nm", pfsKey, pfs.ID)), Value: []byte(pfs.Name)},
 		{Key: []byte(fmt.Sprintf("%s/%s/offset", pfsKey, pfs.ID)), Value: []byte(fmt.Sprintf("%d", offset))},
+		{Key: []byte(fmt.Sprintf("%s/%s", pfsKey, pfs.Name)), Value: []byte(pfs.ID)},
 	}
 
 	funcIntrm := funclib.FuncIntrm{
@@ -1995,10 +1996,22 @@ func ReadPFSCfg(args ...interface{}) (interface{}, error) {
 	cbArgs := args[0].(*PumiceDBServer.PmdbCbArgs)
 	cpReq := args[1].(ctlplfl.CPReq)
 	req := cpReq.Payload.(ctlplfl.GetReq)
+	pfsID := req.ID
+	if !isUUID(req.ID) && !req.GetAll {
+		pKey := getConfKey(pfsKey, req.ID)
+		val, err := cbArgs.Store.Read(pKey, colmfamily)
+		if err != nil {
+			log.Errorf("ReadPFSCfg: name lookup failed for %s: %v", req.ID, err)
+			return ctlplfl.FuncError(err)
+		}
+		pfsID = string(val)
+	}
+
 	key := pfsKey
 	if !req.GetAll {
-		key = fmt.Sprintf("%s/%s", pfsKey, req.ID)
+		key = fmt.Sprintf("%s/%s", pfsKey, pfsID)
 	}
+
 	if _, err := validateAndAuthorizeRBAC(cpReq.Token, authz.ReadPFSCfg); err != nil {
 		log.Errorf("ReadPFSCfg: auth failure: %v", err)
 		return ctlplfl.AuthError(err)
