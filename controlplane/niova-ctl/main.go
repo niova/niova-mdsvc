@@ -87,6 +87,10 @@ const (
 	stateVdevCreationSummary
 	stateSearchVdev
 	stateSearchVdevResult
+	// PFS Management States
+	statePFSManagement
+	statePFSForm
+	stateShowAddedPFS
 	// User Management States
 	stateUserCreateForm
 	stateUserCreateAdminKey
@@ -245,6 +249,11 @@ type model struct {
 	vdevCreationProgress   int                     // Track creation progress
 	vdevCreationTotal      int                     // Total Vdevs to create
 	vdevCreationErrors     []string                // Store any creation errors
+
+	// PFS Management
+	pfsMgmtCursor int
+	currentPFS    ctlplfl.PFS
+	pfsNameInput  textinput.Model
 
 	// Control Plane
 	cpClient            *ctlplcl.CliCFuncs
@@ -485,6 +494,11 @@ func initialModel(cpEnabled bool, cpRaftUUID, cpGossipPath, logFile string) mode
 	vdevFilterTypeInput.CharLimit = 16
 	vdevFilterTypeInput.SetValue("any")
 
+	// Initialize PFS name input
+	pfsNameInput := textinput.New()
+	pfsNameInput.Placeholder = "Enter PFS name"
+	pfsNameInput.CharLimit = 64
+
 	// Initialize user management text inputs
 	userUsernameInput := textinput.New()
 	userUsernameInput.Placeholder = "Enter username (use 'admin' for admin user)"
@@ -528,6 +542,7 @@ func initialModel(cpEnabled bool, cpRaftUUID, cpGossipPath, logFile string) mode
 		{"Manage Partitions", "Create, view, and delete NISD partitions"},
 		{"Manage NISDs", "Initialize NISD instances on device partitions"},
 		{"Manage Vdevs", "Create and manage virtual devices"},
+		{"Manage PFS", "Create and view Parallel File Systems"},
 		{"View Configuration", "Display current hierarchical configuration from control plane"},
 		{"Exit", "Exit"},
 	}...)
@@ -567,6 +582,7 @@ func initialModel(cpEnabled bool, cpRaftUUID, cpGossipPath, logFile string) mode
 		vdevEntityUUIDInput:   vdevEntityUUIDInput,
 		vdevFilterTypeInput:   vdevFilterTypeInput,
 		vdevFormActiveField:   inputVdevName,
+		pfsNameInput:          pfsNameInput,
 		// Control plane configuration
 		logFile:      logFile,
 		cpEnabled:    cpEnabled,
@@ -1085,6 +1101,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m, cmd = m.updateSearchVdev(msg)
 	case stateSearchVdevResult:
 		m, cmd = m.updateSearchVdevResult(msg)
+	// PFS Management
+	case statePFSManagement:
+		m, cmd = m.updatePFSManagement(msg)
+	case statePFSForm:
+		m, cmd = m.updatePFSForm(msg)
+	case stateShowAddedPFS:
+		m, cmd = m.updateShowAddedPFS(msg)
 	// User Management
 	case stateUserCreateForm:
 		m, cmd = m.updateUserCreateForm(msg)
@@ -1240,7 +1263,16 @@ func (m model) updateMenu(msg tea.Msg) (model, tea.Cmd) {
 				m.selectedDevicesForVdev = make(map[int]bool)
 				m.message = ""
 				return m, nil
-			case 9: // View Configuration
+			case 9: // Manage PFS
+				if m.authEnabled && m.loggedInUser == nil {
+					m.message = "Error: Please login first"
+					return m, nil
+				}
+				m.state = statePFSManagement
+				m.pfsMgmtCursor = 0
+				m.message = ""
+				return m, nil
+			case 10: // View Configuration
 				if m.authEnabled && m.loggedInUser == nil {
 					m.message = "Error: Please login first"
 					return m, nil
@@ -1254,7 +1286,7 @@ func (m model) updateMenu(msg tea.Msg) (model, tea.Cmd) {
 				m.message = fmt.Sprintf("Loaded %d PDUs and %d hypervisors from control plane", len(m.cpPDUs), len(m.cpHypervisors))
 				m = m.updateConfigView()
 				return m, nil
-			case 10: // Exit
+			case 11: // Exit
 				m.quitting = true
 				return m, tea.Quit
 			}
@@ -3124,6 +3156,13 @@ func (m model) View() string {
 		return m.viewSearchVdev()
 	case stateSearchVdevResult:
 		return m.viewSearchVdevResult()
+	// PFS Management Views
+	case statePFSManagement:
+		return m.viewPFSManagement()
+	case statePFSForm:
+		return m.viewPFSForm()
+	case stateShowAddedPFS:
+		return m.viewShowAddedPFS()
 	// User Management Views
 	case stateUserCreateForm:
 		return m.viewUserCreateForm()
@@ -9410,6 +9449,159 @@ func (m model) viewInitializeDeviceForm() string {
 	return s.String()
 }
 */
+
+// PFS Management Methods
+
+func (m model) updatePFSManagement(msg tea.Msg) (model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "up", "k":
+			if m.pfsMgmtCursor > 0 {
+				m.pfsMgmtCursor--
+			}
+		case "down", "j":
+			if m.pfsMgmtCursor < 1 {
+				m.pfsMgmtCursor++
+			}
+		case "enter", " ":
+			switch m.pfsMgmtCursor {
+			case 0: // Add PFS
+				m.state = statePFSForm
+				m.pfsNameInput.SetValue("")
+				m.message = ""
+				m.pfsNameInput.Focus()
+				return m, textinput.Blink
+			case 1: // Back
+				m.state = stateMenu
+				m.message = ""
+				return m, nil
+			}
+		case "esc", "q":
+			m.state = stateMenu
+			m.message = ""
+			return m, nil
+		}
+	}
+	return m, nil
+}
+
+func (m model) updatePFSForm(msg tea.Msg) (model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "enter":
+			name := strings.TrimSpace(m.pfsNameInput.Value())
+			if name == "" {
+				m.message = "PFS Name is required"
+				return m, nil
+			}
+			pfs := &ctlplfl.PFS{Name: name}
+			resp, err := m.cpClient.PutPFS(pfs)
+			if err != nil {
+				m.message = fmt.Sprintf("Failed to create PFS: %v", err)
+				return m, nil
+			}
+			if resp != nil && !resp.Success {
+				m.message = fmt.Sprintf("Failed to create PFS: %s", resp.Error)
+				return m, nil
+			}
+			m.currentPFS = ctlplfl.PFS{ID: resp.ID, Name: name}
+			m.state = stateShowAddedPFS
+			m.message = ""
+			return m, nil
+		case "esc":
+			m.state = statePFSManagement
+			m.message = ""
+			return m, nil
+		}
+	}
+	var cmd tea.Cmd
+	m.pfsNameInput, cmd = m.pfsNameInput.Update(msg)
+	return m, cmd
+}
+
+func (m model) updateShowAddedPFS(msg tea.Msg) (model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "enter", " ", "esc":
+			m.state = statePFSManagement
+			return m, nil
+		}
+	}
+	return m, nil
+}
+
+// PFS Management Views
+
+func (m model) viewPFSManagement() string {
+	title := titleStyle.Render("PFS Management")
+
+	var s strings.Builder
+	s.WriteString(title + "\n\n")
+
+	if m.message != "" {
+		if strings.Contains(m.message, "Failed") || strings.Contains(m.message, "Error") {
+			s.WriteString(errorStyle.Render(m.message) + "\n\n")
+		} else {
+			s.WriteString(successStyle.Render(m.message) + "\n\n")
+		}
+	}
+
+	s.WriteString("Select an action:\n\n")
+
+	items := []string{
+		"Add PFS - Create a new Parallel File System",
+		"Back   - Return to main menu",
+	}
+
+	for i, item := range items {
+		cursor := "  "
+		if i == m.pfsMgmtCursor {
+			cursor = "▶ "
+			s.WriteString(selectedItemStyle.Render(fmt.Sprintf("%s%d. %s", cursor, i+1, item)))
+		} else {
+			s.WriteString(fmt.Sprintf("%s%d. %s", cursor, i+1, item))
+		}
+		s.WriteString("\n")
+	}
+
+	s.WriteString("\nControls: ↑/↓ navigate, enter select, esc back to main menu")
+	return s.String()
+}
+
+func (m model) viewPFSForm() string {
+	title := titleStyle.Render("Create New PFS")
+
+	var s strings.Builder
+	s.WriteString(title + "\n\n")
+
+	if m.message != "" {
+		s.WriteString(errorStyle.Render(m.message) + "\n\n")
+	}
+
+	s.WriteString("Name:\n")
+	s.WriteString(focusedStyle.Render(m.pfsNameInput.View()) + "\n\n")
+	s.WriteString("Controls: enter submit, esc back")
+	return s.String()
+}
+
+func (m model) viewShowAddedPFS() string {
+	title := titleStyle.Render("PFS Created Successfully")
+
+	var s strings.Builder
+	s.WriteString(title + "\n\n")
+
+	s.WriteString(lipgloss.NewStyle().Bold(true).Render("PFS Details:") + "\n\n")
+	s.WriteString(fmt.Sprintf("Name: %s\n", m.currentPFS.Name))
+	if m.currentPFS.ID != "" {
+		s.WriteString(fmt.Sprintf("UUID: %s\n", m.currentPFS.ID))
+	}
+
+	s.WriteString("\nPress enter or esc to continue")
+	return s.String()
+}
 
 func main() {
 	// Define command line flags
