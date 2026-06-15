@@ -50,7 +50,6 @@ func TestVdev(t *testing.T) {
 	scenarios := []struct {
 		name            string
 		redundancy      ctlplfl.RedundancyMode
-		totalReplicas   uint8
 		totalDataBlks   uint8
 		totalParityBlks uint8
 		size            int64
@@ -58,13 +57,13 @@ func TestVdev(t *testing.T) {
 		{
 			name:          "CreateWithoutReplica", // 1 replica
 			redundancy:    ctlplfl.RMReplica,
-			totalReplicas: 1,
+			totalDataBlks: 1,
 			size:          8 * 1024 * 1024 * 1024,
 		},
 		{
 			name:          "CreateVdevWith3Replica",
 			redundancy:    ctlplfl.RMReplica,
-			totalReplicas: 3,
+			totalDataBlks: 3,
 			size:          8 * 1024 * 1024 * 1024,
 		},
 		{
@@ -85,7 +84,6 @@ func TestVdev(t *testing.T) {
 				Name:            sc.name,
 				Size:            sc.size,
 				Redundancy:      sc.redundancy,
-				TotalReplicas:   sc.totalReplicas,
 				TotalDataBlks:   sc.totalDataBlks,
 				TotalParityBlks: sc.totalParityBlks,
 			}
@@ -185,7 +183,7 @@ func TestVdev(t *testing.T) {
 				t.Errorf("Redundancy mismatch: expected %v, got %v", sc.redundancy, v.Cfg.Redundancy)
 			}
 
-			expectedTotalBlocks := int(sc.totalReplicas)
+			expectedTotalBlocks := int(sc.totalDataBlks)
 			if sc.redundancy == ctlplfl.RMEC {
 				expectedTotalBlocks = int(sc.totalDataBlks + sc.totalParityBlks)
 			}
@@ -240,8 +238,8 @@ func TestVdev(t *testing.T) {
 				}
 
 				if sc.redundancy == ctlplfl.RMReplica {
-					if replicaCount != int(sc.totalReplicas) {
-						t.Errorf("Replica count mismatch: expected %d, got %d", sc.totalReplicas, replicaCount)
+					if replicaCount != int(sc.totalDataBlks) {
+						t.Errorf("Replica count mismatch: expected %d, got %d", sc.totalDataBlks, replicaCount)
 					}
 				} else {
 					if dataCount != int(sc.totalDataBlks) {
