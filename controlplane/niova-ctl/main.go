@@ -9093,6 +9093,7 @@ func (m model) createSingleVdev(size int64, replica int, index int) VdevCreation
 	}
 
 	if m.cpClient != nil && m.cpConnected {
+		m.cpClient.SetToken(m.userToken())
 		log.Info("Creating Vdev with size: ", vdev.Vdev.Size)
 		resp, err := m.cpClient.CreateVdev(vdev)
 		if err != nil {
