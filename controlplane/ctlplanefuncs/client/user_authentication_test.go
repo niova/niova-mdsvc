@@ -145,7 +145,7 @@ func TestUserAuthVdevCreation(t *testing.T) {
 	assert.NotEmpty(t, user2Resp.SecretKey)
 	assert.NotEmpty(t, user2Resp.UserID)
 	log.Infof("Created user2: %s with ID: %s", user2Username, user2Resp.UserID)
-	log.Infof("Secret key of user2: %s", userResp.SecretKey)
+	log.Infof("Secret key of user2: %s", user2Resp.SecretKey)
 }
 
 func TestCreateHierarchyForMultipleBlockTest(t *testing.T) {
