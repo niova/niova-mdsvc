@@ -648,13 +648,21 @@ func TestAPDeleteVdev(t *testing.T) {
 				HR.Init()
 				nisd := &ctlplfl.Nisd{
 					ID:            testNisdUUID,
-					AvailableSize: 500000000000,
 					FailureDomain: []string{testPDU, testRack, testHV, testDev, testPT},
+					AvailableSize: 500000000000,
+				}
+				nisd2 := &ctlplfl.Nisd{
+					ID:            testNisdUUID2,
+					FailureDomain: []string{testPDU, testRack, testHV, testDev, testPT},
+					AvailableSize: 500000000000,
 				}
 
 				HR.AddNisd(nisd)
 
 				t.Log("Added NISD to HR:", nisd.ID)
+				HR.AddNisd(nisd2)
+
+				t.Log("Added NISD to HR:", nisd2.ID)
 			},
 			vdevID:      testVdevUUID,
 			expectError: false,
@@ -683,7 +691,7 @@ func TestAPDeleteVdev(t *testing.T) {
 
 				res, err := ds.Read(fmt.Sprintf("n_cfg/%s/as", testNisdUUID), "")
 
-				expectedAS := 1000000000000 + 8589934592
+				expectedAS := 500000000000 + 8589934592
 
 				if err != nil || string(res) != strconv.FormatInt(int64(expectedAS), 10) {
 					t.Errorf("Expected NISD AS %d, got %s", expectedAS, string(res))
