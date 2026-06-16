@@ -9090,7 +9090,16 @@ func (m model) viewVdevCreationSummary() string {
 			s.WriteString(fmt.Sprintf("   Size:    %s (%d bytes)\n", formatSize(vdev.Size), vdev.Size))
 			s.WriteString(fmt.Sprintf("   Chunks:  %d\n", vdev.NumChunks))
 			s.WriteString(fmt.Sprintf("   Replicas: %d\n", vdev.NumReplica))
-			s.WriteString(fmt.Sprintf("   Status:  Active\n\n"))
+			s.WriteString(fmt.Sprintf("   Status:  Active\n"))
+			switch {
+			case vdev.PFSName != "" && vdev.PFSID != "":
+				s.WriteString(fmt.Sprintf("   PFS:     %s (%s)\n", vdev.PFSName, vdev.PFSID))
+			case vdev.PFSName != "":
+				s.WriteString(fmt.Sprintf("   PFS:     %s\n", vdev.PFSName))
+			case vdev.PFSID != "":
+				s.WriteString(fmt.Sprintf("   PFS:     %s\n", vdev.PFSID))
+			}
+			s.WriteString("\n")
 		}
 	}
 
