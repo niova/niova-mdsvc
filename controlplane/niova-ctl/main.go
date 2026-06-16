@@ -129,6 +129,7 @@ const (
 	inputVdevSize
 	inputVdevEntityUUID
 	inputVdevFilterType
+	inputVdevPFSName
 )
 
 type model struct {
@@ -243,12 +244,15 @@ type model struct {
 	vdevCountInput         textinput.Model
 	vdevEntityUUIDInput    textinput.Model
 	vdevFilterTypeInput    textinput.Model
+	vdevPFSNameInput       textinput.Model
 	vdevFormActiveField    inputField              // Track which field is currently active
 	createdVdevs           []ctlplfl.VdevCfg       // Store created Vdevs for summary
 	nisdCache              map[string]ctlplfl.Nisd // NISD UUID → NISD info, populated on device view entry
 	vdevCreationProgress   int                     // Track creation progress
 	vdevCreationTotal      int                     // Total Vdevs to create
 	vdevCreationErrors     []string                // Store any creation errors
+	vdevCreationPFSID      string                  // PFS UUID for current creation batch
+	vdevCreationPFSName    string                  // PFS name for current creation batch
 
 	// PFS Management
 	pfsMgmtCursor int
@@ -494,6 +498,10 @@ func initialModel(cpEnabled bool, cpRaftUUID, cpGossipPath, logFile string) mode
 	vdevFilterTypeInput.CharLimit = 16
 	vdevFilterTypeInput.SetValue("any")
 
+	vdevPFSNameInput := textinput.New()
+	vdevPFSNameInput.Placeholder = "PFS name or UUID (optional)"
+	vdevPFSNameInput.CharLimit = 64
+
 	// Initialize PFS name input
 	pfsNameInput := textinput.New()
 	pfsNameInput.Placeholder = "Enter PFS name"
@@ -581,6 +589,7 @@ func initialModel(cpEnabled bool, cpRaftUUID, cpGossipPath, logFile string) mode
 		vdevCountInput:        vdevCountInput,
 		vdevEntityUUIDInput:   vdevEntityUUIDInput,
 		vdevFilterTypeInput:   vdevFilterTypeInput,
+		vdevPFSNameInput:      vdevPFSNameInput,
 		vdevFormActiveField:   inputVdevName,
 		pfsNameInput:          pfsNameInput,
 		// Control plane configuration
@@ -8365,13 +8374,14 @@ func (m model) updateVdevForm(msg tea.Msg) (model, tea.Cmd) {
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "tab", "down":
-			// Cycle forward: name → replica → count → size → entityUUID → filterType → name
+			// Cycle forward: name → replica → count → size → entityUUID → filterType → pfsName → name
 			m.vdevNameInput.Blur()
 			m.vdevReplicaInput.Blur()
 			m.vdevCountInput.Blur()
 			m.vdevSizeInput.Blur()
 			m.vdevEntityUUIDInput.Blur()
 			m.vdevFilterTypeInput.Blur()
+			m.vdevPFSNameInput.Blur()
 			switch m.vdevFormActiveField {
 			case inputVdevName:
 				m.vdevFormActiveField = inputVdevReplica
@@ -8388,6 +8398,9 @@ func (m model) updateVdevForm(msg tea.Msg) (model, tea.Cmd) {
 			case inputVdevEntityUUID:
 				m.vdevFormActiveField = inputVdevFilterType
 				m.vdevFilterTypeInput.Focus()
+			case inputVdevFilterType:
+				m.vdevFormActiveField = inputVdevPFSName
+				m.vdevPFSNameInput.Focus()
 			default:
 				m.vdevFormActiveField = inputVdevName
 				m.vdevNameInput.Focus()
@@ -8401,6 +8414,7 @@ func (m model) updateVdevForm(msg tea.Msg) (model, tea.Cmd) {
 			m.vdevSizeInput.Blur()
 			m.vdevEntityUUIDInput.Blur()
 			m.vdevFilterTypeInput.Blur()
+			m.vdevPFSNameInput.Blur()
 			switch m.vdevFormActiveField {
 			case inputVdevReplica:
 				m.vdevFormActiveField = inputVdevName
@@ -8417,9 +8431,12 @@ func (m model) updateVdevForm(msg tea.Msg) (model, tea.Cmd) {
 			case inputVdevFilterType:
 				m.vdevFormActiveField = inputVdevEntityUUID
 				m.vdevEntityUUIDInput.Focus()
-			default:
+			case inputVdevPFSName:
 				m.vdevFormActiveField = inputVdevFilterType
 				m.vdevFilterTypeInput.Focus()
+			default:
+				m.vdevFormActiveField = inputVdevPFSName
+				m.vdevPFSNameInput.Focus()
 			}
 			return m, textinput.Blink
 		case "enter":
@@ -8483,6 +8500,16 @@ func (m model) updateVdevForm(msg tea.Msg) (model, tea.Cmd) {
 				return m, nil
 			}
 
+			// Determine whether the PFS input is a UUID (PFSID) or a name.
+			pfsInput := strings.TrimSpace(m.vdevPFSNameInput.Value())
+			if isUUID(pfsInput) {
+				m.vdevCreationPFSID = pfsInput
+				m.vdevCreationPFSName = ""
+			} else {
+				m.vdevCreationPFSID = ""
+				m.vdevCreationPFSName = pfsInput
+			}
+
 			// Initialize creation tracking
 			m.vdevCreationTotal = count
 			m.vdevCreationProgress = 0
@@ -8516,6 +8543,8 @@ func (m model) updateVdevForm(msg tea.Msg) (model, tea.Cmd) {
 		m.vdevEntityUUIDInput, cmd = m.vdevEntityUUIDInput.Update(msg)
 	case inputVdevFilterType:
 		m.vdevFilterTypeInput, cmd = m.vdevFilterTypeInput.Update(msg)
+	case inputVdevPFSName:
+		m.vdevPFSNameInput, cmd = m.vdevPFSNameInput.Update(msg)
 	}
 
 	return m, cmd
@@ -8565,6 +8594,11 @@ func (m model) viewVdevForm() string {
 	// Filter type input
 	s.WriteString("Failure Domain Type (optional): ")
 	s.WriteString(m.vdevFilterTypeInput.View())
+	s.WriteString("\n\n")
+
+	// PFS input
+	s.WriteString("PFS Name or UUID (optional): ")
+	s.WriteString(m.vdevPFSNameInput.View())
 	s.WriteString("\n\n")
 
 	s.WriteString("Name: letters and digits only, unique across all Vdevs\n")
@@ -8671,6 +8705,14 @@ func (m model) viewViewVdev() string {
 
 	// Query Vdevs from control plane
 	if m.cpClient != nil && m.cpConnected {
+		// Build a PFSID → name map for display.
+		pfsNameMap := make(map[string]string)
+		if pfsList, err := m.cpClient.GetPFS(&ctlplfl.GetReq{GetAll: true}); err == nil {
+			for _, p := range pfsList {
+				pfsNameMap[p.ID] = p.Name
+			}
+		}
+
 		vdevs, err := m.cpClient.GetVdevCfgs(&ctlplfl.GetReq{GetAll: true})
 		if err != nil {
 			s.WriteString(errorStyle.Render(fmt.Sprintf("Failed to query Vdevs: %v", err)) + "\n\n")
@@ -8727,13 +8769,29 @@ func (m model) viewViewVdev() string {
 					s.WriteString(selectedItemStyle.Render(fmt.Sprintf("   Chunks: %d", vdev.NumChunks)))
 					s.WriteString("\n")
 					s.WriteString(selectedItemStyle.Render(fmt.Sprintf("   Replicas: %d", vdev.NumReplica)))
-					s.WriteString("\n\n")
+					s.WriteString("\n")
+					if vdev.PFSID != "" {
+						pfsDisplay := vdev.PFSID
+						if name, ok := pfsNameMap[vdev.PFSID]; ok && name != "" {
+							pfsDisplay = fmt.Sprintf("%s (%s)", name, vdev.PFSID)
+						}
+						s.WriteString(selectedItemStyle.Render(fmt.Sprintf("   PFS: %s", pfsDisplay)))
+						s.WriteString("\n")
+					}
+					s.WriteString("\n")
 				} else {
 					s.WriteString(fmt.Sprintf("%s%d. %s\n", cursor, i+1, vdev.Name))
 					s.WriteString(fmt.Sprintf("   ID: %s\n", vdev.ID))
 					s.WriteString(fmt.Sprintf("   Size: %d bytes\n", vdev.Size))
 					s.WriteString(fmt.Sprintf("   Chunks: %d\n", vdev.NumChunks))
 					s.WriteString(fmt.Sprintf("   Replicas: %d\n", vdev.NumReplica))
+					if vdev.PFSID != "" {
+						pfsDisplay := vdev.PFSID
+						if name, ok := pfsNameMap[vdev.PFSID]; ok && name != "" {
+							pfsDisplay = fmt.Sprintf("%s (%s)", name, vdev.PFSID)
+						}
+						s.WriteString(fmt.Sprintf("   PFS: %s\n", pfsDisplay))
+					}
 					s.WriteString("\n")
 				}
 			}
@@ -9074,6 +9132,26 @@ func (m model) createVdevsCommand(size int64, count int, replica int) tea.Cmd {
 	}
 }
 
+// isUUID returns true if s looks like a UUID (8-4-4-4-12 hex with hyphens).
+func isUUID(s string) bool {
+	if len(s) != 36 {
+		return false
+	}
+	for i, c := range s {
+		switch i {
+		case 8, 13, 18, 23:
+			if c != '-' {
+				return false
+			}
+		default:
+			if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
 // isAlphanumericStr returns true if s contains only ASCII letters and digits.
 func isAlphanumericStr(s string) bool {
 	if s == "" {
@@ -9127,6 +9205,8 @@ func (m model) createSingleVdev(size int64, replica int, index int) VdevCreation
 			Name:       name,
 			Size:       size,
 			NumReplica: uint8(replica),
+			PFSID:      m.vdevCreationPFSID,
+			PFSName:    m.vdevCreationPFSName,
 		},
 		Filter: filter,
 	}

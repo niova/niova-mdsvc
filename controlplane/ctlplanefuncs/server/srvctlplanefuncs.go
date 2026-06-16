@@ -673,6 +673,9 @@ func WPCreateVdev(args ...interface{}) (interface{}, error) {
 	if len(req.Vdev.Name) > 0 && !isAlphanumeric(req.Vdev.Name) {
 		return ctlplfl.WPFuncError(fmt.Errorf("vdev name %q is invalid: must be non-empty and contain only letters and digits", req.Vdev.Name))
 	}
+	if req.Vdev.PFSID != "" && req.Vdev.PFSName != "" {
+		return ctlplfl.WPFuncError(fmt.Errorf("only one of PFSID or PFSName may be set, not both"))
+	}
 
 	err = req.Vdev.Init()
 	if err != nil {
@@ -1027,6 +1030,28 @@ func APCreateVdev(args ...interface{}) (interface{}, error) {
 	}
 	req.Vdev.ID = resp.ID
 	req.Vdev.NumChunks = uint32(ctlplfl.Count8GBChunks(req.Vdev.Size))
+
+	// Resolve PFSName → PFSID via the reverse index and inject the WP-skipped keys.
+	if req.Vdev.PFSName != "" && req.Vdev.PFSID == "" {
+		raw, err := cbArgs.Store.Read(getConfKey(pfsKey, req.Vdev.PFSName), colmfamily)
+		if err != nil {
+			log.Errorf("APCreateVdev: PFS name %q not found: %v", req.Vdev.PFSName, err)
+			return ctlplfl.FuncError(fmt.Errorf("PFS %q not found", req.Vdev.PFSName))
+		}
+		req.Vdev.PFSID = string(raw)
+		vkey := getConfKey(vdevKey, req.Vdev.ID)
+		intrm.Changes = append(intrm.Changes,
+			funclib.CommitChg{
+				Key:   []byte(fmt.Sprintf("%s/%s/pfs", vkey, cfgkey)),
+				Value: []byte(req.Vdev.PFSID),
+			},
+			funclib.CommitChg{
+				Key: []byte(fmt.Sprintf("%s/%s/v/%s", pfsKey, req.Vdev.PFSID, req.Vdev.ID)),
+			},
+		)
+		log.Infof("APCreateVdev: resolved PFS name %q to ID %s for vdev %s", req.Vdev.PFSName, req.Vdev.PFSID, req.Vdev.ID)
+	}
+
 	offset := 0
 	if req.Vdev.PFSID != "" {
 		offsetKey := fmt.Sprintf("%s/%s/offset", pfsKey, req.Vdev.PFSID)
