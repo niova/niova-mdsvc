@@ -8711,11 +8711,13 @@ func (m model) viewViewVdev() string {
 
 	// Query Vdevs from control plane
 	if m.cpClient != nil && m.cpConnected {
-		// Build a PFSID → name map for display.
+		// Build a PFSID → name map for display (skip reverse-index entries where ID is not a UUID).
 		pfsNameMap := make(map[string]string)
 		if pfsList, err := m.cpClient.GetPFS(&ctlplfl.GetReq{GetAll: true}); err == nil {
 			for _, p := range pfsList {
-				pfsNameMap[p.ID] = p.Name
+				if isUUID(p.ID) {
+					pfsNameMap[p.ID] = p.Name
+				}
 			}
 		}
 
