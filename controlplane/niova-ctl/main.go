@@ -9738,6 +9738,15 @@ func (m model) viewViewPFS() string {
 		return s.String()
 	}
 
+	// Filter out reverse-index entries (ID is the PFS name, not a UUID).
+	realPFSs := pfsList[:0]
+	for _, p := range pfsList {
+		if isUUID(p.ID) {
+			realPFSs = append(realPFSs, p)
+		}
+	}
+	pfsList = realPFSs
+
 	if len(pfsList) == 0 {
 		s.WriteString("No PFSs found.\n\n")
 		s.WriteString(helpStyle.Render("esc: back"))
