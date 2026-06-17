@@ -188,15 +188,6 @@ func getVdevChunkKey(vdevID string) string {
 	return fmt.Sprintf("%s/%s/%s", vdevKey, vdevID, chunkKey)
 }
 
-func isUUID(s string) bool {
-	_, err := uuid.Parse(s)
-
-	if err == nil {
-		return true
-	}
-
-	return false
-}
 
 func ReadSnapByName(args ...interface{}) (interface{}, error) {
 
@@ -672,9 +663,6 @@ func WPCreateVdev(args ...interface{}) (interface{}, error) {
 	}
 	if len(req.Vdev.Name) > 0 && !isAlphanumeric(req.Vdev.Name) {
 		return ctlplfl.WPFuncError(fmt.Errorf("vdev name %q is invalid: must be non-empty and contain only letters and digits", req.Vdev.Name))
-	}
-	if req.Vdev.PFSID != "" && req.Vdev.PFSName != "" {
-		return ctlplfl.WPFuncError(fmt.Errorf("only one of PFSID or PFSName may be set, not both"))
 	}
 
 	err = req.Vdev.Init()
@@ -1391,7 +1379,7 @@ func ReadVdevsInfoWithChunkMapping(args ...interface{}) (interface{}, error) {
 	}
 
 	vdevuuid := req.ID
-	if !isUUID(req.ID) && !req.GetAll {
+	if uuid.Validate(req.ID) != nil && !req.GetAll {
 		vnKey := getConfKey(vnameKey, req.ID)
 		var rqResult *storageiface.RangeReadResult
 		rqResult, err = cbArgs.Store.RangeRead(storageiface.RangeReadArgs{
@@ -1570,7 +1558,7 @@ func ReadVdevInfo(args ...interface{}) (interface{}, error) {
 		return ctlplfl.AuthError(fmt.Errorf("Invalid Token"))
 	}
 	vdevID := req.ID
-	if !isUUID(req.ID) {
+	if uuid.Validate(req.ID) != nil {
 		vnKey := getConfKey(vnameKey, req.ID)
 		var rqResult *storageiface.RangeReadResult
 		rqResult, err = cbArgs.Store.RangeRead(storageiface.RangeReadArgs{
@@ -2022,7 +2010,7 @@ func ReadPFSCfg(args ...interface{}) (interface{}, error) {
 	cpReq := args[1].(ctlplfl.CPReq)
 	req := cpReq.Payload.(ctlplfl.GetReq)
 	pfsID := req.ID
-	if !isUUID(req.ID) && !req.GetAll {
+	if uuid.Validate(req.ID) != nil && !req.GetAll {
 		pKey := getConfKey(pfsKey, req.ID)
 		val, err := cbArgs.Store.Read(pKey, colmfamily)
 		if err != nil {

@@ -8508,7 +8508,7 @@ func (m model) updateVdevForm(msg tea.Msg) (model, tea.Cmd) {
 
 			// Determine whether the PFS input is a UUID (PFSID) or a name.
 			pfsInput := strings.TrimSpace(m.vdevPFSNameInput.Value())
-			if isUUID(pfsInput) {
+			if uuid.Validate(pfsInput) == nil {
 				m.vdevCreationPFSID = pfsInput
 				m.vdevCreationPFSName = ""
 			} else {
@@ -8715,7 +8715,7 @@ func (m model) viewViewVdev() string {
 		pfsNameMap := make(map[string]string)
 		if pfsList, err := m.cpClient.GetPFS(&ctlplfl.GetReq{GetAll: true}); err == nil {
 			for _, p := range pfsList {
-				if isUUID(p.ID) {
+				if uuid.Validate(p.ID) == nil {
 					pfsNameMap[p.ID] = p.Name
 				}
 			}
@@ -9149,25 +9149,6 @@ func (m model) createVdevsCommand(size int64, count int, replica int) tea.Cmd {
 	}
 }
 
-// isUUID returns true if s looks like a UUID (8-4-4-4-12 hex with hyphens).
-func isUUID(s string) bool {
-	if len(s) != 36 {
-		return false
-	}
-	for i, c := range s {
-		switch i {
-		case 8, 13, 18, 23:
-			if c != '-' {
-				return false
-			}
-		default:
-			if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
-				return false
-			}
-		}
-	}
-	return true
-}
 
 // isAlphanumericStr returns true if s contains only ASCII letters and digits.
 func isAlphanumericStr(s string) bool {
@@ -9752,7 +9733,7 @@ func (m model) viewViewPFS() string {
 	// Filter out reverse-index entries (ID is the PFS name, not a UUID).
 	realPFSs := pfsList[:0]
 	for _, p := range pfsList {
-		if isUUID(p.ID) {
+		if uuid.Validate(p.ID) == nil {
 			realPFSs = append(realPFSs, p)
 		}
 	}
