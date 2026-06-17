@@ -188,7 +188,6 @@ func getVdevChunkKey(vdevID string) string {
 	return fmt.Sprintf("%s/%s/%s", vdevKey, vdevID, chunkKey)
 }
 
-
 func ReadSnapByName(args ...interface{}) (interface{}, error) {
 
 	cbargs := args[0].(*PumiceDBServer.PmdbCbArgs)

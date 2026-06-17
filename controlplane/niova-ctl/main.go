@@ -9149,7 +9149,6 @@ func (m model) createVdevsCommand(size int64, count int, replica int) tea.Cmd {
 	}
 }
 
-
 // isAlphanumericStr returns true if s contains only ASCII letters and digits.
 func isAlphanumericStr(s string) bool {
 	if s == "" {
