@@ -188,16 +188,6 @@ func getVdevChunkKey(vdevID string) string {
 	return fmt.Sprintf("%s/%s/%s", vdevKey, vdevID, chunkKey)
 }
 
-func isUUID(s string) bool {
-	_, err := uuid.Parse(s)
-
-	if err == nil {
-		return true
-	}
-
-	return false
-}
-
 func ReadSnapByName(args ...interface{}) (interface{}, error) {
 
 	cbargs := args[0].(*PumiceDBServer.PmdbCbArgs)
@@ -1027,6 +1017,28 @@ func APCreateVdev(args ...interface{}) (interface{}, error) {
 	}
 	req.Vdev.ID = resp.ID
 	req.Vdev.NumChunks = uint32(ctlplfl.Count8GBChunks(req.Vdev.Size))
+
+	// Resolve PFSName → PFSID via the reverse index and inject the WP-skipped keys.
+	if req.Vdev.PFSName != "" && req.Vdev.PFSID == "" {
+		raw, err := cbArgs.Store.Read(getConfKey(pfsKey, req.Vdev.PFSName), colmfamily)
+		if err != nil {
+			log.Errorf("APCreateVdev: PFS name %q not found: %v", req.Vdev.PFSName, err)
+			return ctlplfl.FuncError(fmt.Errorf("PFS %q not found", req.Vdev.PFSName))
+		}
+		req.Vdev.PFSID = string(raw)
+		vkey := getConfKey(vdevKey, req.Vdev.ID)
+		intrm.Changes = append(intrm.Changes,
+			funclib.CommitChg{
+				Key:   []byte(fmt.Sprintf("%s/%s/pfs", vkey, cfgkey)),
+				Value: []byte(req.Vdev.PFSID),
+			},
+			funclib.CommitChg{
+				Key: []byte(fmt.Sprintf("%s/%s/v/%s", pfsKey, req.Vdev.PFSID, req.Vdev.ID)),
+			},
+		)
+		log.Infof("APCreateVdev: resolved PFS name %q to ID %s for vdev %s", req.Vdev.PFSName, req.Vdev.PFSID, req.Vdev.ID)
+	}
+
 	offset := 0
 	if req.Vdev.PFSID != "" {
 		offsetKey := fmt.Sprintf("%s/%s/offset", pfsKey, req.Vdev.PFSID)
@@ -1366,7 +1378,7 @@ func ReadVdevsInfoWithChunkMapping(args ...interface{}) (interface{}, error) {
 	}
 
 	vdevuuid := req.ID
-	if !isUUID(req.ID) && !req.GetAll {
+	if uuid.Validate(req.ID) != nil && !req.GetAll {
 		vnKey := getConfKey(vnameKey, req.ID)
 		var rqResult *storageiface.RangeReadResult
 		rqResult, err = cbArgs.Store.RangeRead(storageiface.RangeReadArgs{
@@ -1545,7 +1557,7 @@ func ReadVdevInfo(args ...interface{}) (interface{}, error) {
 		return ctlplfl.AuthError(fmt.Errorf("Invalid Token"))
 	}
 	vdevID := req.ID
-	if !isUUID(req.ID) {
+	if uuid.Validate(req.ID) != nil {
 		vnKey := getConfKey(vnameKey, req.ID)
 		var rqResult *storageiface.RangeReadResult
 		rqResult, err = cbArgs.Store.RangeRead(storageiface.RangeReadArgs{
@@ -1997,7 +2009,7 @@ func ReadPFSCfg(args ...interface{}) (interface{}, error) {
 	cpReq := args[1].(ctlplfl.CPReq)
 	req := cpReq.Payload.(ctlplfl.GetReq)
 	pfsID := req.ID
-	if !isUUID(req.ID) && !req.GetAll {
+	if uuid.Validate(req.ID) != nil && !req.GetAll {
 		pKey := getConfKey(pfsKey, req.ID)
 		val, err := cbArgs.Store.Read(pKey, colmfamily)
 		if err != nil {

@@ -87,6 +87,11 @@ const (
 	stateVdevCreationSummary
 	stateSearchVdev
 	stateSearchVdevResult
+	// PFS Management States
+	statePFSManagement
+	statePFSForm
+	stateShowAddedPFS
+	stateViewPFS
 	// User Management States
 	stateUserCreateForm
 	stateUserCreateAdminKey
@@ -125,6 +130,7 @@ const (
 	inputVdevSize
 	inputVdevEntityUUID
 	inputVdevFilterType
+	inputVdevPFSName
 )
 
 type model struct {
@@ -239,12 +245,21 @@ type model struct {
 	vdevCountInput         textinput.Model
 	vdevEntityUUIDInput    textinput.Model
 	vdevFilterTypeInput    textinput.Model
+	vdevPFSNameInput       textinput.Model
 	vdevFormActiveField    inputField              // Track which field is currently active
 	createdVdevs           []ctlplfl.VdevCfg       // Store created Vdevs for summary
 	nisdCache              map[string]ctlplfl.Nisd // NISD UUID → NISD info, populated on device view entry
 	vdevCreationProgress   int                     // Track creation progress
 	vdevCreationTotal      int                     // Total Vdevs to create
 	vdevCreationErrors     []string                // Store any creation errors
+	vdevCreationPFSID      string                  // PFS UUID for current creation batch
+	vdevCreationPFSName    string                  // PFS name for current creation batch
+
+	// PFS Management
+	pfsMgmtCursor int
+	pfsViewCursor int
+	currentPFS    ctlplfl.PFS
+	pfsNameInput  textinput.Model
 
 	// Control Plane
 	cpClient            *ctlplcl.CliCFuncs
@@ -485,6 +500,15 @@ func initialModel(cpEnabled bool, cpRaftUUID, cpGossipPath, logFile string) mode
 	vdevFilterTypeInput.CharLimit = 16
 	vdevFilterTypeInput.SetValue("any")
 
+	vdevPFSNameInput := textinput.New()
+	vdevPFSNameInput.Placeholder = "PFS name or UUID (optional)"
+	vdevPFSNameInput.CharLimit = 64
+
+	// Initialize PFS name input
+	pfsNameInput := textinput.New()
+	pfsNameInput.Placeholder = "Enter PFS name"
+	pfsNameInput.CharLimit = 64
+
 	// Initialize user management text inputs
 	userUsernameInput := textinput.New()
 	userUsernameInput.Placeholder = "Enter username (use 'admin' for admin user)"
@@ -528,6 +552,7 @@ func initialModel(cpEnabled bool, cpRaftUUID, cpGossipPath, logFile string) mode
 		{"Manage Partitions", "Create, view, and delete NISD partitions"},
 		{"Manage NISDs", "Initialize NISD instances on device partitions"},
 		{"Manage Vdevs", "Create and manage virtual devices"},
+		{"Manage PFS", "Create and view Parallel File Systems"},
 		{"View Configuration", "Display current hierarchical configuration from control plane"},
 		{"Exit", "Exit"},
 	}...)
@@ -566,7 +591,9 @@ func initialModel(cpEnabled bool, cpRaftUUID, cpGossipPath, logFile string) mode
 		vdevCountInput:        vdevCountInput,
 		vdevEntityUUIDInput:   vdevEntityUUIDInput,
 		vdevFilterTypeInput:   vdevFilterTypeInput,
+		vdevPFSNameInput:      vdevPFSNameInput,
 		vdevFormActiveField:   inputVdevName,
+		pfsNameInput:          pfsNameInput,
 		// Control plane configuration
 		logFile:      logFile,
 		cpEnabled:    cpEnabled,
@@ -1085,6 +1112,15 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m, cmd = m.updateSearchVdev(msg)
 	case stateSearchVdevResult:
 		m, cmd = m.updateSearchVdevResult(msg)
+	// PFS Management
+	case statePFSManagement:
+		m, cmd = m.updatePFSManagement(msg)
+	case statePFSForm:
+		m, cmd = m.updatePFSForm(msg)
+	case stateShowAddedPFS:
+		m, cmd = m.updateShowAddedPFS(msg)
+	case stateViewPFS:
+		m, cmd = m.updateViewPFS(msg)
 	// User Management
 	case stateUserCreateForm:
 		m, cmd = m.updateUserCreateForm(msg)
@@ -1240,7 +1276,16 @@ func (m model) updateMenu(msg tea.Msg) (model, tea.Cmd) {
 				m.selectedDevicesForVdev = make(map[int]bool)
 				m.message = ""
 				return m, nil
-			case 9: // View Configuration
+			case 9: // Manage PFS
+				if m.authEnabled && m.loggedInUser == nil {
+					m.message = "Error: Please login first"
+					return m, nil
+				}
+				m.state = statePFSManagement
+				m.pfsMgmtCursor = 0
+				m.message = ""
+				return m, nil
+			case 10: // View Configuration
 				if m.authEnabled && m.loggedInUser == nil {
 					m.message = "Error: Please login first"
 					return m, nil
@@ -1254,7 +1299,7 @@ func (m model) updateMenu(msg tea.Msg) (model, tea.Cmd) {
 				m.message = fmt.Sprintf("Loaded %d PDUs and %d hypervisors from control plane", len(m.cpPDUs), len(m.cpHypervisors))
 				m = m.updateConfigView()
 				return m, nil
-			case 10: // Exit
+			case 11: // Exit
 				m.quitting = true
 				return m, tea.Quit
 			}
@@ -3124,6 +3169,15 @@ func (m model) View() string {
 		return m.viewSearchVdev()
 	case stateSearchVdevResult:
 		return m.viewSearchVdevResult()
+	// PFS Management Views
+	case statePFSManagement:
+		return m.viewPFSManagement()
+	case statePFSForm:
+		return m.viewPFSForm()
+	case stateShowAddedPFS:
+		return m.viewShowAddedPFS()
+	case stateViewPFS:
+		return m.viewViewPFS()
 	// User Management Views
 	case stateUserCreateForm:
 		return m.viewUserCreateForm()
@@ -8326,13 +8380,14 @@ func (m model) updateVdevForm(msg tea.Msg) (model, tea.Cmd) {
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "tab", "down":
-			// Cycle forward: name → replica → count → size → entityUUID → filterType → name
+			// Cycle forward: name → replica → count → size → entityUUID → filterType → pfsName → name
 			m.vdevNameInput.Blur()
 			m.vdevReplicaInput.Blur()
 			m.vdevCountInput.Blur()
 			m.vdevSizeInput.Blur()
 			m.vdevEntityUUIDInput.Blur()
 			m.vdevFilterTypeInput.Blur()
+			m.vdevPFSNameInput.Blur()
 			switch m.vdevFormActiveField {
 			case inputVdevName:
 				m.vdevFormActiveField = inputVdevReplica
@@ -8349,6 +8404,9 @@ func (m model) updateVdevForm(msg tea.Msg) (model, tea.Cmd) {
 			case inputVdevEntityUUID:
 				m.vdevFormActiveField = inputVdevFilterType
 				m.vdevFilterTypeInput.Focus()
+			case inputVdevFilterType:
+				m.vdevFormActiveField = inputVdevPFSName
+				m.vdevPFSNameInput.Focus()
 			default:
 				m.vdevFormActiveField = inputVdevName
 				m.vdevNameInput.Focus()
@@ -8362,6 +8420,7 @@ func (m model) updateVdevForm(msg tea.Msg) (model, tea.Cmd) {
 			m.vdevSizeInput.Blur()
 			m.vdevEntityUUIDInput.Blur()
 			m.vdevFilterTypeInput.Blur()
+			m.vdevPFSNameInput.Blur()
 			switch m.vdevFormActiveField {
 			case inputVdevReplica:
 				m.vdevFormActiveField = inputVdevName
@@ -8378,9 +8437,12 @@ func (m model) updateVdevForm(msg tea.Msg) (model, tea.Cmd) {
 			case inputVdevFilterType:
 				m.vdevFormActiveField = inputVdevEntityUUID
 				m.vdevEntityUUIDInput.Focus()
-			default:
+			case inputVdevPFSName:
 				m.vdevFormActiveField = inputVdevFilterType
 				m.vdevFilterTypeInput.Focus()
+			default:
+				m.vdevFormActiveField = inputVdevPFSName
+				m.vdevPFSNameInput.Focus()
 			}
 			return m, textinput.Blink
 		case "enter":
@@ -8444,6 +8506,16 @@ func (m model) updateVdevForm(msg tea.Msg) (model, tea.Cmd) {
 				return m, nil
 			}
 
+			// Determine whether the PFS input is a UUID (PFSID) or a name.
+			pfsInput := strings.TrimSpace(m.vdevPFSNameInput.Value())
+			if uuid.Validate(pfsInput) == nil {
+				m.vdevCreationPFSID = pfsInput
+				m.vdevCreationPFSName = ""
+			} else {
+				m.vdevCreationPFSID = ""
+				m.vdevCreationPFSName = pfsInput
+			}
+
 			// Initialize creation tracking
 			m.vdevCreationTotal = count
 			m.vdevCreationProgress = 0
@@ -8477,6 +8549,8 @@ func (m model) updateVdevForm(msg tea.Msg) (model, tea.Cmd) {
 		m.vdevEntityUUIDInput, cmd = m.vdevEntityUUIDInput.Update(msg)
 	case inputVdevFilterType:
 		m.vdevFilterTypeInput, cmd = m.vdevFilterTypeInput.Update(msg)
+	case inputVdevPFSName:
+		m.vdevPFSNameInput, cmd = m.vdevPFSNameInput.Update(msg)
 	}
 
 	return m, cmd
@@ -8526,6 +8600,11 @@ func (m model) viewVdevForm() string {
 	// Filter type input
 	s.WriteString("Failure Domain Type (optional): ")
 	s.WriteString(m.vdevFilterTypeInput.View())
+	s.WriteString("\n\n")
+
+	// PFS input
+	s.WriteString("PFS Name or UUID (optional): ")
+	s.WriteString(m.vdevPFSNameInput.View())
 	s.WriteString("\n\n")
 
 	s.WriteString("Name: letters and digits only, unique across all Vdevs\n")
@@ -8632,6 +8711,16 @@ func (m model) viewViewVdev() string {
 
 	// Query Vdevs from control plane
 	if m.cpClient != nil && m.cpConnected {
+		// Build a PFSID → name map for display (skip reverse-index entries where ID is not a UUID).
+		pfsNameMap := make(map[string]string)
+		if pfsList, err := m.cpClient.GetPFS(&ctlplfl.GetReq{GetAll: true}); err == nil {
+			for _, p := range pfsList {
+				if uuid.Validate(p.ID) == nil {
+					pfsNameMap[p.ID] = p.Name
+				}
+			}
+		}
+
 		vdevs, err := m.cpClient.GetVdevCfgs(&ctlplfl.GetReq{GetAll: true})
 		if err != nil {
 			s.WriteString(errorStyle.Render(fmt.Sprintf("Failed to query Vdevs: %v", err)) + "\n\n")
@@ -8688,13 +8777,29 @@ func (m model) viewViewVdev() string {
 					s.WriteString(selectedItemStyle.Render(fmt.Sprintf("   Chunks: %d", vdev.NumChunks)))
 					s.WriteString("\n")
 					s.WriteString(selectedItemStyle.Render(fmt.Sprintf("   Replicas: %d", vdev.NumReplica)))
-					s.WriteString("\n\n")
+					s.WriteString("\n")
+					if vdev.PFSID != "" {
+						pfsDisplay := vdev.PFSID
+						if name, ok := pfsNameMap[vdev.PFSID]; ok && name != "" {
+							pfsDisplay = fmt.Sprintf("%s (%s)", name, vdev.PFSID)
+						}
+						s.WriteString(selectedItemStyle.Render(fmt.Sprintf("   PFS: %s", pfsDisplay)))
+						s.WriteString("\n")
+					}
+					s.WriteString("\n")
 				} else {
 					s.WriteString(fmt.Sprintf("%s%d. %s\n", cursor, i+1, vdev.Name))
 					s.WriteString(fmt.Sprintf("   ID: %s\n", vdev.ID))
 					s.WriteString(fmt.Sprintf("   Size: %d bytes\n", vdev.Size))
 					s.WriteString(fmt.Sprintf("   Chunks: %d\n", vdev.NumChunks))
 					s.WriteString(fmt.Sprintf("   Replicas: %d\n", vdev.NumReplica))
+					if vdev.PFSID != "" {
+						pfsDisplay := vdev.PFSID
+						if name, ok := pfsNameMap[vdev.PFSID]; ok && name != "" {
+							pfsDisplay = fmt.Sprintf("%s (%s)", name, vdev.PFSID)
+						}
+						s.WriteString(fmt.Sprintf("   PFS: %s\n", pfsDisplay))
+					}
 					s.WriteString("\n")
 				}
 			}
@@ -8987,7 +9092,16 @@ func (m model) viewVdevCreationSummary() string {
 			s.WriteString(fmt.Sprintf("   Size:    %s (%d bytes)\n", formatSize(vdev.Size), vdev.Size))
 			s.WriteString(fmt.Sprintf("   Chunks:  %d\n", vdev.NumChunks))
 			s.WriteString(fmt.Sprintf("   Replicas: %d\n", vdev.NumReplica))
-			s.WriteString(fmt.Sprintf("   Status:  Active\n\n"))
+			s.WriteString(fmt.Sprintf("   Status:  Active\n"))
+			switch {
+			case vdev.PFSName != "" && vdev.PFSID != "":
+				s.WriteString(fmt.Sprintf("   PFS:     %s (%s)\n", vdev.PFSName, vdev.PFSID))
+			case vdev.PFSName != "":
+				s.WriteString(fmt.Sprintf("   PFS:     %s\n", vdev.PFSName))
+			case vdev.PFSID != "":
+				s.WriteString(fmt.Sprintf("   PFS:     %s\n", vdev.PFSID))
+			}
+			s.WriteString("\n")
 		}
 	}
 
@@ -9088,6 +9202,8 @@ func (m model) createSingleVdev(size int64, replica int, index int) VdevCreation
 			Name:       name,
 			Size:       size,
 			NumReplica: uint8(replica),
+			PFSID:      m.vdevCreationPFSID,
+			PFSName:    m.vdevCreationPFSName,
 		},
 		Filter: filter,
 	}
@@ -9410,6 +9526,276 @@ func (m model) viewInitializeDeviceForm() string {
 	return s.String()
 }
 */
+
+// PFS Management Methods
+
+func (m model) updatePFSManagement(msg tea.Msg) (model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "up", "k":
+			if m.pfsMgmtCursor > 0 {
+				m.pfsMgmtCursor--
+			}
+		case "down", "j":
+			if m.pfsMgmtCursor < 2 {
+				m.pfsMgmtCursor++
+			}
+		case "enter", " ":
+			switch m.pfsMgmtCursor {
+			case 0: // Add PFS
+				m.state = statePFSForm
+				m.pfsNameInput.SetValue("")
+				m.message = ""
+				m.pfsNameInput.Focus()
+				return m, textinput.Blink
+			case 1: // View PFSs
+				m.state = stateViewPFS
+				m.pfsViewCursor = 0
+				m.message = ""
+				return m, nil
+			case 2: // Back
+				m.state = stateMenu
+				m.message = ""
+				return m, nil
+			}
+		case "esc", "q":
+			m.state = stateMenu
+			m.message = ""
+			return m, nil
+		}
+	}
+	return m, nil
+}
+
+func (m model) updatePFSForm(msg tea.Msg) (model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "enter":
+			name := strings.TrimSpace(m.pfsNameInput.Value())
+			if name == "" {
+				m.message = "PFS Name is required"
+				return m, nil
+			}
+			pfs := &ctlplfl.PFS{Name: name}
+			resp, err := m.cpClient.PutPFS(pfs)
+			if err != nil {
+				m.message = fmt.Sprintf("Failed to create PFS: %v", err)
+				return m, nil
+			}
+			if resp != nil && !resp.Success {
+				m.message = fmt.Sprintf("Failed to create PFS: %s", resp.Error)
+				return m, nil
+			}
+			m.currentPFS = ctlplfl.PFS{ID: resp.ID, Name: name}
+			m.state = stateShowAddedPFS
+			m.message = ""
+			return m, nil
+		case "esc":
+			m.state = statePFSManagement
+			m.message = ""
+			return m, nil
+		}
+	}
+	var cmd tea.Cmd
+	m.pfsNameInput, cmd = m.pfsNameInput.Update(msg)
+	return m, cmd
+}
+
+func (m model) updateShowAddedPFS(msg tea.Msg) (model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "enter", " ", "esc":
+			m.state = statePFSManagement
+			return m, nil
+		}
+	}
+	return m, nil
+}
+
+// PFS Management Views
+
+func (m model) viewPFSManagement() string {
+	title := titleStyle.Render("PFS Management")
+
+	var s strings.Builder
+	s.WriteString(title + "\n\n")
+
+	if m.message != "" {
+		if strings.Contains(m.message, "Failed") || strings.Contains(m.message, "Error") {
+			s.WriteString(errorStyle.Render(m.message) + "\n\n")
+		} else {
+			s.WriteString(successStyle.Render(m.message) + "\n\n")
+		}
+	}
+
+	s.WriteString("Select an action:\n\n")
+
+	items := []string{
+		"Add PFS  - Create a new Parallel File System",
+		"View PFS - List all PFSs and their Vdevs",
+		"Back     - Return to main menu",
+	}
+
+	for i, item := range items {
+		cursor := "  "
+		if i == m.pfsMgmtCursor {
+			cursor = "▶ "
+			s.WriteString(selectedItemStyle.Render(fmt.Sprintf("%s%d. %s", cursor, i+1, item)))
+		} else {
+			s.WriteString(fmt.Sprintf("%s%d. %s", cursor, i+1, item))
+		}
+		s.WriteString("\n")
+	}
+
+	s.WriteString("\nControls: ↑/↓ navigate, enter select, esc back to main menu")
+	return s.String()
+}
+
+func (m model) viewPFSForm() string {
+	title := titleStyle.Render("Create New PFS")
+
+	var s strings.Builder
+	s.WriteString(title + "\n\n")
+
+	if m.message != "" {
+		s.WriteString(errorStyle.Render(m.message) + "\n\n")
+	}
+
+	s.WriteString("Name:\n")
+	s.WriteString(focusedStyle.Render(m.pfsNameInput.View()) + "\n\n")
+	s.WriteString("Controls: enter submit, esc back")
+	return s.String()
+}
+
+func (m model) viewShowAddedPFS() string {
+	title := titleStyle.Render("PFS Created Successfully")
+
+	var s strings.Builder
+	s.WriteString(title + "\n\n")
+
+	s.WriteString(lipgloss.NewStyle().Bold(true).Render("PFS Details:") + "\n\n")
+	s.WriteString(fmt.Sprintf("Name: %s\n", m.currentPFS.Name))
+	if m.currentPFS.ID != "" {
+		s.WriteString(fmt.Sprintf("UUID: %s\n", m.currentPFS.ID))
+	}
+
+	s.WriteString("\nPress enter or esc to continue")
+	return s.String()
+}
+
+func (m model) updateViewPFS(msg tea.Msg) (model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "up", "k":
+			if m.pfsViewCursor > 0 {
+				m.pfsViewCursor--
+			}
+		case "down", "j":
+			if m.cpClient != nil && m.cpConnected {
+				pfsList, err := m.cpClient.GetPFS(&ctlplfl.GetReq{GetAll: true})
+				if err == nil && m.pfsViewCursor < len(pfsList)-1 {
+					m.pfsViewCursor++
+				}
+			}
+		case "esc", "q":
+			m.state = statePFSManagement
+			m.message = ""
+			return m, nil
+		}
+	}
+	return m, nil
+}
+
+func (m model) viewViewPFS() string {
+	title := titleStyle.Render("View PFSs")
+
+	var s strings.Builder
+	s.WriteString(title + "\n\n")
+
+	if m.cpClient == nil || !m.cpConnected {
+		s.WriteString(errorStyle.Render("Control plane not connected") + "\n\n")
+		s.WriteString(helpStyle.Render("esc: back"))
+		return s.String()
+	}
+
+	pfsList, err := m.cpClient.GetPFS(&ctlplfl.GetReq{GetAll: true})
+	if err != nil {
+		s.WriteString(errorStyle.Render(fmt.Sprintf("Failed to query PFSs: %v", err)) + "\n\n")
+		s.WriteString(helpStyle.Render("esc: back"))
+		return s.String()
+	}
+
+	// Filter out reverse-index entries (ID is the PFS name, not a UUID).
+	realPFSs := pfsList[:0]
+	for _, p := range pfsList {
+		if uuid.Validate(p.ID) == nil {
+			realPFSs = append(realPFSs, p)
+		}
+	}
+	pfsList = realPFSs
+
+	if len(pfsList) == 0 {
+		s.WriteString("No PFSs found.\n\n")
+		s.WriteString(helpStyle.Render("esc: back"))
+		return s.String()
+	}
+
+	// Sort PFSs by name for consistent ordering.
+	sort.Slice(pfsList, func(i, j int) bool {
+		return pfsList[i].Name < pfsList[j].Name
+	})
+
+	// Build vdev ID → name map for resolving vdev names under each PFS.
+	vdevNameMap := make(map[string]string)
+	if vdevs, err := m.cpClient.GetVdevCfgs(&ctlplfl.GetReq{GetAll: true}); err == nil {
+		for _, v := range vdevs {
+			vdevNameMap[v.ID] = v.Name
+		}
+	}
+
+	s.WriteString(fmt.Sprintf("Found %d PFS(s):\n\n", len(pfsList)))
+
+	for i, pfs := range pfsList {
+		cursor := "  "
+		if i == m.pfsViewCursor {
+			cursor = "▶ "
+			s.WriteString(selectedItemStyle.Render(fmt.Sprintf("%s%d. %s", cursor, i+1, pfs.Name)))
+			s.WriteString("\n")
+			s.WriteString(selectedItemStyle.Render(fmt.Sprintf("   ID: %s", pfs.ID)))
+			s.WriteString("\n")
+			s.WriteString(selectedItemStyle.Render(fmt.Sprintf("   Vdevs: %d", len(pfs.VdevIDs))))
+			s.WriteString("\n")
+			for _, vdevID := range pfs.VdevIDs {
+				vdevLabel := vdevID
+				if name, ok := vdevNameMap[vdevID]; ok && name != "" {
+					vdevLabel = fmt.Sprintf("%s (%s)", name, vdevID)
+				}
+				s.WriteString(selectedItemStyle.Render(fmt.Sprintf("     - %s", vdevLabel)))
+				s.WriteString("\n")
+			}
+			s.WriteString("\n")
+		} else {
+			s.WriteString(fmt.Sprintf("%s%d. %s\n", cursor, i+1, pfs.Name))
+			s.WriteString(fmt.Sprintf("   ID: %s\n", pfs.ID))
+			s.WriteString(fmt.Sprintf("   Vdevs: %d\n", len(pfs.VdevIDs)))
+			for _, vdevID := range pfs.VdevIDs {
+				vdevLabel := vdevID
+				if name, ok := vdevNameMap[vdevID]; ok && name != "" {
+					vdevLabel = fmt.Sprintf("%s (%s)", name, vdevID)
+				}
+				s.WriteString(fmt.Sprintf("     - %s\n", vdevLabel))
+			}
+			s.WriteString("\n")
+		}
+	}
+
+	s.WriteString(helpStyle.Render("↑/↓: navigate • esc: back"))
+	return s.String()
+}
 
 func main() {
 	// Define command line flags

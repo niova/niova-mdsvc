@@ -283,6 +283,7 @@ type VdevCfg struct {
 	NumParityBlk uint8
 	AuthToken    string
 	PFSID        string
+	PFSName      string
 }
 
 type PFS struct {
