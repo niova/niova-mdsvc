@@ -1755,7 +1755,7 @@ func APMountVdev(args ...interface{}) (interface{}, error) {
 		return ctlplfl.FuncError(err)
 	}
 
-	log.Debugf("vdev token gen successfull with vdev %v, mc %v, time %v, token %v", vdevID, counter, currentTime, token)
+	log.Debugf("vdev token gen successful with vdev %v, mc %v, time %v, token %v", vdevID, counter, currentTime, token)
 
 	vdevList := ParseEntities[ctlplfl.VdevCfg](mntStateRR.ResultMap, vdevParser{})
 	if len(vdevList) == 0 {
