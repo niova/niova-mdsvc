@@ -684,7 +684,7 @@ func (ccf *CliCFuncs) MountVdev(req *ctlplfl.MountVdevRequest) (ctlplfl.VdevCfg,
 	}
 	cpResp, err := ccf.put(cpReq, ctlplfl.MOUNT_VDEV, &vdev)
 	if err != nil {
-		log.Error("MountVdev failed for vdev: %s, with error: %v", req.VdevID, err)
+		log.Error("MountVdev failed for vdev: ", req.VdevID, " with error: ", err)
 		return vdev, err
 	}
 
