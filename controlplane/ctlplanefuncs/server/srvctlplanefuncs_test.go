@@ -821,7 +821,7 @@ func TestAPDeleteVdev(t *testing.T) {
 
 			cpReq := ctlplfl.CPReq{
 				Token:   token,
-				Payload: ctlplfl.DeleteVdevReq{ID: tc.vdevID},
+				Payload: ctlplfl.VdevRequest{ID: tc.vdevID},
 			}
 
 			result, err := APDeleteVdev(cpReq, cbArgs)
@@ -1539,8 +1539,8 @@ func TestWPMountVdev(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			cpReq := ctlplfl.CPReq{
 				Token: tc.setupToken(),
-				Payload: ctlplfl.MountVdevRequest{
-					VdevID: tc.vdevID,
+				Payload: ctlplfl.VdevRequest{
+					ID: tc.vdevID,
 				},
 			}
 			result, err := WPMountVdev(cpReq)

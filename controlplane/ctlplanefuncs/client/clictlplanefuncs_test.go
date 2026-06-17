@@ -1200,7 +1200,7 @@ func TestDeleteVdev(t *testing.T) {
 	t.Logf("Created vdev for deletion test: %s", vdevID)
 
 	// DeleteVdev often returns "empty response buffer" on success
-	dvResp, err := c.DeleteVdev(&cpLib.DeleteVdevReq{ID: vdevID})
+	dvResp, err := c.DeleteVdev(&cpLib.VdevRequest{ID: vdevID})
 	if err != nil {
 		// This is the expected success path in this codebase
 		assert.Contains(t, err.Error(), "empty response buffer",
@@ -2665,7 +2665,7 @@ func TestMountVdev(t *testing.T) {
 	vdevID := setupVdev(t, c, 100*1024*1024*1024)
 
 	t.Run("Successful Mount", func(t *testing.T) {
-		req := &cpLib.MountVdevRequest{VdevID: vdevID}
+		req := &cpLib.VdevRequest{ID: vdevID}
 		info, err := c.MountVdev(req)
 
 		assert.NoError(t, err)
@@ -2676,7 +2676,7 @@ func TestMountVdev(t *testing.T) {
 	})
 
 	t.Run("Cooldown Limit", func(t *testing.T) {
-		_, err := c.MountVdev(&cpLib.MountVdevRequest{VdevID: vdevID})
+		_, err := c.MountVdev(&cpLib.VdevRequest{ID: vdevID})
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "mount request within active window")
 	})
@@ -2684,7 +2684,7 @@ func TestMountVdev(t *testing.T) {
 	t.Run("Successful Mount After cool down period", func(t *testing.T) {
 		time.Sleep(30 * time.Second)
 
-		info, err := c.MountVdev(&cpLib.MountVdevRequest{VdevID: vdevID})
+		info, err := c.MountVdev(&cpLib.VdevRequest{ID: vdevID})
 		assert.NoError(t, err)
 		assert.Equal(t, uint64(2), info.VdevMountInfo.MountCounter)
 	})
@@ -2707,13 +2707,13 @@ func TestMountMultiClient(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		<-startSignal
-		info1, err1 = c1.MountVdev(&cpLib.MountVdevRequest{VdevID: vdevID})
+		info1, err1 = c1.MountVdev(&cpLib.VdevRequest{ID: vdevID})
 	}()
 
 	go func() {
 		defer wg.Done()
 		<-startSignal
-		info2, err2 = c2.MountVdev(&cpLib.MountVdevRequest{VdevID: vdevID})
+		info2, err2 = c2.MountVdev(&cpLib.VdevRequest{ID: vdevID})
 	}()
 
 	close(startSignal)
@@ -2736,11 +2736,11 @@ func TestMountMultipleVdev(t *testing.T) {
 	vdev1 := setupVdev(t, c, 5*1024*1024*1024)
 	vdev2 := setupVdev(t, c, 5*1024*1024*1024)
 
-	info1, err := c.MountVdev(&cpLib.MountVdevRequest{VdevID: vdev1})
+	info1, err := c.MountVdev(&cpLib.VdevRequest{ID: vdev1})
 	assert.NoError(t, err)
 	assert.Equal(t, uint64(1), info1.VdevMountInfo.MountCounter)
 
-	info2, err := c.MountVdev(&cpLib.MountVdevRequest{VdevID: vdev2})
+	info2, err := c.MountVdev(&cpLib.VdevRequest{ID: vdev2})
 	assert.NoError(t, err)
 	assert.Equal(t, uint64(1), info2.VdevMountInfo.MountCounter)
 }
@@ -2756,14 +2756,14 @@ func TestMountCreateAndDeleteVdevClient(t *testing.T) {
 	assert.NotEmpty(t, vdevID)
 
 	// Step 2: Mount Vdev
-	mountReq := &cpLib.MountVdevRequest{VdevID: vdevID}
+	mountReq := &cpLib.VdevRequest{ID: vdevID}
 	mountInfo, err := c.MountVdev(mountReq)
 	assert.NoError(t, err)
 	assert.Equal(t, vdevID, mountInfo.ID)
 	assert.Equal(t, uint64(1), mountInfo.VdevMountInfo.MountCounter)
 
 	// Step 3: Delete Vdev
-	deleteReq := &cpLib.DeleteVdevReq{ID: vdevID}
+	deleteReq := &cpLib.VdevRequest{ID: vdevID}
 	deleteResp, err := c.DeleteVdev(deleteReq)
 	assert.NoError(t, err)
 	assert.True(t, deleteResp.Success)
@@ -2797,7 +2797,7 @@ func TestMountVdevByName(t *testing.T) {
 	vdevID := setupVdevByName(t, c, 100*1024*1024*1024)
 
 	t.Run("Successful Mount", func(t *testing.T) {
-		req := &cpLib.MountVdevRequest{VdevID: "vdev2"}
+		req := &cpLib.VdevRequest{ID: "vdev2"}
 		info, err := c.MountVdev(req)
 
 		assert.NoError(t, err)
@@ -2808,7 +2808,7 @@ func TestMountVdevByName(t *testing.T) {
 	})
 
 	t.Run("Cooldown Limit", func(t *testing.T) {
-		_, err := c.MountVdev(&cpLib.MountVdevRequest{VdevID: "vdev2"})
+		_, err := c.MountVdev(&cpLib.VdevRequest{ID: "vdev2"})
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "mount request within active window")
 	})
@@ -2816,7 +2816,7 @@ func TestMountVdevByName(t *testing.T) {
 	t.Run("Successful Mount After cool down period", func(t *testing.T) {
 		time.Sleep(30 * time.Second)
 
-		info, err := c.MountVdev(&cpLib.MountVdevRequest{VdevID: "vdev2"})
+		info, err := c.MountVdev(&cpLib.VdevRequest{ID: "vdev2"})
 		assert.NoError(t, err)
 		assert.Equal(t, uint64(2), info.VdevMountInfo.MountCounter)
 	})

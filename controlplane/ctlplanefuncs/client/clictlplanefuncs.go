@@ -658,7 +658,7 @@ func (ccf *CliCFuncs) GetResources(req *ctlplfl.GetResourceReq) (*ctlplfl.Resour
 	return resp, nil
 }
 
-func (ccf *CliCFuncs) DeleteVdev(req *ctlplfl.DeleteVdevReq) (*ctlplfl.ResponseXML, error) {
+func (ccf *CliCFuncs) DeleteVdev(req *ctlplfl.VdevRequest) (*ctlplfl.ResponseXML, error) {
 	resp := &ctlplfl.ResponseXML{}
 	cpreq := &ctlplfl.CPReq{
 		Token:   ccf.token,
@@ -676,7 +676,7 @@ func (ccf *CliCFuncs) DeleteVdev(req *ctlplfl.DeleteVdevReq) (*ctlplfl.ResponseX
 	return resp, nil
 }
 
-func (ccf *CliCFuncs) MountVdev(req *ctlplfl.MountVdevRequest) (ctlplfl.VdevCfg, error) {
+func (ccf *CliCFuncs) MountVdev(req *ctlplfl.VdevRequest) (ctlplfl.VdevCfg, error) {
 	vdev := ctlplfl.VdevCfg{}
 	cpReq := &ctlplfl.CPReq{
 		Token:   ccf.token,
@@ -684,7 +684,7 @@ func (ccf *CliCFuncs) MountVdev(req *ctlplfl.MountVdevRequest) (ctlplfl.VdevCfg,
 	}
 	cpResp, err := ccf.put(cpReq, ctlplfl.MOUNT_VDEV, &vdev)
 	if err != nil {
-		log.Error("MountVdev failed for vdev: %s, with error: %v", req.VdevID, err)
+		log.Errorf("MountVdev failed for vdev %s: %v", req.ID, err)
 		return vdev, err
 	}
 

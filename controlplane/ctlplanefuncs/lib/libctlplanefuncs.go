@@ -336,10 +336,8 @@ type NisdListAvailSize struct {
 	AvailableSize int64  `json:"available_size"`
 }
 
-// DeleteVdevReq is the request structure for deleting a Vdev.
-// UserToken is a JWT token used to authenticate and authorize the caller
-// before the delete operation is allowed to proceed.
-type DeleteVdevReq struct {
+// VdevRequest is the common request structure for vdev operations (mount, delete).
+type VdevRequest struct {
 	ID string
 }
 
@@ -389,9 +387,6 @@ type ResourceListResp struct {
 	Partitions   []DevicePartition
 }
 
-type MountVdevRequest struct {
-	VdevID string
-}
 
 type VdevMountInfo struct {
 	MountCounter   uint64
@@ -503,7 +498,7 @@ func RegisterGOBStructs() {
 	gob.Register(GetResourceReq{})
 	gob.Register(ResourceListResp{})
 	gob.Register(ResourceType(""))
-	gob.Register(DeleteVdevReq{})
+	gob.Register(VdevRequest{})
 	gob.Register(CPReq{})
 	gob.Register(CPResp{})
 	gob.Register(CPError{})
@@ -516,7 +511,6 @@ func RegisterGOBStructs() {
 	gob.Register(userlib.UserResp{})
 	gob.Register([]userlib.UserResp{})
 	gob.Register(userlib.LoginResp{})
-	gob.Register(MountVdevRequest{})
 	gob.Register(VdevMountInfo{})
 }
 
@@ -562,8 +556,8 @@ func NisdAllocHash(data []byte) uint64 {
 	return h.Sum64()
 }
 
-func (dv *DeleteVdevReq) Validate() error {
-	if _, err := uuid.Parse(dv.ID); err != nil {
+func (vr *VdevRequest) Validate() error {
+	if _, err := uuid.Parse(vr.ID); err != nil {
 		return errors.New("invalid ID uuid")
 	}
 

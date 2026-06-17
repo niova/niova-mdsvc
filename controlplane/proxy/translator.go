@@ -53,10 +53,8 @@ func GetReqStruct(name string) any {
 		return &userlib.UserReq{}
 	case userlib.GetUserAPI:
 		return &userlib.GetReq{}
-	case cpLib.DELETE_VDEV:
-		return &cpLib.DeleteVdevReq{}
-	case cpLib.MOUNT_VDEV:
-		return &cpLib.MountVdevRequest{}
+	case cpLib.DELETE_VDEV, cpLib.MOUNT_VDEV:
+		return &cpLib.VdevRequest{}
 	default:
 		return &cpLib.GetReq{}
 	}
@@ -170,9 +168,7 @@ func derefPtr(v any) any {
 		return *p
 	case *userlib.GetReq:
 		return *p
-	case *cpLib.DeleteVdevReq:
-		return *p
-	case *cpLib.MountVdevRequest:
+	case *cpLib.VdevRequest:
 		return *p
 	case *cpLib.GetResourceReq:
 		return *p

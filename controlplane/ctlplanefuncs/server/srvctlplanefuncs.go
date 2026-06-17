@@ -1614,7 +1614,7 @@ func WPMountVdev(args ...interface{}) (interface{}, error) {
 	if !ok {
 		return nil, fmt.Errorf("invalid request type")
 	}
-	req, _ := cpReq.Payload.(ctlplfl.MountVdevRequest)
+	req, ok := cpReq.Payload.(ctlplfl.VdevRequest)
 	if !ok {
 		return nil, fmt.Errorf("invalid payload type")
 	}
@@ -1643,7 +1643,7 @@ func WPMountVdev(args ...interface{}) (interface{}, error) {
 	funcIntrm := funclib.FuncIntrm{
 		Response: resp,
 	}
-	log.Debugf("mount vdev request proceeding to apply phase for vdevID %v", req.VdevID)
+	log.Debugf("mount vdev request proceeding to apply phase for vdevID %v", req.ID)
 	return pmCmn.Encoder(pmCmn.GOB, funcIntrm)
 }
 
@@ -1653,7 +1653,7 @@ func APMountVdev(args ...interface{}) (interface{}, error) {
 	if !ok1 || !ok2 {
 		return nil, fmt.Errorf("invalid arguments to APMountVdev")
 	}
-	req, ok := cpReq.Payload.(ctlplfl.MountVdevRequest)
+	req, ok := cpReq.Payload.(ctlplfl.VdevRequest)
 	if !ok {
 		return nil, fmt.Errorf("invalid payload type")
 	}
@@ -1663,9 +1663,9 @@ func APMountVdev(args ...interface{}) (interface{}, error) {
 		log.Errorf("token validation failed: %v", err)
 		return ctlplfl.AuthError(err)
 	}
-	vdevID := req.VdevID
-	if !isUUID(req.VdevID) {
-		vnKey := getConfKey(vnameKey, req.VdevID)
+	vdevID := req.ID
+	if !isUUID(req.ID) {
+		vnKey := getConfKey(vnameKey, req.ID)
 		var rqResult *storageiface.RangeReadResult
 		rqResult, err = cbArgs.Store.RangeRead(storageiface.RangeReadArgs{
 			Selector: colmfamily,
@@ -1759,7 +1759,7 @@ func APMountVdev(args ...interface{}) (interface{}, error) {
 
 	vdevList := ParseEntities[ctlplfl.VdevCfg](mntStateRR.ResultMap, vdevParser{})
 	if len(vdevList) == 0 {
-		log.Errorf("vdev %s not found", req.VdevID)
+		log.Errorf("vdev %s not found", vdevID)
 		return ctlplfl.FuncError(fmt.Errorf("vdev not found"))
 	}
 	vdevCfg := vdevList[0]
@@ -1936,7 +1936,7 @@ func APDeleteVdev(args ...interface{}) (interface{}, error) {
 	if !ok1 {
 		return nil, fmt.Errorf("invalid request type")
 	}
-	req, ok2 := cpreq.Payload.(ctlplfl.DeleteVdevReq)
+	req, ok2 := cpreq.Payload.(ctlplfl.VdevRequest)
 	if !ok2 {
 		return nil, fmt.Errorf("invalid request type")
 	}
