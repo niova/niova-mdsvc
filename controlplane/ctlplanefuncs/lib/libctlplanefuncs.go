@@ -302,6 +302,7 @@ type VdevCfg struct {
 	AccessToken   string        `xml:"AccessToken" json:"AccessToken"`
 	FilterType    string        // failure domain level used at creation (e.g. "rack", "hv", "any")
 	FilterID      string        // specific entity UUID scoped at creation (empty = no scope)
+	PFSName       string
 }
 
 type PFS struct {
