@@ -1676,7 +1676,7 @@ func APMountVdev(args ...interface{}) (interface{}, error) {
 		return ctlplfl.AuthError(err)
 	}
 	vdevID := req.VdevID
-	if !isUUID(req.VdevID) {
+	if uuid.Validate(req.VdevID) != nil {
 		vnKey := getConfKey(vnameKey, req.VdevID)
 		var rqResult *storageiface.RangeReadResult
 		rqResult, err = cbArgs.Store.RangeRead(storageiface.RangeReadArgs{
