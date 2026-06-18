@@ -1745,9 +1745,9 @@ func APMountVdev(args ...interface{}) (interface{}, error) {
 		TTL:    time.Minute * 30, // Mount tokens last longer
 	}
 	claims := map[string]any{
-		"vdevID":       vdevID,
-		"mountCounter": counter,
-		"issuedAt":     currentTime.Format(time.RFC3339),
+		"vi": vdevID,
+		"mc": counter,
+		"ia": currentTime.Format(time.RFC3339),
 	}
 	token, err := authtc.CreateToken(claims)
 	if err != nil {

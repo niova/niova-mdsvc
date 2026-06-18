@@ -390,12 +390,12 @@ type ResourceListResp struct {
 }
 
 type MountVdevRequest struct {
-	VdevID string
+	VdevID string `xml:"VdevID" json:"VdevID"`
 }
 
 type VdevMountInfo struct {
-	MountCounter   uint64
-	LastUpdatedLTS time.Time
+	MountCounter   uint64    `xml:"MountCounter" json:"MountCounter"`
+	LastUpdatedLTS time.Time `xml:"LastUpdatedLTS" json:"LastUpdatedLTS"`
 }
 
 func (vdev *VdevCfg) Init() error {
