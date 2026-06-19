@@ -367,8 +367,6 @@ func TestCreateVdevWithInvalidFilters(t *testing.T) {
 			log.Infof("FilterType=%v FilterID=%q", tc.filter.Type, tc.filter.ID)
 
 			c.SetToken(adminToken)
-
-			c.SetToken(adminToken)
 			vdevReq := &cpLib.VdevReq{
 				Vdev: &cpLib.VdevCfg{
 					Name:       "invfiltervdev" + uuid.NewString()[:8],
