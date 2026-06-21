@@ -402,15 +402,15 @@ func (vdevParser) ParseField(entity Entity, parts []string, value []byte) {
 			}
 		case NUM_CHUNKS:
 			if nc, err := strconv.ParseUint(string(value), 10, 32); err == nil {
-				vdev.TotalChunks = uint32(nc)
+				vdev.ChunkCnt = uint32(nc)
 			}
 		case TOTAL_DATA_BLKS:
 			if nd, err := strconv.ParseUint(string(value), 10, 8); err == nil {
-				vdev.TotalDataBlks = uint8(nd)
+				vdev.DataBlkCnt = uint8(nd)
 			}
 		case TOTAL_PARITY_BLKS:
 			if np, err := strconv.ParseUint(string(value), 10, 8); err == nil {
-				vdev.TotalParityBlks = uint8(np)
+				vdev.ParityBlkCnt = uint8(np)
 			}
 		case REDUNDANCY_MODE:
 			if rm, err := strconv.Atoi(string(value)); err == nil {
@@ -530,24 +530,24 @@ func (chunkNisdParser) ParseField(entity Entity, parts []string, value []byte) {
 		in.replica[idx] = nisdID
 		in.cn.Redundancy = ctlplfl.RMReplica
 
-		if idx+1 > in.cn.TotalDataBlks {
-			in.cn.TotalDataBlks = idx + 1
+		if idx+1 > in.cn.DataBlkCnt {
+			in.cn.DataBlkCnt = idx + 1
 		}
 
 	case "D":
 		in.data[idx] = nisdID
 		in.cn.Redundancy = ctlplfl.RMEC
 
-		if idx+1 > in.cn.TotalDataBlks {
-			in.cn.TotalDataBlks = idx + 1
+		if idx+1 > in.cn.DataBlkCnt {
+			in.cn.DataBlkCnt = idx + 1
 		}
 
 	case "P":
 		in.parity[idx] = nisdID
 		in.cn.Redundancy = ctlplfl.RMEC
 
-		if idx+1 > in.cn.TotalParityBlks {
-			in.cn.TotalParityBlks = idx + 1
+		if idx+1 > in.cn.ParityBlkCnt {
+			in.cn.ParityBlkCnt = idx + 1
 		}
 	}
 }
@@ -558,19 +558,19 @@ func (chunkNisdParser) GetEntity(entity Entity) Entity {
 	var ids []string
 
 	if in.cn.Redundancy == ctlplfl.RMReplica {
-		for i := uint8(0); i < in.cn.TotalDataBlks; i++ {
+		for i := uint8(0); i < in.cn.DataBlkCnt; i++ {
 			if id, ok := in.replica[i]; ok {
 				ids = append(ids, id)
 			}
 		}
 	} else {
-		for i := uint8(0); i < in.cn.TotalDataBlks; i++ {
+		for i := uint8(0); i < in.cn.DataBlkCnt; i++ {
 			if id, ok := in.data[i]; ok {
 				ids = append(ids, id)
 			}
 		}
 
-		for i := uint8(0); i < in.cn.TotalParityBlks; i++ {
+		for i := uint8(0); i < in.cn.ParityBlkCnt; i++ {
 			if id, ok := in.parity[i]; ok {
 				ids = append(ids, id)
 			}
@@ -578,6 +578,6 @@ func (chunkNisdParser) GetEntity(entity Entity) Entity {
 
 	}
 
-	in.cn.NisdUUIDs = strings.Join(ids, ",")
+	in.cn.NisdIDs = strings.Join(ids, ",")
 	return in.cn
 }

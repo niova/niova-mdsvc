@@ -309,26 +309,26 @@ type RedundancyBlock struct {
 }
 
 type VdevConfig struct {
-	XMLName         xml.Name       `xml:"Vdev"`
-	ID              string         `xml:"ID"`
-	Name            string         `xml:"Name"`
-	Size            int64          `xml:"Size"`                // Logical size in bytes.
-	Redundancy      RedundancyMode `xml:"RedundancyType,attr"` // Replica | EC
-	TotalChunks     uint32         `xml:"ChunkCount"`          // Total logical chunks.
-	FilterType      string         // failure domain level used at creation (e.g. "rack", "hv", "any")
-	FilterID        string         // specific entity UUID scoped at creation (empty = no scope)
-	TotalDataBlks   uint8          `xml:"TotalDataBlks"`
-	TotalParityBlks uint8          `xml:"TotalParityBlks"`
-	AuthToken       string         `xml:"AuthToken"`
-	PFSID           string         `xml:"PFSID"`
+	XMLName      xml.Name       `xml:"Vdev"`
+	ID           string         `xml:"ID"`
+	Name         string         `xml:"Name"`
+	Size         int64          `xml:"Size"`
+	Redundancy   RedundancyMode `xml:"Redundancy"`
+	ChunkCnt     uint32         `xml:"ChunkCnt"`
+	FilterType   string
+	FilterID     string
+	DataBlkCnt   uint8  `xml:"DataBlkCnt"`
+	ParityBlkCnt uint8  `xml:"ParityBlkCnt"`
+	AuthToken    string `xml:"AuthToken"`
+	PFSID        string `xml:"PFSID"`
 }
 
 // TotalRedundancyBlocksPerChunk returns the number of blocks each chunk has based on redundancy mode.
 func (v *VdevConfig) TotalRedundancyBlocksPerChunk() int {
 	if v.Redundancy == RMReplica {
-		return int(v.TotalDataBlks)
+		return int(v.DataBlkCnt)
 	}
-	return int(v.TotalDataBlks + v.TotalParityBlks)
+	return int(v.DataBlkCnt + v.ParityBlkCnt)
 }
 
 type PFS struct {
@@ -347,8 +347,8 @@ type ChunkPlacement struct {
 
 type Chunk struct {
 	XMLName    xml.Name         `xml:"Chunk"`
-	Index      uint32           `xml:"Idx,attr"`            // Logical chunk index.
-	Redundancy RedundancyMode   `xml:"RedundancyType,attr"` // Replica | EC
+	Index      uint32           `xml:"Idx,attr"`
+	Redundancy RedundancyMode   `xml:"Redundancy"`
 	Placements []ChunkPlacement `xml:"Placement"`
 }
 
@@ -437,7 +437,7 @@ func (vdev *VdevConfig) Init() error {
 		return err
 	}
 	vdev.ID = id.String()
-	vdev.TotalChunks = uint32(Count8GBChunks(vdev.Size))
+	vdev.ChunkCnt = uint32(Count8GBChunks(vdev.Size))
 	return nil
 }
 
@@ -493,11 +493,11 @@ func MatchIPs(a, b []string) bool {
 }
 
 type ChunkNisd struct {
-	XMLName         xml.Name       `xml:"ChunkNisd"`
-	Redundancy      RedundancyMode `xml:"RedundancyType,attr"` // Replica | EC
-	TotalDataBlks   uint8          `xml:"TotalDataBlks"`
-	TotalParityBlks uint8          `xml:"TotalParityBlks"`
-	NisdUUIDs       string         `xml:"NISDs"`
+	XMLName      xml.Name       `xml:"ChunkNisd"`
+	Redundancy   RedundancyMode `xml:"Redundancy"`
+	DataBlkCnt   uint8          `xml:"DataBlkCnt"`
+	ParityBlkCnt uint8          `xml:"ParityBlkCnt"`
+	NisdIDs      string         `xml:"NisdIDs"`
 }
 
 func RegisterGOBStructs() {

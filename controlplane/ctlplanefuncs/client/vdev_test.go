@@ -38,8 +38,8 @@ func validateVdevDistribution(t *testing.T, filter *cpLib.Filter, v *cpLib.Vdev)
 		return false
 	}
 
-	// Verify all chunks are present (from 0 to TotalChunks-1)
-	for i := 0; i < int(v.Cfg.TotalChunks); i++ {
+	// Verify all chunks are present (from 0 to ChunkCnt-1)
+	for i := 0; i < int(v.Cfg.ChunkCnt); i++ {
 		placements, ok := chunkPlacements[i]
 		if !ok {
 			t.Errorf("Chunk %d is missing from distribution", i)
@@ -107,7 +107,7 @@ func TestVdevLifecycle(t *testing.T) {
 	scenarios := []struct {
 		name            string
 		redundancy      cpLib.RedundancyMode
-		TotalDataBlks   uint8
+		DataBlkCnt   uint8
 		totalDataBlks   uint8
 		totalParityBlks uint8
 		size            int64
@@ -124,8 +124,8 @@ func TestVdevLifecycle(t *testing.T) {
 					Name:            sc.name,
 					Size:            sc.size,
 					Redundancy:      sc.redundancy,
-					TotalDataBlks:   sc.totalDataBlks,
-					TotalParityBlks: sc.totalParityBlks,
+					DataBlkCnt:   sc.totalDataBlks,
+					ParityBlkCnt: sc.totalParityBlks,
 				},
 			}
 
@@ -167,7 +167,7 @@ func TestVdevCreationWithFilters(t *testing.T) {
 			vdevReq := &cpLib.VdevReq{
 				Vdev: &cpLib.VdevConfig{
 					Size:          16 * cpLib.CHUNK_SIZE,
-					TotalDataBlks: 1,
+					DataBlkCnt: 1,
 				},
 				Filter: cpLib.Filter{Type: tc.filterType, ID: tc.filterID},
 			}
@@ -206,7 +206,7 @@ func TestVdevCreationWithInvalidFilters(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			c.SetToken(adminToken)
 			_, err := c.CreateVdev(&cpLib.VdevReq{
-				Vdev:   &cpLib.VdevConfig{Size: cpLib.CHUNK_SIZE, TotalDataBlks: 2},
+				Vdev:   &cpLib.VdevConfig{Size: cpLib.CHUNK_SIZE, DataBlkCnt: 2},
 				Filter: tc.filter,
 			})
 			require.Error(t, err)
@@ -231,7 +231,7 @@ func TestVdevDeletion(t *testing.T) {
 	c.PutNisd(&nisd)
 
 	resp, err := c.CreateVdev(&cpLib.VdevReq{
-		Vdev: &cpLib.VdevConfig{Size: cpLib.CHUNK_SIZE, TotalDataBlks: 1},
+		Vdev: &cpLib.VdevConfig{Size: cpLib.CHUNK_SIZE, DataBlkCnt: 1},
 	})
 	require.NoError(t, err)
 	vdevID := resp.ID
@@ -254,7 +254,7 @@ func TestVdevCreationWithPFS(t *testing.T) {
 
 	for i := 0; i < 3; i++ {
 		resp, err := c.CreateVdev(&cpLib.VdevReq{
-			Vdev: &cpLib.VdevConfig{Size: cpLib.CHUNK_SIZE, TotalDataBlks: 1, PFSID: pfsID},
+			Vdev: &cpLib.VdevConfig{Size: cpLib.CHUNK_SIZE, DataBlkCnt: 1, PFSID: pfsID},
 		})
 		assert.NoError(t, err)
 		assert.True(t, resp.Success)
@@ -283,7 +283,7 @@ func TestVdevOwnershipABAC(t *testing.T) {
 
 	u1Token := createRegularUserAndLogin(t, authClient, adminToken)
 	c1 := newClientWithToken(t, u1Token)
-	v1Resp, _ := c1.CreateVdev(&cpLib.VdevReq{Vdev: &cpLib.VdevConfig{Size: cpLib.CHUNK_SIZE, TotalDataBlks: 1}})
+	v1Resp, _ := c1.CreateVdev(&cpLib.VdevReq{Vdev: &cpLib.VdevConfig{Size: cpLib.CHUNK_SIZE, DataBlkCnt: 1}})
 
 	u2Token := createRegularUserAndLogin(t, authClient, adminToken)
 	c2 := newClientWithToken(t, u2Token)
@@ -305,7 +305,7 @@ func TestVdevNisdChunkQuery(t *testing.T) {
 	}
 	c.PutNisd(&nisd)
 
-	resp, _ := c.CreateVdev(&cpLib.VdevReq{Vdev: &cpLib.VdevConfig{Size: cpLib.CHUNK_SIZE, TotalDataBlks: 1}})
+	resp, _ := c.CreateVdev(&cpLib.VdevReq{Vdev: &cpLib.VdevConfig{Size: cpLib.CHUNK_SIZE, DataBlkCnt: 1}})
 
 	readV, err := c.GetVdevConfig(&cpLib.GetReq{ID: resp.ID})
 	assert.NoError(t, err)

@@ -694,11 +694,11 @@ func WPCreateVdev(args ...interface{}) (interface{}, error) {
 		case SIZE:
 			value = strconv.Itoa(int(req.Vdev.Size))
 		case NUM_CHUNKS:
-			value = strconv.Itoa(int(req.Vdev.TotalChunks))
+			value = strconv.Itoa(int(req.Vdev.ChunkCnt))
 		case TOTAL_DATA_BLKS:
-			value = strconv.Itoa(int(req.Vdev.TotalDataBlks))
+			value = strconv.Itoa(int(req.Vdev.DataBlkCnt))
 		case TOTAL_PARITY_BLKS:
-			value = strconv.Itoa(int(req.Vdev.TotalParityBlks))
+			value = strconv.Itoa(int(req.Vdev.ParityBlkCnt))
 		case REDUNDANCY_MODE:
 			value = strconv.Itoa(int(req.Vdev.Redundancy))
 		case NAME:
@@ -804,12 +804,12 @@ func allocateNisdPerChunk(req *ctlplfl.VdevReq, fd int, chunkIdx int,
 				blkType = ctlplfl.Replica
 				blkSeq = i
 			} else {
-				if i < int(req.Vdev.TotalDataBlks) {
+				if i < int(req.Vdev.DataBlkCnt) {
 					blkType = ctlplfl.Data
 					blkSeq = i
 				} else {
 					blkType = ctlplfl.Parity
-					blkSeq = i - int(req.Vdev.TotalDataBlks)
+					blkSeq = i - int(req.Vdev.DataBlkCnt)
 				}
 			}
 
@@ -853,12 +853,12 @@ func allocateNisdPerChunk(req *ctlplfl.VdevReq, fd int, chunkIdx int,
 			blkType = ctlplfl.Replica
 			blkSeq = i
 		} else {
-			if i < int(req.Vdev.TotalDataBlks) {
+			if i < int(req.Vdev.DataBlkCnt) {
 				blkType = ctlplfl.Data
 				blkSeq = i
 			} else {
 				blkType = ctlplfl.Parity
-				blkSeq = i - int(req.Vdev.TotalDataBlks)
+				blkSeq = i - int(req.Vdev.DataBlkCnt)
 			}
 		}
 
@@ -927,7 +927,7 @@ func allocateNisdPerVdev(req *ctlplfl.VdevReq, fd int, nisdMap *btree.Map[string
 	// Track device usage across all chunks in this vdev
 	deviceUsage := make(map[string]*DeviceUsageInfo)
 
-	for i := 0; i < int(req.Vdev.TotalChunks); i++ {
+	for i := 0; i < int(req.Vdev.ChunkCnt); i++ {
 		log.Debugf("allocating nisd for chunk: %d, from fd: %d ", i, fd)
 		err := allocateNisdPerChunk(req, fd, i, &commitCh, nisdMap, deviceUsage, offset)
 		if err != nil {
@@ -1067,7 +1067,7 @@ func APCreateVdev(args ...interface{}) (interface{}, error) {
 		return ctlplfl.FuncError(fmt.Errorf("invalid response type"))
 	}
 	req.Vdev.ID = resp.ID
-	req.Vdev.TotalChunks = uint32(ctlplfl.Count8GBChunks(req.Vdev.Size))
+	req.Vdev.ChunkCnt = uint32(ctlplfl.Count8GBChunks(req.Vdev.Size))
 	offset := 0
 	if req.Vdev.PFSID != "" {
 		offsetKey := fmt.Sprintf("%s/%s/offset", pfsKey, req.Vdev.PFSID)
@@ -1497,15 +1497,15 @@ func ReadVdevsInfoWithChunkMapping(args ...interface{}) (interface{}, error) {
 				}
 			case NUM_CHUNKS:
 				if nc, err := strconv.ParseUint(string(value), 10, 32); err == nil {
-					vdev.Cfg.TotalChunks = uint32(nc)
+					vdev.Cfg.ChunkCnt = uint32(nc)
 				}
 			case TOTAL_DATA_BLKS:
 				if tdb, err := strconv.ParseUint(string(value), 10, 64); err == nil {
-					vdev.Cfg.TotalDataBlks = uint8(tdb)
+					vdev.Cfg.DataBlkCnt = uint8(tdb)
 				}
 			case TOTAL_PARITY_BLKS:
 				if tpb, err := strconv.ParseUint(string(value), 10, 64); err == nil {
-					vdev.Cfg.TotalParityBlks = uint8(tpb)
+					vdev.Cfg.ParityBlkCnt = uint8(tpb)
 				}
 			case REDUNDANCY_MODE:
 				if rm, err := strconv.ParseUint(string(value), 10, 8); err == nil {
@@ -1672,15 +1672,15 @@ func ReadVdevInfo(args ...interface{}) (interface{}, error) {
 				}
 			case NUM_CHUNKS:
 				if nc, err := strconv.ParseUint(string(v), 10, 32); err == nil {
-					vdevInfo.TotalChunks = uint32(nc)
+					vdevInfo.ChunkCnt = uint32(nc)
 				}
 			case TOTAL_DATA_BLKS:
 				if nd, err := strconv.ParseUint(string(v), 10, 8); err == nil {
-					vdevInfo.TotalDataBlks = uint8(nd)
+					vdevInfo.DataBlkCnt = uint8(nd)
 				}
 			case TOTAL_PARITY_BLKS:
 				if np, err := strconv.ParseUint(string(v), 10, 8); err == nil {
-					vdevInfo.TotalParityBlks = uint8(np)
+					vdevInfo.ParityBlkCnt = uint8(np)
 				}
 			case REDUNDANCY_MODE:
 				if rm, err := strconv.Atoi(string(v)); err == nil {

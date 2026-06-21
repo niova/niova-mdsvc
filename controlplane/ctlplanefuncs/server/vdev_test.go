@@ -84,8 +84,8 @@ func TestVdev(t *testing.T) {
 				Name:            sc.name,
 				Size:            sc.size,
 				Redundancy:      sc.redundancy,
-				TotalDataBlks:   sc.totalDataBlks,
-				TotalParityBlks: sc.totalParityBlks,
+				DataBlkCnt:   sc.totalDataBlks,
+				ParityBlkCnt: sc.totalParityBlks,
 			}
 			vdevConfig.Init()
 
@@ -127,7 +127,7 @@ func TestVdev(t *testing.T) {
 				Vdev: vdevConfig,
 			}
 			req.Vdev.ID = vdevID
-			req.Vdev.TotalChunks = uint32(ctlplfl.Count8GBChunks(req.Vdev.Size))
+			req.Vdev.ChunkCnt = uint32(ctlplfl.Count8GBChunks(req.Vdev.Size))
 
 			allocMap := btree.NewMap[string, *ctlplfl.NisdVdevAlloc](32)
 
@@ -196,7 +196,7 @@ func TestVdev(t *testing.T) {
 			parityCount := 0
 			replicaCount := 0
 
-			for i := uint32(0); i < v.Cfg.TotalChunks; i++ {
+			for i := uint32(0); i < v.Cfg.ChunkCnt; i++ {
 				getReqChunk := ctlplfl.GetReq{
 					ID: fmt.Sprintf("%s/%d", vdevID, i),
 				}

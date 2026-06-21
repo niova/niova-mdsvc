@@ -8209,8 +8209,8 @@ func (m model) viewSearchVdevResult() string {
 	s.WriteString(fmt.Sprintf("  Name:     %s\n", v.Cfg.Name))
 	s.WriteString(fmt.Sprintf("  ID:       %s\n", v.Cfg.ID))
 	s.WriteString(fmt.Sprintf("  Size:     %s (%d bytes)\n", formatSize(v.Cfg.Size), v.Cfg.Size))
-	s.WriteString(fmt.Sprintf("  Chunks:   %d\n", v.Cfg.TotalChunks))
-	s.WriteString(fmt.Sprintf("  Replicas: %d\n", v.Cfg.TotalDataBlks))
+	s.WriteString(fmt.Sprintf("  Chunks:   %d\n", v.Cfg.ChunkCnt))
+	s.WriteString(fmt.Sprintf("  Replicas: %d\n", v.Cfg.DataBlkCnt))
 	s.WriteString("\n")
 
 	if len(v.NisdToChkMap) == 0 {
@@ -8685,16 +8685,16 @@ func (m model) viewViewVdev() string {
 					s.WriteString("\n")
 					s.WriteString(selectedItemStyle.Render(fmt.Sprintf("   Size: %d bytes", vdev.Size)))
 					s.WriteString("\n")
-					s.WriteString(selectedItemStyle.Render(fmt.Sprintf("   Chunks: %d", vdev.TotalChunks)))
+					s.WriteString(selectedItemStyle.Render(fmt.Sprintf("   Chunks: %d", vdev.ChunkCnt)))
 					s.WriteString("\n")
-					s.WriteString(selectedItemStyle.Render(fmt.Sprintf("   Replicas: %d", vdev.TotalDataBlks)))
+					s.WriteString(selectedItemStyle.Render(fmt.Sprintf("   Replicas: %d", vdev.DataBlkCnt)))
 					s.WriteString("\n\n")
 				} else {
 					s.WriteString(fmt.Sprintf("%s%d. %s\n", cursor, i+1, vdev.Name))
 					s.WriteString(fmt.Sprintf("   ID: %s\n", vdev.ID))
 					s.WriteString(fmt.Sprintf("   Size: %d bytes\n", vdev.Size))
-					s.WriteString(fmt.Sprintf("   Chunks: %d\n", vdev.TotalChunks))
-					s.WriteString(fmt.Sprintf("   Replicas: %d\n", vdev.TotalDataBlks))
+					s.WriteString(fmt.Sprintf("   Chunks: %d\n", vdev.ChunkCnt))
+					s.WriteString(fmt.Sprintf("   Replicas: %d\n", vdev.DataBlkCnt))
 					s.WriteString("\n")
 				}
 			}
@@ -8843,8 +8843,8 @@ func (m model) viewShowAddedVdev() string {
 	s.WriteString(fmt.Sprintf("Name: %s\n", m.currentVdev.Cfg.Name))
 	s.WriteString(fmt.Sprintf("ID: %s\n", m.currentVdev.Cfg.ID))
 	s.WriteString(fmt.Sprintf("Size: %d bytes\n", m.currentVdev.Cfg.Size))
-	s.WriteString(fmt.Sprintf("Chunks: %d\n", m.currentVdev.Cfg.TotalChunks))
-	s.WriteString(fmt.Sprintf("Replicas: %d\n", m.currentVdev.Cfg.TotalDataBlks))
+	s.WriteString(fmt.Sprintf("Chunks: %d\n", m.currentVdev.Cfg.ChunkCnt))
+	s.WriteString(fmt.Sprintf("Replicas: %d\n", m.currentVdev.Cfg.DataBlkCnt))
 
 	s.WriteString("\n\nPress any key to return to Vdev management")
 
@@ -8985,8 +8985,8 @@ func (m model) viewVdevCreationSummary() string {
 			s.WriteString(fmt.Sprintf("%d. Name:   %s\n", i+1, vdev.Name))
 			s.WriteString(fmt.Sprintf("   Vdev ID: %s\n", vdev.ID))
 			s.WriteString(fmt.Sprintf("   Size:    %s (%d bytes)\n", formatSize(vdev.Size), vdev.Size))
-			s.WriteString(fmt.Sprintf("   Chunks:  %d\n", vdev.TotalChunks))
-			s.WriteString(fmt.Sprintf("   Replicas: %d\n", vdev.TotalDataBlks))
+			s.WriteString(fmt.Sprintf("   Chunks:  %d\n", vdev.ChunkCnt))
+			s.WriteString(fmt.Sprintf("   Replicas: %d\n", vdev.DataBlkCnt))
 			s.WriteString(fmt.Sprintf("   Status:  Active\n\n"))
 		}
 	}
@@ -9087,7 +9087,7 @@ func (m model) createSingleVdev(size int64, replica int, index int) VdevCreation
 		Vdev: &ctlplfl.VdevConfig{
 			Name:          name,
 			Size:          size,
-			TotalDataBlks: uint8(replica),
+			DataBlkCnt: uint8(replica),
 		},
 		Filter: filter,
 	}
@@ -9113,7 +9113,7 @@ func (m model) createSingleVdev(size int64, replica int, index int) VdevCreation
 		}
 		log.Info("Vdev created successfully: ", resp.ID)
 		vdev.Vdev.ID = resp.ID
-		vdev.Vdev.TotalChunks = uint32(ctlplfl.Count8GBChunks(size))
+		vdev.Vdev.ChunkCnt = uint32(ctlplfl.Count8GBChunks(size))
 		return VdevCreationMsg{
 			Index:   index,
 			Success: true,
