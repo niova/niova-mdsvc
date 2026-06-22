@@ -33,7 +33,7 @@ jobs:
 
     # Install Ansible
     - name: Install Ansible
-      run:  pip3 install ansible==9.2
+      run:  pip3 install ansible==9.2 ansible-core==2.16.3
 
     # Install python libraries
     - name: Install python libraries
@@ -78,8 +78,16 @@ jobs:
       env:
         LD_LIBRARY_PATH: /home/runner/work/niovad/niovad/build_dir/lib
 
+    - name: Build controlplane client go test binary
+      run: |
+        export PATH=$PATH:/home/runner/work/go/go/bin
+        cd /home/runner/work/niova-mdsvc/niova-mdsvc/controlplane/ctlplanefuncs/client
+        go test -c -o client.test
+        mkdir -p /home/runner/work/niovad/niovad/build_dir/ctlplane_test
+        cp client.test /home/runner/work/niovad/niovad/build_dir/ctlplane_test/
+
     - name: Copy script to run recipes
-      run: cp scripts/run-recipes.sh /home/runner/work/niovad/niovad/build_dir/ &&
+      run: cp scripts/run-cp-recipes.sh /home/runner/work/niovad/niovad/build_dir/ &&
            cp scripts/controlplane_recipes.txt /home/runner/work/niovad/niovad/build_dir/
 
     # Checkout holon repo
@@ -87,6 +95,7 @@ jobs:
       uses: actions/checkout@v4
       with:
        repository: 00pauln00/holon
+       # ref:
        path: ./holon
 
     - name: Copy holon repo
@@ -99,16 +108,16 @@ jobs:
       run: mkdir  /home/runner/work/niovad/niovad/code_cov &&
            export GOCOVERDIR=/work/niovad/niovad/code_cov
 
-    - name: run recipes for controlplane application
-      run: export GOCOVERDIR=/home/runner/work/niovad/niovad/code_cov && 
+    - name:  run recipes for controlplane application
+      run: export GOCOVERDIR=/home/runner/work/niovad/niovad/code_cov &&
             cd /home/runner/work/niovad/niovad/build_dir/holon/ &&
-           ../run-recipes.sh '/home/runner/work/niovad/niovad/build_dir/holon'
+           ../run-cp-recipes.sh '/home/runner/work/niovad/niovad/build_dir/holon'
                              '/home/runner/work/niovad/niovad/build_dir'
-                             '/home/runner/work/niovad/niovad/holon_log' 5
+                             '/home/runner/work/niovad/niovad/holon_log'
+                             5
                              '/home/runner/work/niovad/niovad/build_dir/controlplane_recipes.txt'
                              'controlplane'
                              '/home/runner/work/go/go/bin'
-                             5
 
     - name: Run go covdata tool to generate code cover report
       run: cd /home/runner/work/niovad/niovad/code_cov &&
