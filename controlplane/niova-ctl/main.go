@@ -9751,7 +9751,7 @@ func (m model) viewViewPFS() string {
 
 	// Build vdev ID → name map for resolving vdev names under each PFS.
 	vdevNameMap := make(map[string]string)
-	if vdevs, err := m.cpClient.GetVdevCfgs(&ctlplfl.GetReq{GetAll: true}); err == nil {
+	if vdevs, err := m.cpClient.GetVdevConfigs(&ctlplfl.GetReq{GetAll: true}); err == nil {
 		for _, v := range vdevs {
 			vdevNameMap[v.ID] = v.Name
 		}
