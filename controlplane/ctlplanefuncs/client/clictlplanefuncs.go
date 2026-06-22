@@ -279,7 +279,7 @@ func (ccf *CliCFuncs) GetNisds(req ctlplfl.GetReq) ([]ctlplfl.Nisd, error) {
 func (ccf *CliCFuncs) GetNisd(req ctlplfl.GetReq) (*ctlplfl.Nisd, error) {
 	cpReq := &ctlplfl.CPReq{
 		Token:   ccf.token,
-		Payload: req,
+		Payload: ctlplfl.GetReqEnvelope{Req: req},
 	}
 	ncfg := &ctlplfl.Nisd{}
 	cpResp, err := ccf.get(cpReq, ctlplfl.GET_NISD, ncfg)
@@ -564,7 +564,7 @@ func (ccf *CliCFuncs) GetVdevCfg(req *ctlplfl.GetReq) (ctlplfl.VdevCfg, error) {
 	vdev := ctlplfl.VdevCfg{}
 	cpReq := &ctlplfl.CPReq{
 		Token:   ccf.token,
-		Payload: req,
+		Payload: ctlplfl.GetReqEnvelope{Req: *req},
 	}
 	cpResp, err := ccf.get(cpReq, ctlplfl.GET_VDEV_INFO, &vdev)
 	if err != nil {
@@ -626,7 +626,7 @@ func (ccf *CliCFuncs) GetChunkNisd(req *ctlplfl.GetReq) (ctlplfl.ChunkNisd, erro
 	log.Info("fetching chunk Info for:", req.ID)
 	cpReq := &ctlplfl.CPReq{
 		Token:   ccf.token,
-		Payload: req,
+		Payload: ctlplfl.GetReqEnvelope{Req: *req},
 	}
 	cpResp, err := ccf.get(cpReq, ctlplfl.GET_CHUNK_NISD, &cn)
 	if err != nil {

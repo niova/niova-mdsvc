@@ -263,8 +263,10 @@ func (c *Client) UpdateAdminSecretKey(userID, newSecretKey, userToken string) (*
 
 // Login authenticates the user with username and secret key, returns JWT token.
 func (c *Client) Login(username, secretKey string) (*userlib.LoginResp, error) {
-	req := &cpLib.GetReq{
-		ID: fmt.Sprintf("%s:%s", username, secretKey),
+	req := &cpLib.GetReqEnvelope{
+		Req: cpLib.GetReq{
+			ID: fmt.Sprintf("%s:%s", username, secretKey),
+		},
 	}
 
 	resp := &userlib.LoginResp{}

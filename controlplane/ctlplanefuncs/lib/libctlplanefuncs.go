@@ -363,6 +363,10 @@ type GetReq struct {
 	Fields []string
 }
 
+type GetReqEnvelope struct {
+	Req GetReq `xml:"GetReq"`
+}
+
 type ResourceType string
 
 const (
