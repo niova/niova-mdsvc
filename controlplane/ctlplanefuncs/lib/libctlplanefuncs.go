@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -23,28 +24,33 @@ import (
 )
 
 const (
-	PUT_DEVICE               = "PutDevice"
-	GET_DEVICE               = "GetDevice"
-	PUT_NISD                 = "PutNisd"
-	GET_NISD                 = "GetNisd"
-	GET_NISD_LIST            = "GetAllNisd"
-	CREATE_VDEV              = "CreateVdev"
-	DELETE_VDEV              = "DeleteVdev"
-	GET_VDEV_CHUNK_INFO      = "GetVdevsWithChunkInfo"
-	GET_VDEV                 = "GetVdevs"
-	CREATE_SNAP              = "CreateSnap"
-	READ_SNAP_NAME           = "ReadSnapByName"
-	READ_SNAP_VDEV           = "ReadSnapForVdev"
-	PUT_PDU                  = "PutPDU"
-	GET_PDU                  = "GetPDU"
-	GET_RACK                 = "GetRack"
-	PUT_RACK                 = "PutRack"
-	GET_HYPERVISOR           = "GetHypervisor"
-	PUT_HYPERVISOR           = "PutHypervisor"
-	PUT_PARTITION            = "PutPartition"
-	GET_PARTITION            = "GetPartition"
-	PUT_PFS                  = "PutPFS"
-	GET_PFS                  = "GetPFS"
+	PUT_DEVICE          = "PutDevice"
+	GET_DEVICE          = "GetDevice"
+	PUT_NISD            = "PutNisd"
+	GET_NISD            = "GetNisd"
+	GET_NISD_LIST       = "GetAllNisd"
+	CREATE_VDEV         = "CreateVdev"
+	DELETE_VDEV         = "DeleteVdev"
+	GET_VDEV_CHUNK_INFO = "GetVdevsWithChunkInfo"
+	GET_VDEV            = "GetVdevs"
+	CREATE_SNAP         = "CreateSnap"
+	READ_SNAP_NAME      = "ReadSnapByName"
+	READ_SNAP_VDEV      = "ReadSnapForVdev"
+	PUT_PDU             = "PutPDU"
+	GET_PDU             = "GetPDU"
+	GET_RACK            = "GetRack"
+	PUT_RACK            = "PutRack"
+	GET_HYPERVISOR      = "GetHypervisor"
+	PUT_HYPERVISOR      = "PutHypervisor"
+	PUT_PARTITION       = "PutPartition"
+	GET_PARTITION       = "GetPartition"
+	PUT_PFS             = "PutPFS"
+	GET_PFS             = "GetPFS"
+	PUT_NISD_ARGS       = "PutNisdArgs"
+	GET_NISD_ARGS       = "GetNisdArgs"
+
+	// niova-client methods
+	MOUNT_VDEV               = "mount_vdev"
 	GET_VDEV_INFO            = "get_vdev_info" // new
 	GET_ALL_VDEV             = "get_all_vdev"
 	GET_CHUNK_NISD           = "get_chunk_nisd"
@@ -52,8 +58,6 @@ const (
 	GET_NISD_AVAILABLE_SIZES = "GetNisdAvailableSizes"
 	GET_ALL_RESOURCES        = "GetAllResources"
 
-	PUT_NISD_ARGS  = "PutNisdArgs"
-	GET_NISD_ARGS  = "GetNisdArgs"
 	CHUNK_SIZE     = 8 * 1024 * 1024 * 1024
 	MAX_REPLY_SIZE = 4 * 1024 * 1024
 	NAME           = "name"
@@ -77,6 +81,12 @@ const (
 	HASH_SIZE = 8
 
 	PmdbColumnFamily = "PMDBTS_CF"
+
+	VDEV_MOUNT_LIMIT = 30 * time.Second
+
+	MntKey           = "m"
+	MOUNT_COUNTER    = "mc"
+	LAST_UPDATED_LTS = "lu"
 )
 
 type FD int
@@ -91,6 +101,14 @@ const (
 )
 
 const logFileName = "client.log"
+
+// Error message returned by PMDB when key is not found
+const errKeyNotFoundMsg = "Failed to lookup for key"
+
+// IsKeyNotFoundError checks if the error indicates that the key was not found in PMDB
+func IsKeyNotFoundError(err error) bool {
+	return err != nil && err.Error() == errKeyNotFoundMsg
+}
 
 // DefaultLogPath returns an absolute path for the application log file:
 //   - root:         /var/log/niova/client.log
@@ -271,19 +289,20 @@ type DeviceAlloc struct {
 }
 
 type VdevCfg struct {
-	XMLName      xml.Name `xml:"Vdev"`
-	ID           string
-	Name         string
-	FilterType   string // failure domain level used at creation (e.g. "rack", "hv", "any")
-	FilterID     string // specific entity UUID scoped at creation (empty = no scope)
-	Size         int64
-	NumChunks    uint32
-	NumReplica   uint8
-	NumDataBlk   uint8
-	NumParityBlk uint8
-	AuthToken    string
-	PFSID        string
-	PFSName      string
+	XMLName       xml.Name      `xml:"Vdev" json:"-"`
+	ID            string        `xml:"ID" json:"ID"`
+	Name          string        `xml:"Name" json:"Name"`
+	Size          int64         `xml:"Size" json:"Size"`
+	NumChunks     uint32        `xml:"NumChunks" json:"NumChunks"`
+	NumReplica    uint8         `xml:"NumReplica" json:"NumReplica"`
+	NumDataBlk    uint8         `xml:"NumDataBlk" json:"NumDataBlk"`
+	NumParityBlk  uint8         `xml:"NumParityBlk" json:"NumParityBlk"`
+	VdevMountInfo VdevMountInfo `xml:"VdevMountInfo" json:"VdevMountInfo"`
+	PFSID         string        `xml:"PFSID" json:"PFSID"`
+	AccessToken   string        `xml:"AccessToken" json:"AccessToken"`
+	FilterType    string        // failure domain level used at creation (e.g. "rack", "hv", "any")
+	FilterID      string        // specific entity UUID scoped at creation (empty = no scope)
+	PFSName       string
 }
 
 type PFS struct {
@@ -369,6 +388,15 @@ type ResourceListResp struct {
 	Hypervisors  []Hypervisor
 	Devices      []Device
 	Partitions   []DevicePartition
+}
+
+type MountVdevRequest struct {
+	VdevID string `xml:"VdevID" json:"VdevID"`
+}
+
+type VdevMountInfo struct {
+	MountCounter   uint64    `xml:"MountCounter" json:"MountCounter"`
+	LastUpdatedLTS time.Time `xml:"LastUpdatedLTS" json:"LastUpdatedLTS"`
 }
 
 func (vdev *VdevCfg) Init() error {
@@ -489,6 +517,8 @@ func RegisterGOBStructs() {
 	gob.Register(userlib.UserResp{})
 	gob.Register([]userlib.UserResp{})
 	gob.Register(userlib.LoginResp{})
+	gob.Register(MountVdevRequest{})
+	gob.Register(VdevMountInfo{})
 }
 
 func (req *GetReq) ValidateRequest() error {

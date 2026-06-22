@@ -675,3 +675,22 @@ func (ccf *CliCFuncs) DeleteVdev(req *ctlplfl.DeleteVdevReq) (*ctlplfl.ResponseX
 
 	return resp, nil
 }
+
+func (ccf *CliCFuncs) MountVdev(req *ctlplfl.MountVdevRequest) (ctlplfl.VdevCfg, error) {
+	vdev := ctlplfl.VdevCfg{}
+	cpReq := &ctlplfl.CPReq{
+		Token:   ccf.token,
+		Payload: req,
+	}
+	cpResp, err := ccf.put(cpReq, ctlplfl.MOUNT_VDEV, &vdev)
+	if err != nil {
+		log.Error("MountVdev failed for vdev: ", req.VdevID, " with error: ", err)
+		return vdev, err
+	}
+
+	if err := cpResp.Err(); err != nil {
+		return vdev, err
+	}
+
+	return vdev, nil
+}
