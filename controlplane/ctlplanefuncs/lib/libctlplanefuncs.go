@@ -321,6 +321,7 @@ type VdevConfig struct {
 	ParityBlkCnt uint8  `xml:"ParityBlkCnt"`
 	AuthToken    string `xml:"AuthToken"`
 	PFSID        string `xml:"PFSID"`
+	PFSName      string `xml:"PFSName"`
 }
 
 // TotalRedundancyBlocksPerChunk returns the number of blocks each chunk has based on redundancy mode.
@@ -329,6 +330,7 @@ func (v *VdevConfig) TotalRedundancyBlocksPerChunk() int {
 		return int(v.DataBlkCnt)
 	}
 	return int(v.DataBlkCnt + v.ParityBlkCnt)
+
 }
 
 type PFS struct {
