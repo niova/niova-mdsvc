@@ -312,13 +312,13 @@ type VdevConfig struct {
 	XMLName      xml.Name       `xml:"Vdev"`
 	ID           string         `xml:"ID"`
 	Name         string         `xml:"Name"`
-	Size         int64          `xml:"Size"`
-	Redundancy   RedundancyMode `xml:"Redundancy"`
-	ChunkCnt     uint32         `xml:"ChunkCnt"`
+	Size         int64          `xml:"size"`
+	Redundancy   RedundancyMode `xml:"redundancy"`
+	ChunkCnt     uint32         `xml:"chunk_cnt"`
 	FilterType   string
 	FilterID     string
-	DataBlkCnt   uint8  `xml:"DataBlkCnt"`
-	ParityBlkCnt uint8  `xml:"ParityBlkCnt"`
+	DataBlkCnt   uint8  `xml:"data_blk_cnt"`
+	ParityBlkCnt uint8  `xml:"parity_blk_cnt"`
 	AuthToken    string `xml:"AuthToken"`
 	PFSID        string `xml:"PFSID"`
 	PFSName      string `xml:"PFSName"`
@@ -496,10 +496,10 @@ func MatchIPs(a, b []string) bool {
 
 type ChunkNisd struct {
 	XMLName      xml.Name       `xml:"ChunkNisd"`
-	Redundancy   RedundancyMode `xml:"Redundancy"`
-	DataBlkCnt   uint8          `xml:"DataBlkCnt"`
-	ParityBlkCnt uint8          `xml:"ParityBlkCnt"`
-	NisdIDs      string         `xml:"NisdIDs"`
+	Redundancy   RedundancyMode `xml:"redundancy"`
+	DataBlkCnt   uint8          `xml:"data_blk_cnt"`
+	ParityBlkCnt uint8          `xml:"parity_blk_cnt"`
+	NisdIDs      string         `xml:"nisd_ids"`
 }
 
 func RegisterGOBStructs() {
