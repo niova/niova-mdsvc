@@ -443,9 +443,9 @@ func TestVdevLifecycleByName(t *testing.T) {
 
 	req1 := &cpLib.VdevReq{
 		Vdev: &cpLib.VdevConfig{
-			Name:          vdev1Name,
-			ID:            uuid.NewString(),
-			Size:          500 * 1024 * 1024 * 1024,
+			Name:       vdev1Name,
+			ID:         uuid.NewString(),
+			Size:       500 * 1024 * 1024 * 1024,
 			DataBlkCnt: 1,
 		},
 	}
@@ -460,9 +460,9 @@ func TestVdevLifecycleByName(t *testing.T) {
 
 	req2 := &cpLib.VdevReq{
 		Vdev: &cpLib.VdevConfig{
-			Name:          vdev2Name,
-			ID:            uuid.NewString(),
-			Size:          500 * 1024 * 1024 * 1024,
+			Name:       vdev2Name,
+			ID:         uuid.NewString(),
+			Size:       500 * 1024 * 1024 * 1024,
 			DataBlkCnt: 1,
 		},
 	}
@@ -729,8 +729,8 @@ func TestParallelVdevCreation(t *testing.T) {
 		for i := 0; i < 150; i++ {
 			vdev := &cpLib.VdevReq{
 				Vdev: &cpLib.VdevConfig{
-					Name:          fmt.Sprintf("pvdev%d%s", i, uuid.NewString()[:6]),
-					Size:          100 * 1024 * 1024 * 1024,
+					Name:       fmt.Sprintf("pvdev%d%s", i, uuid.NewString()[:6]),
+					Size:       100 * 1024 * 1024 * 1024,
 					DataBlkCnt: 1,
 				},
 			}
@@ -855,7 +855,7 @@ func TestEvenChunkDistribution(t *testing.T) {
 	for range 20 {
 		resp, err := c.CreateVdev(&cpLib.VdevReq{
 			Vdev: &cpLib.VdevConfig{
-				Size:          vdevSize,
+				Size:       vdevSize,
 				DataBlkCnt: 1,
 			},
 		})
@@ -2069,8 +2069,8 @@ func TestCreateVdevForBlockTest(t *testing.T) {
 
 	vdevResp, err := c.CreateVdev(&cpLib.VdevReq{
 		Vdev: &cpLib.VdevConfig{
-			Size:          107374182400, // 100 GiB
-			Name:          "blocktestVdev",
+			Size:       107374182400, // 100 GiB
+			Name:       "blocktestVdev",
 			DataBlkCnt: 1,
 		},
 	})
@@ -2380,4 +2380,205 @@ func TestGetResourcesAuthorization(t *testing.T) {
 	}
 
 	t.Log("GetResources Authorization Test Completed Successfully")
+}
+
+func setupNisd(t *testing.T, c *CliCFuncs, port uint16, totalSize int64) *cpLib.Nisd {
+	n := cpLib.Nisd{
+		PeerPort: port,
+		ID:       uuid.NewString(),
+		FailureDomain: []string{
+			uuid.NewString(),
+			uuid.NewString(),
+			uuid.NewString(),
+			"nvme_Intel_7sfd81",
+			"nvme_Intel_7sfd81_1",
+		},
+		TotalSize:     totalSize,
+		AvailableSize: totalSize,
+	}
+
+	_, err := c.PutNisd(&n)
+	require.NoError(t, err)
+
+	return &n
+}
+
+func setupVdev(t *testing.T, c *CliCFuncs, size int64) string {
+	vdevReq := &cpLib.VdevReq{
+		Vdev: &cpLib.VdevConfig{
+			ID:         uuid.NewString(),
+			Size:       size,
+			DataBlkCnt: 1,
+		},
+	}
+
+	vdevResp, err := c.CreateVdev(vdevReq)
+	require.NoError(t, err)
+	require.True(t, vdevResp.Success)
+
+	return vdevResp.ID
+}
+
+func TestMountVdev(t *testing.T) {
+	c := newClient(t)
+
+	setupNisd(t, c, 8001, 15_000_000_000_000)
+	vdevID := setupVdev(t, c, 100*1024*1024*1024)
+
+	t.Run("Successful Mount", func(t *testing.T) {
+		req := &cpLib.MountVdevRequest{VdevID: vdevID}
+		info, err := c.MountVdev(req)
+
+		assert.NoError(t, err)
+		assert.Equal(t, vdevID, info.ID)
+		assert.Equal(t, uint64(1), info.VdevMountInfo.MountCounter)
+		assert.NotEmpty(t, info.AccessToken)
+		assert.False(t, info.VdevMountInfo.LastUpdatedLTS.IsZero())
+	})
+
+	t.Run("Cooldown Limit", func(t *testing.T) {
+		_, err := c.MountVdev(&cpLib.MountVdevRequest{VdevID: vdevID})
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "mount request within active window")
+	})
+
+	t.Run("Successful Mount After cool down period", func(t *testing.T) {
+		time.Sleep(30 * time.Second)
+
+		info, err := c.MountVdev(&cpLib.MountVdevRequest{VdevID: vdevID})
+		assert.NoError(t, err)
+		assert.Equal(t, uint64(2), info.VdevMountInfo.MountCounter)
+	})
+}
+
+func TestMountMultiClient(t *testing.T) {
+	c1 := newClient(t)
+	c2 := newClient(t)
+
+	setupNisd(t, c1, 8002, 1_000_000_000_000)
+	vdevID := setupVdev(t, c1, 10*1024*1024*1024)
+
+	startSignal := make(chan struct{})
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	var err1, err2 error
+	var info1, info2 cpLib.VdevConfig
+
+	go func() {
+		defer wg.Done()
+		<-startSignal
+		info1, err1 = c1.MountVdev(&cpLib.MountVdevRequest{VdevID: vdevID})
+	}()
+
+	go func() {
+		defer wg.Done()
+		<-startSignal
+		info2, err2 = c2.MountVdev(&cpLib.MountVdevRequest{VdevID: vdevID})
+	}()
+
+	close(startSignal)
+	wg.Wait()
+
+	if err1 == nil {
+		assert.Equal(t, uint64(1), info1.VdevMountInfo.MountCounter)
+		assert.Error(t, err2)
+	} else {
+		assert.Equal(t, uint64(1), info2.VdevMountInfo.MountCounter)
+		assert.Error(t, err1)
+	}
+}
+
+func TestMountMultipleVdev(t *testing.T) {
+	c := newClient(t)
+
+	setupNisd(t, c, 8003, 20*1024*1024*1024)
+
+	vdev1 := setupVdev(t, c, 5*1024*1024*1024)
+	vdev2 := setupVdev(t, c, 5*1024*1024*1024)
+
+	info1, err := c.MountVdev(&cpLib.MountVdevRequest{VdevID: vdev1})
+	assert.NoError(t, err)
+	assert.Equal(t, uint64(1), info1.VdevMountInfo.MountCounter)
+
+	info2, err := c.MountVdev(&cpLib.MountVdevRequest{VdevID: vdev2})
+	assert.NoError(t, err)
+	assert.Equal(t, uint64(1), info2.VdevMountInfo.MountCounter)
+}
+
+func TestMountCreateAndDeleteVdevClient(t *testing.T) {
+	c := newClient(t)
+
+	// Step 0: Setup NISD for allocation
+	setupNisd(t, c, 8004, 100*1024*1024*1024)
+
+	// Step 1: Create Vdev
+	vdevID := setupVdev(t, c, 10*1024*1024*1024)
+	assert.NotEmpty(t, vdevID)
+
+	// Step 2: Mount Vdev
+	mountReq := &cpLib.MountVdevRequest{VdevID: vdevID}
+	mountInfo, err := c.MountVdev(mountReq)
+	assert.NoError(t, err)
+	assert.Equal(t, vdevID, mountInfo.ID)
+	assert.Equal(t, uint64(1), mountInfo.VdevMountInfo.MountCounter)
+
+	// Step 3: Delete Vdev
+	deleteReq := &cpLib.DeleteVdevReq{ID: vdevID}
+	deleteResp, err := c.DeleteVdev(deleteReq)
+	assert.NoError(t, err)
+	assert.True(t, deleteResp.Success)
+
+	// Step 4: Verify deletion (GetVdevConfig should fail)
+	_, err = c.GetVdevConfig(&cpLib.GetReq{ID: vdevID})
+	assert.Error(t, err)
+}
+
+func setupVdevByName(t *testing.T, c *CliCFuncs, size int64) string {
+	vdevReq := &cpLib.VdevReq{
+		Vdev: &cpLib.VdevConfig{
+			Name:       "vdev2",
+			ID:         uuid.NewString(),
+			Size:       size,
+			DataBlkCnt: 1,
+		},
+	}
+
+	vdevResp, err := c.CreateVdev(vdevReq)
+	require.NoError(t, err)
+	require.True(t, vdevResp.Success)
+
+	return vdevResp.ID
+}
+
+func TestMountVdevByName(t *testing.T) {
+	c := newClient(t)
+
+	setupNisd(t, c, 8001, 15_000_000_000_000)
+	vdevID := setupVdevByName(t, c, 100*1024*1024*1024)
+
+	t.Run("Successful Mount", func(t *testing.T) {
+		req := &cpLib.MountVdevRequest{VdevID: "vdev2"}
+		info, err := c.MountVdev(req)
+
+		assert.NoError(t, err)
+		assert.Equal(t, vdevID, info.ID)
+		assert.Equal(t, uint64(1), info.VdevMountInfo.MountCounter)
+		assert.NotEmpty(t, info.AccessToken)
+		assert.False(t, info.VdevMountInfo.LastUpdatedLTS.IsZero())
+	})
+
+	t.Run("Cooldown Limit", func(t *testing.T) {
+		_, err := c.MountVdev(&cpLib.MountVdevRequest{VdevID: "vdev2"})
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "mount request within active window")
+	})
+
+	t.Run("Successful Mount After cool down period", func(t *testing.T) {
+		time.Sleep(30 * time.Second)
+
+		info, err := c.MountVdev(&cpLib.MountVdevRequest{VdevID: "vdev2"})
+		assert.NoError(t, err)
+		assert.Equal(t, uint64(2), info.VdevMountInfo.MountCounter)
+	})
 }

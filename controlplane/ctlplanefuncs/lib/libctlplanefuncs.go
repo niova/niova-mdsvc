@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -45,17 +46,19 @@ const (
 	GET_PARTITION       = "GetPartition"
 	PUT_PFS             = "PutPFS"
 	GET_PFS             = "GetPFS"
-	GET_VDEV_INFO       = "get_vdev_info" // new
-	GET_ALL_VDEV        = "get_all_vdev"
-	GET_CHUNK_NISD      = "get_chunk_nisd"
-	GET_CHUNK           = "get_chunk"
+	PUT_NISD_ARGS       = "PutNisdArgs"
+	GET_NISD_ARGS       = "GetNisdArgs"
 
+	// niova-client methods
+	MOUNT_VDEV               = "mount_vdev"
+	GET_CHUNK                = "get_chunk"
+	GET_VDEV_INFO            = "get_vdev_info" // new
+	GET_ALL_VDEV             = "get_all_vdev"
+	GET_CHUNK_NISD           = "get_chunk_nisd"
 	GET_NISD_INFO            = "get_nisd_info"
 	GET_NISD_AVAILABLE_SIZES = "GetNisdAvailableSizes"
 	GET_ALL_RESOURCES        = "GetAllResources"
 
-	PUT_NISD_ARGS  = "PutNisdArgs"
-	GET_NISD_ARGS  = "GetNisdArgs"
 	CHUNK_SIZE     = 8 * 1024 * 1024 * 1024
 	MAX_REPLY_SIZE = 4 * 1024 * 1024
 	NAME           = "name"
@@ -79,6 +82,12 @@ const (
 	HASH_SIZE = 8
 
 	PmdbColumnFamily = "PMDBTS_CF"
+
+	VDEV_MOUNT_LIMIT = 30 * time.Second
+
+	MntKey           = "m"
+	MOUNT_COUNTER    = "mc"
+	LAST_UPDATED_LTS = "lu"
 )
 
 type FD int
@@ -127,6 +136,14 @@ func ChunkPrefix(t ChunkType) string {
 }
 
 const logFileName = "client.log"
+
+// Error message returned by PMDB when key is not found
+const errKeyNotFoundMsg = "Failed to lookup for key"
+
+// IsKeyNotFoundError checks if the error indicates that the key was not found in PMDB
+func IsKeyNotFoundError(err error) bool {
+	return err != nil && err.Error() == errKeyNotFoundMsg
+}
 
 // DefaultLogPath returns an absolute path for the application log file:
 //   - root:         /var/log/niova/client.log
@@ -315,19 +332,20 @@ type RedundancyBlock struct {
 }
 
 type VdevConfig struct {
-	XMLName      xml.Name       `xml:"Vdev"`
-	ID           string         `xml:"ID"`
-	Name         string         `xml:"Name"`
-	Size         int64          `xml:"size"`
-	Redundancy   RedundancyMode `xml:"redundancy"`
-	ChunkCnt     uint32         `xml:"chunk_cnt"`
-	FilterType   string
-	FilterID     string
-	DataBlkCnt   uint8  `xml:"data_blk_cnt"`
-	ParityBlkCnt uint8  `xml:"parity_blk_cnt"`
-	AuthToken    string `xml:"AuthToken"`
-	PFSID        string `xml:"PFSID"`
-	PFSName      string `xml:"PFSName"`
+	XMLName       xml.Name       `xml:"Vdev" json:"-"`
+	ID            string         `xml:"ID" json:"ID"`
+	Name          string         `xml:"Name" json:"Name"`
+	Size          int64          `xml:"Size" json:"Size"`
+	Redundancy    RedundancyMode `xml:"redundancy"`
+	ChunkCnt      uint32         `xml:"chunk_cnt"`
+	DataBlkCnt    uint8          `xml:"data_blk_cnt"`
+	ParityBlkCnt  uint8          `xml:"parity_blk_cnt"`
+	VdevMountInfo VdevMountInfo  `xml:"VdevMountInfo" json:"VdevMountInfo"`
+	PFSID         string         `xml:"PFSID" json:"PFSID"`
+	AccessToken   string         `xml:"AccessToken" json:"AccessToken"`
+	FilterType    string         // failure domain level used at creation (e.g. "rack", "hv", "any")
+	FilterID      string         // specific entity UUID scoped at creation (empty = no scope)
+	PFSName       string
 }
 
 // TotalRedundancyBlocksPerChunk returns the number of blocks each chunk has based on redundancy mode.
@@ -435,6 +453,15 @@ type ResourceListResp struct {
 	Hypervisors  []Hypervisor
 	Devices      []Device
 	Partitions   []DevicePartition
+}
+
+type MountVdevRequest struct {
+	VdevID string `xml:"VdevID" json:"VdevID"`
+}
+
+type VdevMountInfo struct {
+	MountCounter   uint64    `xml:"MountCounter" json:"MountCounter"`
+	LastUpdatedLTS time.Time `xml:"LastUpdatedLTS" json:"LastUpdatedLTS"`
 }
 
 func (vdev *VdevConfig) Init() error {
@@ -557,6 +584,8 @@ func RegisterGOBStructs() {
 	gob.Register(userlib.UserResp{})
 	gob.Register([]userlib.UserResp{})
 	gob.Register(userlib.LoginResp{})
+	gob.Register(MountVdevRequest{})
+	gob.Register(VdevMountInfo{})
 }
 
 func (req *GetReq) ValidateRequest() error {

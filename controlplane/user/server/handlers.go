@@ -29,14 +29,6 @@ const defaultAdminSecretKey = "niova-admin-secret-key"
 // Default token TTL (15 minutes)
 const defaultTokenTTL = 15 * time.Minute
 
-// Error message returned by PMDB when key is not found
-const errKeyNotFoundMsg = "Failed to lookup for key"
-
-// isKeyNotFoundError checks if the error indicates that the key was not found in PMDB
-func isKeyNotFoundError(err error) bool {
-	return err != nil && err.Error() == errKeyNotFoundMsg
-}
-
 //
 // var columnFamily string = "AUTH_CF"
 
@@ -56,7 +48,7 @@ func checkUserExistsByID(userID string, callbackArgs *pumiceserver.PmdbCbArgs) (
 		Consistent: false,
 	})
 
-	if isKeyNotFoundError(err) {
+	if cpLib.IsKeyNotFoundError(err) {
 		// User doesn't exist
 		log.Infof("Key [%v] not found\n", prefixKey)
 		return nil, nil
@@ -86,7 +78,7 @@ func getUserIDByUsername(username string, callbackArgs *pumiceserver.PmdbCbArgs)
 		Consistent: false,
 	})
 
-	if isKeyNotFoundError(err) {
+	if cpLib.IsKeyNotFoundError(err) {
 		// Username doesn't exist in index
 		return "", nil
 	} else if err != nil {
@@ -426,7 +418,7 @@ func GetUser(args ...interface{}) (interface{}, error) {
 
 	var users []userlib.User
 	if err != nil {
-		if isKeyNotFoundError(err) {
+		if cpLib.IsKeyNotFoundError(err) {
 			// Key/prefix not found treat as empty result (no users)
 			log.Infof("Key [%v] not found\n", prefixKey)
 			users = []userlib.User{}
