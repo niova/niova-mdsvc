@@ -71,7 +71,7 @@ func TestGenerateDistributionReport(t *testing.T) {
 			Vdev: &cpLib.VdevConfig{
 				Name:            name,
 				Size:            32 * cpLib.CHUNK_SIZE,
-				Redundancy:      cpLib.RMEC,
+				Redundancy:      cpLib.RMEC32K,
 				DataBlkCnt:   4,
 				ParityBlkCnt: 3,
 				PFSID:           pfs2ID,

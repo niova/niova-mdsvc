@@ -96,8 +96,14 @@ type RedundancyMode int
 
 const (
 	RMReplica RedundancyMode = 0
-	RMEC      RedundancyMode = 1
+	RMEC32K   RedundancyMode = 1
+	RMEC64K   RedundancyMode = 2
+	RMEC128K  RedundancyMode = 3
 )
+
+func (r RedundancyMode) IsEC() bool {
+	return r >= RMEC32K
+}
 
 type ChunkType int
 
@@ -495,11 +501,8 @@ func MatchIPs(a, b []string) bool {
 }
 
 type ChunkNisd struct {
-	XMLName      xml.Name       `xml:"ChunkNisd"`
-	Redundancy   RedundancyMode `xml:"redundancy"`
-	DataBlkCnt   uint8          `xml:"data_blk_cnt"`
-	ParityBlkCnt uint8          `xml:"parity_blk_cnt"`
-	NisdIDs      string         `xml:"nisd_ids"`
+	XMLName xml.Name `xml:"ChunkNisd"`
+	NisdIDs string   `xml:"nisd_ids"`
 }
 
 func RegisterGOBStructs() {

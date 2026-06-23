@@ -68,7 +68,7 @@ func TestVdev(t *testing.T) {
 		},
 		{
 			name:            "CreateVdevWithEC43",
-			redundancy:      ctlplfl.RMEC,
+			redundancy:      ctlplfl.RMEC32K,
 			totalDataBlks:   4,
 			totalParityBlks: 3,
 			size:            8 * 1024 * 1024 * 1024,
@@ -184,7 +184,7 @@ func TestVdev(t *testing.T) {
 			}
 
 			expectedTotalBlocks := int(sc.totalDataBlks)
-			if sc.redundancy == ctlplfl.RMEC {
+			if sc.redundancy.IsEC() {
 				expectedTotalBlocks = int(sc.totalDataBlks + sc.totalParityBlks)
 			}
 

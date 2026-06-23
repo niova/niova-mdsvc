@@ -114,7 +114,7 @@ func TestVdevLifecycle(t *testing.T) {
 	}{
 		{name: "Replica1", redundancy: cpLib.RMReplica, totalDataBlks: 1, size: 8 * cpLib.CHUNK_SIZE},
 		{name: "Replica3", redundancy: cpLib.RMReplica, totalDataBlks: 3, size: 8 * cpLib.CHUNK_SIZE},
-		{name: "EC43", redundancy: cpLib.RMEC, totalDataBlks: 4, totalParityBlks: 3, size: 8 * cpLib.CHUNK_SIZE},
+		{name: "EC43", redundancy: cpLib.RMEC32K, totalDataBlks: 4, totalParityBlks: 3, size: 8 * cpLib.CHUNK_SIZE},
 	}
 
 	for _, sc := range scenarios {

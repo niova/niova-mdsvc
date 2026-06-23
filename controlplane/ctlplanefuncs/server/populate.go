@@ -278,3 +278,36 @@ func (nisdArgsPopulator) Populate(entity Entity, commitChgs *[]funclib.CommitChg
 		})
 	}
 }
+
+type vdevPopulator struct{}
+
+func (vdevPopulator) Populate(entity Entity, commitChgs *[]funclib.CommitChg, entityKey string) {
+	vdev := entity.(*cpLib.VdevConfig)
+	key := getConfKey(entityKey, vdev.ID)
+	for _, field := range []string{SIZE, NUM_CHUNKS, TOTAL_DATA_BLKS, TOTAL_PARITY_BLKS, REDUNDANCY_MODE, NAME} {
+		var value string
+		switch field {
+		case SIZE:
+			value = strconv.Itoa(int(vdev.Size))
+		case NUM_CHUNKS:
+			value = strconv.Itoa(int(vdev.ChunkCnt))
+		case TOTAL_DATA_BLKS:
+			value = strconv.Itoa(int(vdev.DataBlkCnt))
+		case TOTAL_PARITY_BLKS:
+			value = strconv.Itoa(int(vdev.ParityBlkCnt))
+		case REDUNDANCY_MODE:
+			value = strconv.Itoa(int(vdev.Redundancy))
+		case NAME:
+			value = vdev.Name
+		default:
+			continue
+		}
+		if value == "" {
+			continue
+		}
+		*commitChgs = append(*commitChgs, funclib.CommitChg{
+			Key:   []byte(fmt.Sprintf("%s/%s/%s", key, cfgkey, field)),
+			Value: []byte(value),
+		})
+	}
+}

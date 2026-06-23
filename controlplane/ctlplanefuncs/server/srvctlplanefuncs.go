@@ -678,29 +678,8 @@ func WPCreateVdev(args ...interface{}) (interface{}, error) {
 	}
 	log.Infof("initializing vdev: %+v for user: %s", req.Vdev, tc.UserID)
 	key := getConfKey(vdevKey, req.Vdev.ID)
-	for _, field := range []string{SIZE, NUM_CHUNKS, TOTAL_DATA_BLKS, TOTAL_PARITY_BLKS, REDUNDANCY_MODE, NAME} {
-		var value string
-		switch field {
-		case SIZE:
-			value = strconv.Itoa(int(req.Vdev.Size))
-		case NUM_CHUNKS:
-			value = strconv.Itoa(int(req.Vdev.ChunkCnt))
-		case TOTAL_DATA_BLKS:
-			value = strconv.Itoa(int(req.Vdev.DataBlkCnt))
-		case TOTAL_PARITY_BLKS:
-			value = strconv.Itoa(int(req.Vdev.ParityBlkCnt))
-		case REDUNDANCY_MODE:
-			value = strconv.Itoa(int(req.Vdev.Redundancy))
-		case NAME:
-			value = req.Vdev.Name
-		default:
-			continue
-		}
-		commitChgs = append(commitChgs, funclib.CommitChg{
-			Key:   []byte(fmt.Sprintf("%s/%s/%s", key, cfgkey, field)),
-			Value: []byte(value),
-		})
-	}
+	vdevChgs := PopulateEntities(req.Vdev, vdevPopulator{}, vdevKey)
+	commitChgs = append(commitChgs, vdevChgs...)
 
 	// Add reverse-index key so duplicate name lookups are O(1)
 	reverseNameKey := fmt.Sprintf("%s/%s", vnameKey, req.Vdev.Name)
@@ -1792,6 +1771,20 @@ func ReadChunk(args ...interface{}) (interface{}, error) {
 		}
 		// Bulk request returning empty list is fine
 		return ctlplfl.EncodeResponse(chunkList)
+	}
+
+	// Resolve exact EC variant (32K/64K/128K) from the vdev-level redundancy key,
+	// since the chunk placement prefix (D/P) only signals generic EC.
+	vdevRMKey := fmt.Sprintf("%s/%s/%s/%s", vdevKey, vdevID, cfgkey, REDUNDANCY_MODE)
+	if rmVal, err := cbargs.Store.Read(vdevRMKey, colmfamily); err == nil {
+		if rm, err := strconv.Atoi(string(rmVal)); err == nil {
+			ecType := ctlplfl.RedundancyMode(rm)
+			for i := range chunkList {
+				if chunkList[i].Redundancy.IsEC() {
+					chunkList[i].Redundancy = ecType
+				}
+			}
+		}
 	}
 
 	if chunk != "" {

@@ -475,10 +475,10 @@ func (chunkParser) ParseField(entity Entity, parts []string, value []byte) {
 		chunk.Redundancy = ctlplfl.RMReplica
 	case "D":
 		placement.Type = ctlplfl.Data
-		chunk.Redundancy = ctlplfl.RMEC
+		chunk.Redundancy = ctlplfl.RMEC32K
 	case "P":
 		placement.Type = ctlplfl.Parity
-		chunk.Redundancy = ctlplfl.RMEC
+		chunk.Redundancy = ctlplfl.RMEC32K
 	}
 
 	chunk.Placements = append(chunk.Placements, placement)
@@ -528,27 +528,10 @@ func (chunkNisdParser) ParseField(entity Entity, parts []string, value []byte) {
 	switch placement[CHUNK_REDUNDANCY] {
 	case "R":
 		in.replica[idx] = nisdID
-		in.cn.Redundancy = ctlplfl.RMReplica
-
-		if idx+1 > in.cn.DataBlkCnt {
-			in.cn.DataBlkCnt = idx + 1
-		}
-
 	case "D":
 		in.data[idx] = nisdID
-		in.cn.Redundancy = ctlplfl.RMEC
-
-		if idx+1 > in.cn.DataBlkCnt {
-			in.cn.DataBlkCnt = idx + 1
-		}
-
 	case "P":
 		in.parity[idx] = nisdID
-		in.cn.Redundancy = ctlplfl.RMEC
-
-		if idx+1 > in.cn.ParityBlkCnt {
-			in.cn.ParityBlkCnt = idx + 1
-		}
 	}
 }
 
@@ -557,25 +540,31 @@ func (chunkNisdParser) GetEntity(entity Entity) Entity {
 
 	var ids []string
 
-	if in.cn.Redundancy == ctlplfl.RMReplica {
-		for i := uint8(0); i < in.cn.DataBlkCnt; i++ {
-			if id, ok := in.replica[i]; ok {
-				ids = append(ids, id)
+	if len(in.replica) > 0 {
+		// Replica: ordered by sequence number 0, 1, 2, ...
+		for i := uint8(0); ; i++ {
+			id, ok := in.replica[i]
+			if !ok {
+				break
 			}
+			ids = append(ids, id)
 		}
 	} else {
-		for i := uint8(0); i < in.cn.DataBlkCnt; i++ {
-			if id, ok := in.data[i]; ok {
-				ids = append(ids, id)
+		// EC: data blocks first in sequence order, then parity blocks in sequence order
+		for i := uint8(0); ; i++ {
+			id, ok := in.data[i]
+			if !ok {
+				break
 			}
+			ids = append(ids, id)
 		}
-
-		for i := uint8(0); i < in.cn.ParityBlkCnt; i++ {
-			if id, ok := in.parity[i]; ok {
-				ids = append(ids, id)
+		for i := uint8(0); ; i++ {
+			id, ok := in.parity[i]
+			if !ok {
+				break
 			}
+			ids = append(ids, id)
 		}
-
 	}
 
 	in.cn.NisdIDs = strings.Join(ids, ",")
