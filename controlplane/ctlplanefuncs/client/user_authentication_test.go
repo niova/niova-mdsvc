@@ -103,8 +103,10 @@ func TestUserAuthVdevCreation(t *testing.T) {
 	ctlClient.SetToken(user1AccessToken)
 
 	// Step 3: Admin creates a vdev with their access token
+	vdev1Name := "vdevtest3" + uuid.NewString()[:8]
 	vdev1 := &cpLib.VdevReq{
-		Vdev: &cpLib.VdevConfig{
+		Vdev: &cpLib.VdevCfg{
+			Name:       vdev1Name,
 			Size:       8 * 1024 * 1024 * 1024, // 8 GB
 			DataBlkCnt: 1,
 		},
@@ -116,6 +118,7 @@ func TestUserAuthVdevCreation(t *testing.T) {
 	assert.NotEmpty(t, vdevResp.ID, "vdev ID should not be empty")
 	vdevID := vdevResp.ID
 	log.Infof("user created vdev with ID: %s", vdevID)
+	log.Infof("user created vdev with name: %s", vdevResp.Name)
 
 	// Step 4: Verify user can access their own vdev
 	getReqUser := &cpLib.GetReq{
