@@ -19,8 +19,10 @@ import (
 // legacy /func endpoint until the migration to REST is complete.
 func (handler *proxyHandler) restRoutes() map[string]http.HandlerFunc {
 	return map[string]http.HandlerFunc{
+		"/vdev":      handler.handleGetVdev,
+		"/nisd":      handler.handleGetNisd,
+		"/get_chunk": handler.handleGetChunk,
 		// Registered in subsequent milestones:
-		//   "/vdev", "/nisd", "/get_chunk"  (reads)
 		//   "/create_vdev", "/create_infra" (writes)
 		//   "/get_chunks"                   (paginated read)
 	}
