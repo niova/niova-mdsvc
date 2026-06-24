@@ -682,6 +682,7 @@ func (handler *proxyHandler) startHTTPServer() error {
 		PMDBServerConfig: handler.PMDBServerConfigByteMap,
 		RecvdPort:        &RecvdPort,
 		AppType:          "Proxy",
+		Routes:           handler.restRoutes(),
 	}
 	handler.httpServerObj.HTTPConnectionLimit, _ = strconv.Atoi(handler.limit)
 	if handler.requireStat != "0" {
