@@ -1,1 +1,3 @@
 controlPlane_authentication_mechanism_test.yml
+controlPlane_start_nclient_using_vdev_name_and_uuid.yml
+controlPlane_start_nclient_using_vdev_name.yml
