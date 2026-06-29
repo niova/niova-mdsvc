@@ -1,13 +1,18 @@
 package clictlplanefuncs
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
+	"net/url"
+	"strings"
 	"sync/atomic"
 
 	log "github.com/00pauln00/niova-lookout/pkg/xlog"
 
 	ctlplfl "github.com/00pauln00/niova-mdsvc/controlplane/ctlplanefuncs/lib"
+	restapi "github.com/00pauln00/niova-mdsvc/controlplane/restapi"
 
 	pmCmn "github.com/00pauln00/niova-pumicedb/go/pkg/pumicecommon"
 	sd "github.com/00pauln00/niova-pumicedb/go/pkg/utils/servicediscovery"
@@ -128,6 +133,65 @@ func (ccf *CliCFuncs) get(cpReq *ctlplfl.CPReq, urla string, target any) (*ctlpl
 		return nil, err
 	}
 	return cpResp, nil
+}
+
+// ---- REST transport for endpoints migrated to the proxy's REST API ----
+//
+// These helpers talk to the proxy's REST routes (e.g. /vdev, /create_vdev)
+// instead of the legacy /func envelope. Only the migrated endpoints use them;
+// the remaining methods keep using request/get/put above until they migrate.
+
+// restHeaders builds the common headers for a REST call. The auth token, when
+// set, is sent as a Bearer token; writes additionally declare a JSON body.
+func (ccf *CliCFuncs) restHeaders(write bool) map[string]string {
+	h := make(map[string]string)
+	if write {
+		h["Content-Type"] = "application/json"
+	}
+	if ccf.token != "" {
+		h["Authorization"] = "Bearer " + ccf.token
+	}
+	return h
+}
+
+// restResult converts a transport result into (body, error), turning any non-2xx
+// HTTP status into an error carrying the proxy's JSON error message.
+func restResult(body []byte, status int, err error) ([]byte, error) {
+	if err != nil {
+		return nil, err
+	}
+	if status < 200 || status >= 300 {
+		var er restapi.ErrorResponse
+		if json.Unmarshal(body, &er) == nil && er.Error != "" {
+			return nil, fmt.Errorf("control plane returned %d: %s", status, er.Error)
+		}
+		return nil, fmt.Errorf("control plane returned %d: %s", status, string(body))
+	}
+	return body, nil
+}
+
+// restGet issues a GET to a migrated REST endpoint (path includes any query).
+func (ccf *CliCFuncs) restGet(path string) ([]byte, error) {
+	ccf.sdObj.TillReady("PROXY", 5)
+	body, status, err := ccf.sdObj.RESTRequest(http.MethodGet, path, nil, ccf.restHeaders(false))
+	return restResult(body, status, err)
+}
+
+// restPost issues a POST to a migrated REST endpoint, supplying the PumiceDB
+// write idempotency key via the X-RNCUI header (required by the proxy).
+func (ccf *CliCFuncs) restPost(path string, jsonBody []byte, rncui string) ([]byte, error) {
+	ccf.sdObj.TillReady("PROXY", 5)
+	headers := ccf.restHeaders(true)
+	headers["X-RNCUI"] = rncui
+	body, status, err := ccf.sdObj.RESTRequest(http.MethodPost, path, jsonBody, headers)
+	return restResult(body, status, err)
+}
+
+// nextRncui returns the next client write idempotency key, matching the legacy
+// _put scheme so writes stay dedup-stable per client.
+func (ccf *CliCFuncs) nextRncui() string {
+	seq := ccf.writeSeq.Add(1) - 1
+	return fmt.Sprintf("%s:0:0:0:%d", ccf.appUUID, seq)
 }
 
 // SetToken sets the auth JWT token used for all subsequent requests.
@@ -277,40 +341,59 @@ func (ccf *CliCFuncs) GetNisds(req ctlplfl.GetReq) ([]ctlplfl.Nisd, error) {
 }
 
 func (ccf *CliCFuncs) GetNisd(req ctlplfl.GetReq) (*ctlplfl.Nisd, error) {
-	cpReq := &ctlplfl.CPReq{
-		Token:   ccf.token,
-		Payload: req,
-	}
-	ncfg := &ctlplfl.Nisd{}
-	cpResp, err := ccf.get(cpReq, ctlplfl.GET_NISD, ncfg)
+	body, err := ccf.restGet("/nisd?id=" + url.QueryEscape(req.ID))
 	if err != nil {
 		log.Error("failed to fetch nisd info: ", err)
 		return nil, err
 	}
 
-	if err := cpResp.Err(); err != nil {
+	var resp restapi.GetNisdResponse
+	if err := json.Unmarshal(body, &resp); err != nil {
+		log.Error("failed to decode nisd response: ", err)
 		return nil, err
 	}
 
+	ncfg := &ctlplfl.Nisd{
+		ID:       resp.ID,
+		PeerPort: uint16(resp.PeerPort),
+	}
+	for _, ni := range resp.NetInfo {
+		ncfg.NetInfo = append(ncfg.NetInfo, ctlplfl.NetworkInfo{IPAddr: ni.IPAddr, Port: uint16(ni.Port)})
+	}
+	ncfg.NetInfoCnt = len(ncfg.NetInfo)
 	return ncfg, nil
 }
 
 func (ccf *CliCFuncs) CreateVdev(vdev *ctlplfl.VdevReq) (*ctlplfl.ResponseXML, error) {
-	cpReq := &ctlplfl.CPReq{
-		Token:   ccf.token,
-		Payload: vdev,
+	if vdev == nil || vdev.Vdev == nil {
+		return nil, fmt.Errorf("create_vdev: nil vdev request")
 	}
-	resp := &ctlplfl.ResponseXML{}
-	cpResp, err := ccf.put(cpReq, ctlplfl.CREATE_VDEV, resp)
+	// NOTE: the REST /create_vdev contract carries only size_bytes and
+	// num_replicas. Name, PFS, and failure-domain Filter are not part of the
+	// REST contract and are intentionally dropped here.
+	reqBody := restapi.CreateVdevRequest{
+		SizeBytes:   vdev.Vdev.Size,
+		NumReplicas: int(vdev.Vdev.DataBlkCnt),
+	}
+	jb, err := json.Marshal(reqBody)
 	if err != nil {
+		log.Error("failed to encode create_vdev request: ", err)
 		return nil, err
 	}
 
-	if err := cpResp.Err(); err != nil {
+	body, err := ccf.restPost("/create_vdev", jb, ccf.nextRncui())
+	if err != nil {
+		log.Error("CreateVdev failed: ", err)
 		return nil, err
 	}
 
-	return resp, nil
+	var resp restapi.CreateVdevResponse
+	if err := json.Unmarshal(body, &resp); err != nil {
+		log.Error("failed to decode create_vdev response: ", err)
+		return nil, err
+	}
+
+	return &ctlplfl.ResponseXML{ID: resp.VdevID, Success: resp.Success, Error: resp.Error}, nil
 }
 
 func (ccf *CliCFuncs) GetVdevsWithChunkInfo(req *ctlplfl.GetReq) ([]ctlplfl.Vdev, error) {
@@ -562,20 +645,23 @@ func (ccf *CliCFuncs) GetNisdArgs(req ctlplfl.GetReq) (ctlplfl.NisdArgs, error) 
 
 func (ccf *CliCFuncs) GetVdevConfig(req *ctlplfl.GetReq) (ctlplfl.VdevConfig, error) {
 	vdev := ctlplfl.VdevConfig{}
-	cpReq := &ctlplfl.CPReq{
-		Token:   ccf.token,
-		Payload: req,
-	}
-	cpResp, err := ccf.get(cpReq, ctlplfl.GET_VDEV_INFO, &vdev)
+	body, err := ccf.restGet("/vdev?id=" + url.QueryEscape(req.ID))
 	if err != nil {
 		log.Error("Read Vdev Cfg failed: ", err)
 		return vdev, err
 	}
 
-	if err := cpResp.Err(); err != nil {
+	var resp restapi.GetVdevResponse
+	if err := json.Unmarshal(body, &resp); err != nil {
+		log.Error("failed to decode vdev response: ", err)
 		return vdev, err
 	}
 
+	// REST /vdev carries a subset of VdevConfig; only these fields are populated.
+	vdev.ID = resp.ID
+	vdev.Size = resp.Size
+	vdev.ChunkCnt = uint32(resp.NumChunks)
+	vdev.DataBlkCnt = uint8(resp.NumReplicas)
 	return vdev, nil
 }
 
@@ -624,20 +710,28 @@ func (ccf *CliCFuncs) GetNisdListWithAvailSize(req *ctlplfl.GetReq) ([]ctlplfl.N
 func (ccf *CliCFuncs) GetChunkNisd(req *ctlplfl.GetReq) (ctlplfl.ChunkNisd, error) {
 	cn := ctlplfl.ChunkNisd{}
 	log.Info("fetching chunk Info for:", req.ID)
-	cpReq := &ctlplfl.CPReq{
-		Token:   ccf.token,
-		Payload: req,
+
+	// The legacy request ID is "<vdevID>/<chunkIdx>"; the REST endpoint takes
+	// the vdev id and chunk index as separate query parameters.
+	parts := strings.SplitN(req.ID, "/", 2)
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+		return cn, fmt.Errorf("invalid chunk id %q: expected \"<vdevID>/<chunkIdx>\"", req.ID)
 	}
-	cpResp, err := ccf.get(cpReq, ctlplfl.GET_CHUNK_NISD, &cn)
+	path := "/get_chunk?vdev_id=" + url.QueryEscape(parts[0]) + "&chunk_idx=" + url.QueryEscape(parts[1])
+
+	body, err := ccf.restGet(path)
 	if err != nil {
-		log.Error("GetHypervisor failed: ", err)
+		log.Error("GetChunkNisd failed: ", err)
 		return cn, err
 	}
 
-	if err := cpResp.Err(); err != nil {
+	var resp restapi.GetChunkResponse
+	if err := json.Unmarshal(body, &resp); err != nil {
+		log.Error("failed to decode chunk response: ", err)
 		return cn, err
 	}
 
+	cn.NisdIDs = strings.Join(resp.NisdIDs, ",")
 	return cn, nil
 }
 
