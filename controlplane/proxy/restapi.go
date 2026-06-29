@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"net/http"
+	"reflect"
 	"strings"
 
 	pmdbClient "github.com/00pauln00/niova-pumicedb/go/pkg/pumiceclient"
@@ -19,12 +20,13 @@ import (
 // legacy /func endpoint until the migration to REST is complete.
 func (handler *proxyHandler) restRoutes() map[string]http.HandlerFunc {
 	return map[string]http.HandlerFunc{
-		"/vdev":      handler.handleGetVdev,
-		"/nisd":      handler.handleGetNisd,
-		"/get_chunk": handler.handleGetChunk,
+		"/vdev":        handler.handleGetVdev,
+		"/nisd":        handler.handleGetNisd,
+		"/get_chunk":   handler.handleGetChunk,
+		"/create_vdev": handler.handleCreateVdev,
 		// Registered in subsequent milestones:
-		//   "/create_vdev", "/create_infra" (writes)
-		//   "/get_chunks"                   (paginated read)
+		//   "/create_infra" (write)
+		//   "/get_chunks"   (paginated read)
 	}
 }
 
@@ -97,7 +99,12 @@ func (handler *proxyHandler) sendFuncReq(name string, cpReq cpLib.CPReq, isWrite
 // rncuiFromRequest); wsn is the write sequence number (0 matches the legacy
 // /func default, where the sequence is encoded in the RNCUI). Reads pass "", 0.
 func (handler *proxyHandler) callFunc(name string, cpReq cpLib.CPReq, isWrite bool, rncui string, wsn int64, respPayload any) (*cpLib.CPResp, error) {
-	replyBytes, err := handler.sendFuncReq(name, cpReq, isWrite, rncui, wsn)
+	// For testing purpose!
+	send := handler.sendFuncReq
+	if handler.sendFuncReqFn != nil {
+		send = handler.sendFuncReqFn
+	}
+	replyBytes, err := send(name, cpReq, isWrite, rncui, wsn)
 	if err != nil {
 		log.Errorf("callFunc: pmdb request failed | func=%s err=%v", name, err)
 		return nil, err
@@ -106,10 +113,31 @@ func (handler *proxyHandler) callFunc(name string, cpReq cpLib.CPReq, isWrite bo
 		return nil, fmt.Errorf("empty reply from pmdb for %s", name)
 	}
 
-	cpResp := &cpLib.CPResp{Payload: respPayload}
+	// Decode the CPResp envelope. The typed payload is left for gob to populate
+	// into cpResp.Payload: gob allocates a fresh concrete value of the
+	// wire-registered type and will NOT fill a caller-supplied pointer that was
+	// pre-set on the interface field. We then copy that value into the caller's
+	// respPayload pointer below.
+	cpResp := &cpLib.CPResp{}
 	if err := PumiceDBCommon.Decoder(PumiceDBCommon.GOB, replyBytes, cpResp); err != nil {
 		log.Errorf("callFunc: failed to decode CPResp | func=%s size=%d err=%v", name, len(replyBytes), err)
 		return nil, err
+	}
+
+	// On success the server returns the function payload as a concrete value in
+	// cpResp.Payload; copy it into respPayload. Error responses carry a nil
+	// payload (Error is set instead), so there is nothing to copy.
+	if respPayload != nil && cpResp.Payload != nil {
+		dst := reflect.ValueOf(respPayload)
+		if dst.Kind() != reflect.Ptr || dst.IsNil() {
+			return cpResp, fmt.Errorf("callFunc: respPayload must be a non-nil pointer, got %T", respPayload)
+		}
+		src := reflect.ValueOf(cpResp.Payload)
+		if !src.Type().AssignableTo(dst.Elem().Type()) {
+			return cpResp, fmt.Errorf("callFunc: %s returned payload of type %T, not assignable to %s",
+				name, cpResp.Payload, dst.Elem().Type())
+		}
+		dst.Elem().Set(src)
 	}
 	return cpResp, nil
 }
