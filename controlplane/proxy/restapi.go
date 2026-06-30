@@ -20,10 +20,23 @@ import (
 // legacy /func endpoint until the migration to REST is complete.
 func (handler *proxyHandler) restRoutes() map[string]http.HandlerFunc {
 	return map[string]http.HandlerFunc{
+		// nisd: GET reads, POST writes (method-dispatched).
 		"/vdev":        handler.handleGetVdev,
-		"/nisd":        handler.handleGetNisd,
+		"/nisd":        handler.handleNisd,
 		"/get_chunk":   handler.handleGetChunk,
 		"/create_vdev": handler.handleCreateVdev,
+		// Single-entity infra writes.
+		"/pdu":        handler.handlePutPDU,
+		"/rack":       handler.handlePutRack,
+		"/hypervisor": handler.handlePutHypervisor,
+		"/device":     handler.handlePutDevice,
+		"/pfs":        handler.handlePutPFS,
+		"/partition":  handler.handlePutPartition,
+		"/nisd_args":  handler.handlePutNisdArgs,
+		// Vdev lifecycle writes.
+		"/snap":        handler.handleCreateSnap,
+		"/delete_vdev": handler.handleDeleteVdev,
+		"/mount_vdev":  handler.handleMountVdev,
 		// Registered in subsequent milestones:
 		//   "/create_infra" (write)
 		//   "/get_chunks"   (paginated read)

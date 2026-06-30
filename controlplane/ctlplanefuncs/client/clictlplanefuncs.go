@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"strings"
 	"sync/atomic"
+	"time"
 
 	log "github.com/00pauln00/niova-lookout/pkg/xlog"
 
@@ -194,45 +195,52 @@ func (ccf *CliCFuncs) nextRncui() string {
 	return fmt.Sprintf("%s:0:0:0:%d", ccf.appUUID, seq)
 }
 
+// restWrite POSTs a DTO to a write endpoint and maps the generic WriteResponse
+// back to the internal ResponseXML the callers expect.
+func (ccf *CliCFuncs) restWrite(path string, dto any) (*ctlplfl.ResponseXML, error) {
+	jb, err := json.Marshal(dto)
+	if err != nil {
+		return nil, err
+	}
+	body, err := ccf.restPost(path, jb, ccf.nextRncui())
+	if err != nil {
+		return nil, err
+	}
+	var resp restapi.WriteResponse
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return nil, err
+	}
+	return &ctlplfl.ResponseXML{ID: resp.ID, Success: resp.Success, Error: resp.Error}, nil
+}
+
 // SetToken sets the auth JWT token used for all subsequent requests.
 func (ccf *CliCFuncs) SetToken(token string) {
 	ccf.token = token
 }
 
 func (ccf *CliCFuncs) CreateSnap(vdev string, chunkSeq []uint64, snapName string) error {
-	chks := make([]ctlplfl.ChunkXML, 0)
-	for idx, seq := range chunkSeq {
-		chks = append(chks,
-			ctlplfl.ChunkXML{
-				Idx: uint32(idx),
-				Seq: seq,
-			})
+	dto := restapi.CreateSnapRequest{
+		VdevID:   vdev,
+		SnapName: snapName,
+		ChunkSeq: chunkSeq,
 	}
-	var Snap ctlplfl.SnapXML
-	Snap.SnapName = snapName
-	Snap.Vdev = vdev
-	Snap.Chunks = chks
-
-	cpReq := &ctlplfl.CPReq{
-		Token:   ccf.token,
-		Payload: Snap,
-	}
-
-	snapRes := ctlplfl.SnapResponseXML{}
-	cpResp, err := ccf.put(cpReq, ctlplfl.CREATE_SNAP, &snapRes)
+	jb, err := json.Marshal(dto)
 	if err != nil {
-		log.Error("failed to fetch snap info: ", err)
+		return err
+	}
+	body, err := ccf.restPost("/snap", jb, ccf.nextRncui())
+	if err != nil {
+		log.Error("failed to create snap: ", err)
 		return err
 	}
 
-	if err := cpResp.Err(); err != nil {
+	var resp restapi.CreateSnapResponse
+	if err := json.Unmarshal(body, &resp); err != nil {
 		return err
 	}
-
-	if !snapRes.SnapName.Success {
+	if !resp.Success {
 		return errors.New("Snap not created")
 	}
-
 	return nil
 }
 
@@ -263,22 +271,22 @@ func (ccf *CliCFuncs) ReadSnapForVdev(vdev string) ([]byte, error) {
 }
 
 func (ccf *CliCFuncs) PutDevice(device *ctlplfl.Device) (*ctlplfl.ResponseXML, error) {
-	cpReq := &ctlplfl.CPReq{
-		Token:   ccf.token,
-		Payload: device,
+	if device == nil {
+		return nil, fmt.Errorf("put_device: nil device")
 	}
-	resp := &ctlplfl.ResponseXML{}
-	cpResp, err := ccf.put(cpReq, ctlplfl.PUT_DEVICE, resp)
-	if err != nil {
-		log.Error("PutDevice failed: ", err)
-		return nil, err
+	// Child partitions are written separately via PutPartition; the single-entity
+	// REST body carries only the device record.
+	dto := restapi.Device{
+		ID:            device.ID,
+		HypervisorID:  device.HypervisorID,
+		Name:          device.Name,
+		DevicePath:    device.DevicePath,
+		SerialNumber:  device.SerialNumber,
+		State:         int(device.State),
+		Size:          device.Size,
+		FailureDomain: device.FailureDomain,
 	}
-
-	if err := cpResp.Err(); err != nil {
-		return nil, err
-	}
-
-	return resp, nil
+	return ccf.restWrite("/device", dto)
 }
 
 // TODO make changes to use new GetRequest struct
@@ -302,22 +310,21 @@ func (ccf *CliCFuncs) GetDevices(req ctlplfl.GetReq) ([]ctlplfl.Device, error) {
 }
 
 func (ccf *CliCFuncs) PutNisd(ncfg *ctlplfl.Nisd) (*ctlplfl.ResponseXML, error) {
-	cpReq := &ctlplfl.CPReq{
-		Token:   ccf.token,
-		Payload: ncfg,
+	if ncfg == nil {
+		return nil, fmt.Errorf("put_nisd: nil nisd")
 	}
-	resp := &ctlplfl.ResponseXML{}
-	cpResp, err := ccf.put(cpReq, ctlplfl.PUT_NISD, resp)
-	if err != nil {
-		log.Error("failed to update nisd info: ", err)
-		return nil, err
+	dto := restapi.NISD{
+		ID:            ncfg.ID,
+		PeerPort:      int(ncfg.PeerPort),
+		FailureDomain: ncfg.FailureDomain,
+		TotalSize:     ncfg.TotalSize,
+		AvailableSize: ncfg.AvailableSize,
+		SocketPath:    ncfg.SocketPath,
 	}
-
-	if err := cpResp.Err(); err != nil {
-		return nil, err
+	for _, ni := range ncfg.NetInfo {
+		dto.NetInfo = append(dto.NetInfo, restapi.NetworkInfo{IPAddr: ni.IPAddr, Port: int(ni.Port)})
 	}
-
-	return resp, nil
+	return ccf.restWrite("/nisd", dto)
 }
 
 func (ccf *CliCFuncs) GetNisds(req ctlplfl.GetReq) ([]ctlplfl.Nisd, error) {
@@ -416,22 +423,17 @@ func (ccf *CliCFuncs) GetVdevsWithChunkInfo(req *ctlplfl.GetReq) ([]ctlplfl.Vdev
 }
 
 func (ccf *CliCFuncs) PutPartition(devp *ctlplfl.DevicePartition) (*ctlplfl.ResponseXML, error) {
-	cpReq := &ctlplfl.CPReq{
-		Token:   ccf.token,
-		Payload: devp,
+	if devp == nil {
+		return nil, fmt.Errorf("put_partition: nil partition")
 	}
-	resp := &ctlplfl.ResponseXML{}
-	cpResp, err := ccf.put(cpReq, ctlplfl.PUT_PARTITION, resp)
-	if err != nil {
-		log.Error("Put Partition failed: ", err)
-		return nil, err
+	dto := restapi.Partition{
+		PartitionID:   devp.PartitionID,
+		PartitionPath: devp.PartitionPath,
+		NISDUUID:      devp.NISDUUID,
+		DevID:         devp.DevID,
+		Size:          devp.Size,
 	}
-
-	if err := cpResp.Err(); err != nil {
-		return nil, err
-	}
-
-	return resp, nil
+	return ccf.restWrite("/partition", dto)
 }
 
 func (ccf *CliCFuncs) GetPartition(req ctlplfl.GetReq) ([]ctlplfl.DevicePartition, error) {
@@ -454,22 +456,17 @@ func (ccf *CliCFuncs) GetPartition(req ctlplfl.GetReq) ([]ctlplfl.DevicePartitio
 }
 
 func (ccf *CliCFuncs) PutPDU(req *ctlplfl.PDU) (*ctlplfl.ResponseXML, error) {
-	cpReq := &ctlplfl.CPReq{
-		Token:   ccf.token,
-		Payload: req,
+	if req == nil {
+		return nil, fmt.Errorf("put_pdu: nil pdu")
 	}
-	resp := &ctlplfl.ResponseXML{}
-	cpResp, err := ccf.put(cpReq, ctlplfl.PUT_PDU, resp)
-	if err != nil {
-		log.Error("PutPDUs failed: ", err)
-		return nil, err
+	dto := restapi.PDU{
+		ID:            req.ID,
+		Name:          req.Name,
+		Location:      req.Location,
+		Specification: req.Specification,
+		PowerCap:      req.PowerCapacity,
 	}
-
-	if err := cpResp.Err(); err != nil {
-		return nil, err
-	}
-
-	return resp, nil
+	return ccf.restWrite("/pdu", dto)
 }
 
 func (ccf *CliCFuncs) GetPDUs(req *ctlplfl.GetReq) ([]ctlplfl.PDU, error) {
@@ -492,22 +489,16 @@ func (ccf *CliCFuncs) GetPDUs(req *ctlplfl.GetReq) ([]ctlplfl.PDU, error) {
 }
 
 func (ccf *CliCFuncs) PutPFS(req *ctlplfl.PFS) (*ctlplfl.ResponseXML, error) {
-	cpReq := &ctlplfl.CPReq{
-		Token:   ccf.token,
-		Payload: req,
+	if req == nil {
+		return nil, fmt.Errorf("put_pfs: nil pfs")
 	}
-	resp := &ctlplfl.ResponseXML{}
-	cpResp, err := ccf.put(cpReq, ctlplfl.PUT_PFS, resp)
-	if err != nil {
-		log.Error("PutPFS failed: ", err)
-		return nil, err
+	dto := restapi.PFS{
+		ID:      req.ID,
+		Name:    req.Name,
+		Offset:  req.Offset,
+		VdevIDs: req.VdevIDs,
 	}
-
-	if err := cpResp.Err(); err != nil {
-		return nil, err
-	}
-
-	return resp, nil
+	return ccf.restWrite("/pfs", dto)
 }
 
 func (ccf *CliCFuncs) GetPFS(req *ctlplfl.GetReq) ([]ctlplfl.PFS, error) {
@@ -530,22 +521,17 @@ func (ccf *CliCFuncs) GetPFS(req *ctlplfl.GetReq) ([]ctlplfl.PFS, error) {
 }
 
 func (ccf *CliCFuncs) PutRack(req *ctlplfl.Rack) (*ctlplfl.ResponseXML, error) {
-	cpReq := &ctlplfl.CPReq{
-		Token:   ccf.token,
-		Payload: req,
+	if req == nil {
+		return nil, fmt.Errorf("put_rack: nil rack")
 	}
-	resp := &ctlplfl.ResponseXML{}
-	cpResp, err := ccf.put(cpReq, ctlplfl.PUT_RACK, resp)
-	if err != nil {
-		log.Error("PutRack failed: ", err)
-		return nil, err
+	dto := restapi.Rack{
+		ID:            req.ID,
+		PDUID:         req.PDUID,
+		Name:          req.Name,
+		Location:      req.Location,
+		Specification: req.Specification,
 	}
-
-	if err := cpResp.Err(); err != nil {
-		return nil, err
-	}
-
-	return resp, nil
+	return ccf.restWrite("/rack", dto)
 }
 
 func (ccf *CliCFuncs) GetRacks(req *ctlplfl.GetReq) ([]ctlplfl.Rack, error) {
@@ -568,22 +554,19 @@ func (ccf *CliCFuncs) GetRacks(req *ctlplfl.GetReq) ([]ctlplfl.Rack, error) {
 }
 
 func (ccf *CliCFuncs) PutHypervisor(req *ctlplfl.Hypervisor) (*ctlplfl.ResponseXML, error) {
-	cpReq := &ctlplfl.CPReq{
-		Token:   ccf.token,
-		Payload: req,
+	if req == nil {
+		return nil, fmt.Errorf("put_hypervisor: nil hypervisor")
 	}
-	resp := &ctlplfl.ResponseXML{}
-	cpResp, err := ccf.put(cpReq, ctlplfl.PUT_HYPERVISOR, resp)
-	if err != nil {
-		log.Error("PutHypervisor failed: ", err)
-		return nil, err
+	dto := restapi.Hypervisor{
+		ID:          req.ID,
+		RackID:      req.RackID,
+		Name:        req.Name,
+		PortRange:   req.PortRange,
+		SSHPort:     req.SSHPort,
+		RDMAEnabled: req.RDMAEnabled,
+		IPAddrs:     req.IPAddrs,
 	}
-
-	if err := cpResp.Err(); err != nil {
-		return nil, err
-	}
-
-	return resp, nil
+	return ccf.restWrite("/hypervisor", dto)
 }
 
 func (ccf *CliCFuncs) GetHypervisor(req *ctlplfl.GetReq) ([]ctlplfl.Hypervisor, error) {
@@ -606,22 +589,19 @@ func (ccf *CliCFuncs) GetHypervisor(req *ctlplfl.GetReq) ([]ctlplfl.Hypervisor, 
 }
 
 func (ccf *CliCFuncs) PutNisdArgs(req *ctlplfl.NisdArgs) (*ctlplfl.ResponseXML, error) {
-	cpReq := &ctlplfl.CPReq{
-		Token:   ccf.token,
-		Payload: req,
+	if req == nil {
+		return nil, fmt.Errorf("put_nisd_args: nil args")
 	}
-	resp := &ctlplfl.ResponseXML{}
-	cpResp, err := ccf.put(cpReq, ctlplfl.PUT_NISD_ARGS, resp)
-	if err != nil {
-		log.Error("PutNisdArgs failed: ", err)
-		return nil, err
+	dto := restapi.NisdArgs{
+		Defrag:               req.Defrag,
+		AllowDefragMCIBCache: req.AllowDefragMCIBCache,
+		MBCCnt:               req.MBCCnt,
+		MergeHCnt:            req.MergeHCnt,
+		MCIBReadCache:        req.MCIBReadCache,
+		S3:                   req.S3,
+		DSync:                req.DSync,
 	}
-
-	if err := cpResp.Err(); err != nil {
-		return nil, err
-	}
-
-	return resp, nil
+	return ccf.restWrite("/nisd_args", dto)
 }
 
 func (ccf *CliCFuncs) GetNisdArgs(req ctlplfl.GetReq) (ctlplfl.NisdArgs, error) {
@@ -793,38 +773,38 @@ func (ccf *CliCFuncs) GetChunks(req *ctlplfl.GetReq) ([]ctlplfl.Chunk, error) {
 }
 
 func (ccf *CliCFuncs) DeleteVdev(req *ctlplfl.DeleteVdevReq) (*ctlplfl.ResponseXML, error) {
-	resp := &ctlplfl.ResponseXML{}
-	cpreq := &ctlplfl.CPReq{
-		Token:   ccf.token,
-		Payload: req,
+	if req == nil || req.ID == "" {
+		return nil, fmt.Errorf("delete_vdev: missing id")
 	}
-	cpResp, err := ccf.put(cpreq, ctlplfl.DELETE_VDEV, resp)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := cpResp.Err(); err != nil {
-		return nil, err
-	}
-
-	return resp, nil
+	return ccf.restWrite("/delete_vdev", restapi.DeleteVdevRequest{VdevID: req.ID})
 }
 
 func (ccf *CliCFuncs) MountVdev(req *ctlplfl.MountVdevRequest) (ctlplfl.VdevConfig, error) {
 	vdev := ctlplfl.VdevConfig{}
-	cpReq := &ctlplfl.CPReq{
-		Token:   ccf.token,
-		Payload: req,
+	if req == nil {
+		return vdev, fmt.Errorf("mount_vdev: nil request")
 	}
-	cpResp, err := ccf.put(cpReq, ctlplfl.MOUNT_VDEV, &vdev)
+	dto := restapi.MountVdevRequest{VdevID: req.VdevID}
+	jb, err := json.Marshal(dto)
+	if err != nil {
+		return vdev, err
+	}
+	body, err := ccf.restPost("/mount_vdev", jb, ccf.nextRncui())
 	if err != nil {
 		log.Error("MountVdev failed for vdev: ", req.VdevID, " with error: ", err)
 		return vdev, err
 	}
 
-	if err := cpResp.Err(); err != nil {
+	var resp restapi.MountVdevResponse
+	if err := json.Unmarshal(body, &resp); err != nil {
 		return vdev, err
 	}
-
+	vdev.ID = req.VdevID
+	vdev.VdevMountInfo.MountCounter = resp.MountCounter
+	if resp.LastUpdatedLTS != "" {
+		if t, perr := time.Parse(time.RFC3339, resp.LastUpdatedLTS); perr == nil {
+			vdev.VdevMountInfo.LastUpdatedLTS = t
+		}
+	}
 	return vdev, nil
 }

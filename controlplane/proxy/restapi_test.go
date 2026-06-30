@@ -361,9 +361,245 @@ func TestHandleCreateVdev_MethodNotAllowed(t *testing.T) {
 func TestRestRoutesRegistered(t *testing.T) {
 	h := &proxyHandler{}
 	routes := h.restRoutes()
-	for _, p := range []string{"/vdev", "/nisd", "/get_chunk", "/create_vdev"} {
+	for _, p := range []string{
+		"/vdev", "/nisd", "/get_chunk", "/create_vdev",
+		"/pdu", "/rack", "/hypervisor", "/device", "/pfs", "/partition", "/nisd_args",
+		"/snap", "/delete_vdev", "/mount_vdev",
+	} {
 		if routes[p] == nil {
 			t.Errorf("route %s not registered", p)
 		}
+	}
+}
+
+// ---- single-entity + lifecycle writes ----
+
+// writeReq builds a request with an optional JSON body and X-RNCUI header.
+func writeReq(t *testing.T, method, target, body, rncui string) *http.Request {
+	t.Helper()
+	var r *http.Request
+	if body == "" {
+		r = httptest.NewRequest(method, target, nil)
+	} else {
+		r = httptest.NewRequest(method, target, strings.NewReader(body))
+		r.Header.Set("Content-Type", "application/json")
+	}
+	if rncui != "" {
+		r.Header.Set(rncuiHeader, rncui)
+	}
+	return r
+}
+
+func TestHandlePutPDU_Success(t *testing.T) {
+	var cap capturedCall
+	h := newFakeHandler(gobReply(t, cpLib.ResponseXML{ID: "pdu-1", Success: true}), nil, &cap)
+	rr := httptest.NewRecorder()
+	h.handlePutPDU(rr, writeReq(t, http.MethodPost, "/pdu",
+		`{"id":"pdu-1","name":"p","power_cap":"5kW"}`, "r1"))
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", rr.Code, rr.Body.String())
+	}
+	var got restapi.WriteResponse
+	decodeBody(t, rr, &got)
+	if !got.Success || got.ID != "pdu-1" {
+		t.Fatalf("response = %+v", got)
+	}
+	if !cap.isWrite || cap.rncui != "r1" || cap.name != cpLib.PUT_PDU {
+		t.Fatalf("captured = %+v", cap)
+	}
+	pdu, ok := cap.cpReq.Payload.(cpLib.PDU)
+	if !ok || pdu.ID != "pdu-1" || pdu.PowerCapacity != "5kW" {
+		t.Fatalf("payload = %#v", cap.cpReq.Payload)
+	}
+}
+
+func TestHandlePutPDU_MissingRNCUI(t *testing.T) {
+	h := newFakeHandler(gobReply(t, cpLib.ResponseXML{ID: "x"}), nil, nil)
+	rr := httptest.NewRecorder()
+	h.handlePutPDU(rr, writeReq(t, http.MethodPost, "/pdu", `{"id":"x"}`, ""))
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", rr.Code)
+	}
+}
+
+func TestHandlePutPDU_MissingID(t *testing.T) {
+	h := newFakeHandler(nil, nil, nil)
+	rr := httptest.NewRecorder()
+	h.handlePutPDU(rr, writeReq(t, http.MethodPost, "/pdu", `{"name":"p"}`, "r1"))
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", rr.Code)
+	}
+}
+
+func TestHandlePutNisd_Success_MapsNetInfo(t *testing.T) {
+	var cap capturedCall
+	h := newFakeHandler(gobReply(t, cpLib.ResponseXML{ID: "nisd-1", Success: true}), nil, &cap)
+	rr := httptest.NewRecorder()
+	h.handlePutNisd(rr, writeReq(t, http.MethodPost, "/nisd",
+		`{"id":"nisd-1","peer_port":9000,"failure_domain":["pdu","rack"],"net_info":[{"ip_addr":"10.0.0.1","port":7000}]}`, "r1"))
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", rr.Code, rr.Body.String())
+	}
+	if cap.name != cpLib.PUT_NISD {
+		t.Fatalf("op = %q", cap.name)
+	}
+	nisd, ok := cap.cpReq.Payload.(cpLib.Nisd)
+	if !ok || nisd.ID != "nisd-1" || nisd.PeerPort != 9000 {
+		t.Fatalf("payload = %#v", cap.cpReq.Payload)
+	}
+	if len(nisd.NetInfo) != 1 || nisd.NetInfo[0].Port != 7000 || nisd.NetInfoCnt != 1 {
+		t.Fatalf("net_info mapping wrong: %+v cnt=%d", nisd.NetInfo, nisd.NetInfoCnt)
+	}
+	if len(nisd.FailureDomain) != 2 {
+		t.Fatalf("failure_domain = %v", nisd.FailureDomain)
+	}
+}
+
+func TestHandlePutNisdArgs_Success(t *testing.T) {
+	var cap capturedCall
+	h := newFakeHandler(gobReply(t, cpLib.ResponseXML{Success: true}), nil, &cap)
+	rr := httptest.NewRecorder()
+	h.handlePutNisdArgs(rr, writeReq(t, http.MethodPost, "/nisd_args",
+		`{"defrag":true,"mbc_cnt":4,"s3":"bucket"}`, "r1"))
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", rr.Code, rr.Body.String())
+	}
+	args, ok := cap.cpReq.Payload.(cpLib.NisdArgs)
+	if !ok || !args.Defrag || args.MBCCnt != 4 || args.S3 != "bucket" {
+		t.Fatalf("payload = %#v", cap.cpReq.Payload)
+	}
+}
+
+// /nisd dispatches GET->read, POST->write, others->405.
+func TestHandleNisd_MethodDispatch(t *testing.T) {
+	// GET -> read
+	hGet := newFakeHandler(gobReply(t, cpLib.Nisd{ID: "n1", PeerPort: 1}), nil, nil)
+	rr := httptest.NewRecorder()
+	hGet.handleNisd(rr, httptest.NewRequest(http.MethodGet, "/nisd?id=n1", nil))
+	if rr.Code != http.StatusOK {
+		t.Fatalf("GET status = %d, want 200; body=%s", rr.Code, rr.Body.String())
+	}
+	// POST -> write
+	hPost := newFakeHandler(gobReply(t, cpLib.ResponseXML{ID: "n1", Success: true}), nil, nil)
+	rr = httptest.NewRecorder()
+	hPost.handleNisd(rr, writeReq(t, http.MethodPost, "/nisd", `{"id":"n1"}`, "r1"))
+	if rr.Code != http.StatusOK {
+		t.Fatalf("POST status = %d, want 200; body=%s", rr.Code, rr.Body.String())
+	}
+	// PUT -> 405
+	rr = httptest.NewRecorder()
+	newFakeHandler(nil, nil, nil).handleNisd(rr, httptest.NewRequest(http.MethodPut, "/nisd", nil))
+	if rr.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("PUT status = %d, want 405", rr.Code)
+	}
+}
+
+func TestHandleDeleteVdev_Success(t *testing.T) {
+	var cap capturedCall
+	h := newFakeHandler(gobReply(t, cpLib.ResponseXML{ID: "v1", Success: true}), nil, &cap)
+	rr := httptest.NewRecorder()
+	h.handleDeleteVdev(rr, writeReq(t, http.MethodPost, "/delete_vdev", `{"vdev_id":"v1"}`, "r1"))
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", rr.Code, rr.Body.String())
+	}
+	var got restapi.WriteResponse
+	decodeBody(t, rr, &got)
+	if !got.Success || got.ID != "v1" {
+		t.Fatalf("response = %+v", got)
+	}
+	if cap.name != cpLib.DELETE_VDEV || !cap.isWrite || cap.rncui != "r1" {
+		t.Fatalf("captured = %+v", cap)
+	}
+	dv, ok := cap.cpReq.Payload.(cpLib.DeleteVdevReq)
+	if !ok || dv.ID != "v1" {
+		t.Fatalf("payload = %#v", cap.cpReq.Payload)
+	}
+}
+
+func TestHandleDeleteVdev_MissingID(t *testing.T) {
+	h := newFakeHandler(nil, nil, nil)
+	rr := httptest.NewRecorder()
+	h.handleDeleteVdev(rr, writeReq(t, http.MethodPost, "/delete_vdev", `{}`, "r1"))
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", rr.Code)
+	}
+}
+
+func TestHandleDeleteVdev_MissingRNCUI(t *testing.T) {
+	h := newFakeHandler(gobReply(t, cpLib.ResponseXML{Success: true}), nil, nil)
+	rr := httptest.NewRecorder()
+	h.handleDeleteVdev(rr, writeReq(t, http.MethodPost, "/delete_vdev", `{"vdev_id":"v1"}`, ""))
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", rr.Code)
+	}
+}
+
+func TestHandleMountVdev_Success(t *testing.T) {
+	var cap capturedCall
+	h := newFakeHandler(gobReply(t, cpLib.VdevMountInfo{MountCounter: 7}), nil, &cap)
+	rr := httptest.NewRecorder()
+	h.handleMountVdev(rr, writeReq(t, http.MethodPost, "/mount_vdev", `{"vdev_id":"v1"}`, "r1"))
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", rr.Code, rr.Body.String())
+	}
+	var got restapi.MountVdevResponse
+	decodeBody(t, rr, &got)
+	if !got.Success || got.MountCounter != 7 {
+		t.Fatalf("response = %+v", got)
+	}
+	if cap.name != cpLib.MOUNT_VDEV {
+		t.Fatalf("op = %q", cap.name)
+	}
+	mv, ok := cap.cpReq.Payload.(cpLib.MountVdevRequest)
+	if !ok || mv.VdevID != "v1" {
+		t.Fatalf("payload = %#v", cap.cpReq.Payload)
+	}
+}
+
+func TestHandleCreateSnap_Success(t *testing.T) {
+	var cap capturedCall
+	reply := gobReply(t, cpLib.SnapResponseXML{SnapName: cpLib.SnapName{Name: "snap-1", Success: true}})
+	h := newFakeHandler(reply, nil, &cap)
+	rr := httptest.NewRecorder()
+	h.handleCreateSnap(rr, writeReq(t, http.MethodPost, "/snap",
+		`{"vdev_id":"v1","snap_name":"snap-1","chunk_seq":[10,20,30]}`, "r1"))
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", rr.Code, rr.Body.String())
+	}
+	var got restapi.CreateSnapResponse
+	decodeBody(t, rr, &got)
+	if !got.Success || got.SnapName != "snap-1" {
+		t.Fatalf("response = %+v", got)
+	}
+	snap, ok := cap.cpReq.Payload.(cpLib.SnapXML)
+	if !ok || snap.Vdev != "v1" || snap.SnapName != "snap-1" || len(snap.Chunks) != 3 {
+		t.Fatalf("payload = %#v", cap.cpReq.Payload)
+	}
+	// chunk_seq maps to ChunkXML{Idx: position, Seq: value}
+	if snap.Chunks[1].Idx != 1 || snap.Chunks[1].Seq != 20 {
+		t.Fatalf("chunk[1] = %+v", snap.Chunks[1])
+	}
+}
+
+func TestHandleCreateSnap_NotCreated(t *testing.T) {
+	reply := gobReply(t, cpLib.SnapResponseXML{SnapName: cpLib.SnapName{Name: "s", Success: false}})
+	h := newFakeHandler(reply, nil, nil)
+	rr := httptest.NewRecorder()
+	h.handleCreateSnap(rr, writeReq(t, http.MethodPost, "/snap",
+		`{"vdev_id":"v1","snap_name":"s"}`, "r1"))
+	if rr.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want 500; body=%s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestHandleCreateSnap_MissingFields(t *testing.T) {
+	h := newFakeHandler(nil, nil, nil)
+	rr := httptest.NewRecorder()
+	h.handleCreateSnap(rr, writeReq(t, http.MethodPost, "/snap", `{"vdev_id":"v1"}`, "r1"))
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", rr.Code)
 	}
 }
