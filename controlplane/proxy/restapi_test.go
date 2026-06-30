@@ -357,21 +357,6 @@ func TestHandleCreateVdev_MethodNotAllowed(t *testing.T) {
 	}
 }
 
-// restRoutes must register exactly the legacy exact-path write endpoints.
-func TestRestRoutesRegistered(t *testing.T) {
-	h := &proxyHandler{}
-	routes := h.restRoutes()
-	for _, p := range []string{
-		"/nisd",
-		"/pdu", "/rack", "/hypervisor", "/device", "/pfs", "/partition", "/nisd_args",
-		"/snap", "/mount_vdev",
-	} {
-		if routes[p] == nil {
-			t.Errorf("route %s not registered", p)
-		}
-	}
-}
-
 // restMux must register the TiDB-style /api/ routes with method matching.
 func TestRestMuxRegistered(t *testing.T) {
 	h := &proxyHandler{}
@@ -380,8 +365,17 @@ func TestRestMuxRegistered(t *testing.T) {
 		{http.MethodPost, "/api/vdev"},
 		{http.MethodGet, "/api/vdev"},
 		{http.MethodDelete, "/api/vdev/some-id"},
+		{http.MethodPost, "/api/snap"},
+		{http.MethodPost, "/api/mount_vdev"},
 		{http.MethodGet, "/api/nisd"},
 		{http.MethodGet, "/api/chunk"},
+		{http.MethodGet, "/api/resource"},
+		{http.MethodPut, "/api/resource"},
+		{http.MethodGet, "/api/infra"},
+		{http.MethodPost, "/api/pfs"},
+		{http.MethodGet, "/api/pfs"},
+		{http.MethodPost, "/api/nisd_args"},
+		{http.MethodGet, "/api/nisd_args"},
 	} {
 		req := httptest.NewRequest(c.method, c.target, nil)
 		if _, pattern := mux.Handler(req); pattern == "" {
@@ -408,11 +402,11 @@ func writeReq(t *testing.T, method, target, body, rncui string) *http.Request {
 	return r
 }
 
-func TestHandlePutPDU_Success(t *testing.T) {
+func TestHandlePutResource_PDU(t *testing.T) {
 	var cap capturedCall
 	h := newFakeHandler(gobReply(t, cpLib.ResponseXML{ID: "pdu-1", Success: true}), nil, &cap)
 	rr := httptest.NewRecorder()
-	h.handlePutPDU(rr, writeReq(t, http.MethodPost, "/pdu",
+	h.handlePutResource(rr, writeReq(t, http.MethodPut, "/api/resource?type=pdu",
 		`{"id":"pdu-1","name":"p","power_cap":"5kW"}`, "r1"))
 
 	if rr.Code != http.StatusOK {
@@ -432,29 +426,11 @@ func TestHandlePutPDU_Success(t *testing.T) {
 	}
 }
 
-func TestHandlePutPDU_MissingRNCUI(t *testing.T) {
-	h := newFakeHandler(gobReply(t, cpLib.ResponseXML{ID: "x"}), nil, nil)
-	rr := httptest.NewRecorder()
-	h.handlePutPDU(rr, writeReq(t, http.MethodPost, "/pdu", `{"id":"x"}`, ""))
-	if rr.Code != http.StatusBadRequest {
-		t.Fatalf("status = %d, want 400", rr.Code)
-	}
-}
-
-func TestHandlePutPDU_MissingID(t *testing.T) {
-	h := newFakeHandler(nil, nil, nil)
-	rr := httptest.NewRecorder()
-	h.handlePutPDU(rr, writeReq(t, http.MethodPost, "/pdu", `{"name":"p"}`, "r1"))
-	if rr.Code != http.StatusBadRequest {
-		t.Fatalf("status = %d, want 400", rr.Code)
-	}
-}
-
-func TestHandlePutNisd_Success_MapsNetInfo(t *testing.T) {
+func TestHandlePutResource_Nisd_MapsNetInfo(t *testing.T) {
 	var cap capturedCall
 	h := newFakeHandler(gobReply(t, cpLib.ResponseXML{ID: "nisd-1", Success: true}), nil, &cap)
 	rr := httptest.NewRecorder()
-	h.handlePutNisd(rr, writeReq(t, http.MethodPost, "/nisd",
+	h.handlePutResource(rr, writeReq(t, http.MethodPut, "/api/resource?type=nisd",
 		`{"id":"nisd-1","peer_port":9000,"failure_domain":["pdu","rack"],"net_info":[{"ip_addr":"10.0.0.1","port":7000}]}`, "r1"))
 
 	if rr.Code != http.StatusOK {
@@ -475,6 +451,42 @@ func TestHandlePutNisd_Success_MapsNetInfo(t *testing.T) {
 	}
 }
 
+func TestHandlePutResource_MissingType(t *testing.T) {
+	h := newFakeHandler(nil, nil, nil)
+	rr := httptest.NewRecorder()
+	h.handlePutResource(rr, writeReq(t, http.MethodPut, "/api/resource", `{"id":"x"}`, "r1"))
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", rr.Code)
+	}
+}
+
+func TestHandlePutResource_UnsupportedType(t *testing.T) {
+	h := newFakeHandler(nil, nil, nil)
+	rr := httptest.NewRecorder()
+	h.handlePutResource(rr, writeReq(t, http.MethodPut, "/api/resource?type=widget", `{"id":"x"}`, "r1"))
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", rr.Code)
+	}
+}
+
+func TestHandlePutResource_MissingID(t *testing.T) {
+	h := newFakeHandler(nil, nil, nil)
+	rr := httptest.NewRecorder()
+	h.handlePutResource(rr, writeReq(t, http.MethodPut, "/api/resource?type=pdu", `{"name":"p"}`, "r1"))
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", rr.Code)
+	}
+}
+
+func TestHandlePutResource_MissingRNCUI(t *testing.T) {
+	h := newFakeHandler(gobReply(t, cpLib.ResponseXML{ID: "x"}), nil, nil)
+	rr := httptest.NewRecorder()
+	h.handlePutResource(rr, writeReq(t, http.MethodPut, "/api/resource?type=pdu", `{"id":"x"}`, ""))
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", rr.Code)
+	}
+}
+
 func TestHandlePutNisdArgs_Success(t *testing.T) {
 	var cap capturedCall
 	h := newFakeHandler(gobReply(t, cpLib.ResponseXML{Success: true}), nil, &cap)
@@ -487,30 +499,6 @@ func TestHandlePutNisdArgs_Success(t *testing.T) {
 	args, ok := cap.cpReq.Payload.(cpLib.NisdArgs)
 	if !ok || !args.Defrag || args.MBCCnt != 4 || args.S3 != "bucket" {
 		t.Fatalf("payload = %#v", cap.cpReq.Payload)
-	}
-}
-
-// /nisd dispatches GET->read, POST->write, others->405.
-func TestHandleNisd_MethodDispatch(t *testing.T) {
-	// GET -> read
-	hGet := newFakeHandler(gobReply(t, cpLib.Nisd{ID: "n1", PeerPort: 1}), nil, nil)
-	rr := httptest.NewRecorder()
-	hGet.handleNisd(rr, httptest.NewRequest(http.MethodGet, "/nisd?id=n1", nil))
-	if rr.Code != http.StatusOK {
-		t.Fatalf("GET status = %d, want 200; body=%s", rr.Code, rr.Body.String())
-	}
-	// POST -> write
-	hPost := newFakeHandler(gobReply(t, cpLib.ResponseXML{ID: "n1", Success: true}), nil, nil)
-	rr = httptest.NewRecorder()
-	hPost.handleNisd(rr, writeReq(t, http.MethodPost, "/nisd", `{"id":"n1"}`, "r1"))
-	if rr.Code != http.StatusOK {
-		t.Fatalf("POST status = %d, want 200; body=%s", rr.Code, rr.Body.String())
-	}
-	// PUT -> 405
-	rr = httptest.NewRecorder()
-	newFakeHandler(nil, nil, nil).handleNisd(rr, httptest.NewRequest(http.MethodPut, "/nisd", nil))
-	if rr.Code != http.StatusMethodNotAllowed {
-		t.Fatalf("PUT status = %d, want 405", rr.Code)
 	}
 }
 
@@ -631,5 +619,134 @@ func TestHandleCreateSnap_MissingFields(t *testing.T) {
 	h.handleCreateSnap(rr, writeReq(t, http.MethodPost, "/snap", `{"vdev_id":"v1"}`, "r1"))
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400", rr.Code)
+	}
+}
+
+// ---- GET /api/resource ----
+
+func TestHandleGetResource_PDU(t *testing.T) {
+	reply := gobReply(t, cpLib.ResourceListResp{
+		ResourceType: cpLib.ResourcePDU,
+		PDUs:         []cpLib.PDU{{ID: "pdu-1", Name: "p", PowerCapacity: "5kW"}},
+	})
+	h := newFakeHandler(reply, nil, nil)
+	rr := httptest.NewRecorder()
+	h.handleGetResource(rr, httptest.NewRequest(http.MethodGet, "/api/resource?type=pdu", nil))
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", rr.Code, rr.Body.String())
+	}
+	var got restapi.GetResourceResponse
+	decodeBody(t, rr, &got)
+	if !got.Success || got.Type != "pdu" || len(got.PDUs) != 1 || got.PDUs[0].ID != "pdu-1" || got.PDUs[0].PowerCap != "5kW" {
+		t.Fatalf("response = %+v", got)
+	}
+}
+
+func TestHandleGetResource_MissingType(t *testing.T) {
+	h := newFakeHandler(nil, nil, nil)
+	rr := httptest.NewRecorder()
+	h.handleGetResource(rr, httptest.NewRequest(http.MethodGet, "/api/resource", nil))
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", rr.Code)
+	}
+}
+
+func TestHandleGetResource_UnsupportedType(t *testing.T) {
+	h := newFakeHandler(nil, nil, nil)
+	rr := httptest.NewRecorder()
+	h.handleGetResource(rr, httptest.NewRequest(http.MethodGet, "/api/resource?type=widget", nil))
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", rr.Code)
+	}
+}
+
+// ---- GET /api/pfs ----
+
+func TestHandleGetPFS_Success(t *testing.T) {
+	reply := gobReply(t, []cpLib.PFS{{ID: "pfs-1", Name: "p", VdevIDs: []string{"v1"}}})
+	h := newFakeHandler(reply, nil, nil)
+	rr := httptest.NewRecorder()
+	h.handleGetPFS(rr, httptest.NewRequest(http.MethodGet, "/api/pfs?id=pfs-1", nil))
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", rr.Code, rr.Body.String())
+	}
+	var got restapi.GetPFSResponse
+	decodeBody(t, rr, &got)
+	if !got.Success || len(got.PFS) != 1 || got.PFS[0].ID != "pfs-1" || len(got.PFS[0].VdevIDs) != 1 {
+		t.Fatalf("response = %+v", got)
+	}
+}
+
+// ---- GET /api/nisd_args ----
+
+func TestHandleGetNisdArgs_Success(t *testing.T) {
+	reply := gobReply(t, cpLib.NisdArgs{Defrag: true, MBCCnt: 4, S3: "bucket"})
+	h := newFakeHandler(reply, nil, nil)
+	rr := httptest.NewRecorder()
+	h.handleGetNisdArgs(rr, httptest.NewRequest(http.MethodGet, "/api/nisd_args", nil))
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", rr.Code, rr.Body.String())
+	}
+	var got restapi.GetNisdArgsResponse
+	decodeBody(t, rr, &got)
+	if !got.Success || !got.NisdArgs.Defrag || got.NisdArgs.MBCCnt != 4 || got.NisdArgs.S3 != "bucket" {
+		t.Fatalf("response = %+v", got)
+	}
+}
+
+// ---- GET /api/infra ----
+
+// TestHandleGetInfra_AssemblesTree drives the per-type GET_ALL_RESOURCES calls
+// with a fake that returns a distinct ResourceListResp per resource type, and
+// asserts the proxy nests them PDU -> Rack -> Hypervisor -> Device -> NISD.
+func TestHandleGetInfra_AssemblesTree(t *testing.T) {
+	h := &proxyHandler{
+		sendFuncReqFn: func(name string, cpReq cpLib.CPReq, isWrite bool, rncui string, wsn int64) ([]byte, error) {
+			rt := cpReq.Payload.(cpLib.GetResourceReq).ResourceType
+			var rl cpLib.ResourceListResp
+			switch rt {
+			case cpLib.ResourcePDU:
+				rl = cpLib.ResourceListResp{PDUs: []cpLib.PDU{{ID: "pdu-1"}}}
+			case cpLib.ResourceRack:
+				rl = cpLib.ResourceListResp{Racks: []cpLib.Rack{{ID: "rack-1", PDUID: "pdu-1"}}}
+			case cpLib.ResourceHypervisor:
+				rl = cpLib.ResourceListResp{Hypervisors: []cpLib.Hypervisor{{ID: "hv-1", RackID: "rack-1"}}}
+			case cpLib.ResourceDevice:
+				rl = cpLib.ResourceListResp{Devices: []cpLib.Device{{ID: "dev-1", HypervisorID: "hv-1"}}}
+			case cpLib.ResourceNisd:
+				rl = cpLib.ResourceListResp{Nisds: []cpLib.Nisd{{ID: "nisd-1", FailureDomain: []string{"pdu-1", "rack-1", "hv-1", "dev-1"}}}}
+			}
+			enc, err := cpLib.EncodeResponse(rl)
+			if err != nil {
+				return nil, err
+			}
+			return enc.([]byte), nil
+		},
+	}
+	rr := httptest.NewRecorder()
+	h.handleGetInfra(rr, httptest.NewRequest(http.MethodGet, "/api/infra", nil))
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", rr.Code, rr.Body.String())
+	}
+	var got restapi.GetInfraResponse
+	decodeBody(t, rr, &got)
+	if len(got.Infra.PDUs) != 1 || got.Infra.PDUs[0].ID != "pdu-1" {
+		t.Fatalf("pdus = %+v", got.Infra.PDUs)
+	}
+	racks := got.Infra.PDUs[0].Racks
+	if len(racks) != 1 || racks[0].ID != "rack-1" {
+		t.Fatalf("racks = %+v", racks)
+	}
+	hvs := racks[0].Hypervisors
+	if len(hvs) != 1 || hvs[0].ID != "hv-1" {
+		t.Fatalf("hypervisors = %+v", hvs)
+	}
+	devs := hvs[0].Devices
+	if len(devs) != 1 || devs[0].ID != "dev-1" {
+		t.Fatalf("devices = %+v", devs)
+	}
+	nisds := devs[0].NISDs
+	if len(nisds) != 1 || nisds[0].ID != "nisd-1" {
+		t.Fatalf("nisds = %+v", nisds)
 	}
 }

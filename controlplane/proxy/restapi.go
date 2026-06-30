@@ -26,37 +26,24 @@ func (handler *proxyHandler) restMux() *http.ServeMux {
 	mux.HandleFunc("POST /api/vdev", handler.handleCreateVdev)
 	mux.HandleFunc("GET /api/vdev", handler.handleGetVdev)
 	mux.HandleFunc("DELETE /api/vdev/{id}", handler.handleDeleteVdev)
+	mux.HandleFunc("POST /api/snap", handler.handleCreateSnap)
+	mux.HandleFunc("POST /api/mount_vdev", handler.handleMountVdev)
+	// infra entity reads/upserts.
+	mux.HandleFunc("GET /api/resource", handler.handleGetResource)
+	mux.HandleFunc("PUT /api/resource", handler.handlePutResource)
+	mux.HandleFunc("GET /api/infra", handler.handleGetInfra)
+	mux.HandleFunc("POST /api/pfs", handler.handlePutPFS)
+	mux.HandleFunc("GET /api/pfs", handler.handleGetPFS)
+	mux.HandleFunc("POST /api/nisd_args", handler.handlePutNisdArgs)
+	mux.HandleFunc("GET /api/nisd_args", handler.handleGetNisdArgs)
 	// reads.
 	mux.HandleFunc("GET /api/nisd", handler.handleGetNisd)
 	mux.HandleFunc("GET /api/chunk", handler.handleGetChunk)
-	// Registered in subsequent milestones:
-	//   "POST /api/infra", "GET /api/infra"
-	//   "GET /api/chunks"        (paginated read)
-	//   "GET|PUT /api/resource"  (entity reads/upserts)
-	//   "POST /api/chunk/reassign", "POST|GET /api/pfs", "POST /api/reset"
+	// Not implemented for now: GET /api/chunks (paginated chunk listing - mdsvc
+	// chunk ranging is deferred). Not implementable without server-side ops (no
+	// niova func): POST /api/infra (atomic create_infra),
+	// POST /api/chunk/reassign, POST /api/reset.
 	return mux
-}
-
-// restRoutes returns the legacy exact-path REST route table. These niova-only
-// write endpoints have no TiDB equivalent yet; they keep their flat paths until
-// they are folded into the /api/ contract (e.g. PUT /api/resource) in a later
-// milestone. They run alongside restMux and the legacy /func endpoint.
-func (handler *proxyHandler) restRoutes() map[string]http.HandlerFunc {
-	return map[string]http.HandlerFunc{
-		// nisd write (GET reads moved to GET /api/nisd; POST still served here).
-		"/nisd": handler.handleNisd,
-		// Single-entity infra writes.
-		"/pdu":        handler.handlePutPDU,
-		"/rack":       handler.handlePutRack,
-		"/hypervisor": handler.handlePutHypervisor,
-		"/device":     handler.handlePutDevice,
-		"/pfs":        handler.handlePutPFS,
-		"/partition":  handler.handlePutPartition,
-		"/nisd_args":  handler.handlePutNisdArgs,
-		// Vdev lifecycle writes.
-		"/snap":       handler.handleCreateSnap,
-		"/mount_vdev": handler.handleMountVdev,
-	}
 }
 
 // tokenFromRequest extracts a bearer token from the Authorization header, if

@@ -232,6 +232,82 @@ func (ccf *CliCFuncs) restWrite(path string, dto any) (*ctlplfl.ResponseXML, err
 	return &ctlplfl.ResponseXML{ID: resp.ID, Success: resp.Success, Error: resp.Error}, nil
 }
 
+// restPut issues a PUT to a migrated REST endpoint, supplying the PumiceDB write
+// idempotency key via the X-RNCUI header (required by the proxy for writes).
+func (ccf *CliCFuncs) restPut(path string, jsonBody []byte, rncui string) ([]byte, error) {
+	ccf.sdObj.TillReady("PROXY", 5)
+	headers := ccf.restHeaders(true)
+	headers["X-RNCUI"] = rncui
+	body, status, err := ccf.sdObj.RESTRequest(http.MethodPut, path, jsonBody, headers)
+	return restResult(body, status, err)
+}
+
+// restWriteResource PUTs an entity DTO to PUT /api/resource?type=rtype (the
+// TiDB-style infra upsert) and maps the WriteResponse back to a ResponseXML.
+func (ccf *CliCFuncs) restWriteResource(rtype string, dto any) (*ctlplfl.ResponseXML, error) {
+	jb, err := json.Marshal(dto)
+	if err != nil {
+		return nil, err
+	}
+	body, err := ccf.restPut("/api/resource?type="+url.QueryEscape(rtype), jb, ccf.nextRncui())
+	if err != nil {
+		return nil, err
+	}
+	var resp restapi.WriteResponse
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return nil, err
+	}
+	return &ctlplfl.ResponseXML{ID: resp.ID, Success: resp.Success, Error: resp.Error}, nil
+}
+
+// getResourceList fetches GET /api/resource?type=rtype.
+func (ccf *CliCFuncs) getResourceList(rtype string) (restapi.GetResourceResponse, error) {
+	var resp restapi.GetResourceResponse
+	body, err := ccf.restGet("/api/resource?type=" + url.QueryEscape(rtype))
+	if err != nil {
+		return resp, err
+	}
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return resp, err
+	}
+	return resp, nil
+}
+
+// ---- restapi DTO -> cpLib mapping (for REST reads) ----
+
+func pduFromRest(p restapi.PDU) ctlplfl.PDU {
+	return ctlplfl.PDU{ID: p.ID, Name: p.Name, Location: p.Location, Specification: p.Specification, PowerCapacity: p.PowerCap}
+}
+
+func rackFromRest(r restapi.Rack) ctlplfl.Rack {
+	return ctlplfl.Rack{ID: r.ID, PDUID: r.PDUID, Name: r.Name, Location: r.Location, Specification: r.Specification}
+}
+
+func hypervisorFromRest(h restapi.Hypervisor) ctlplfl.Hypervisor {
+	return ctlplfl.Hypervisor{ID: h.ID, RackID: h.RackID, Name: h.Name, PortRange: h.PortRange, SSHPort: h.SSHPort, RDMAEnabled: h.RDMAEnabled, IPAddrs: h.IPAddrs}
+}
+
+func deviceFromRest(d restapi.Device) ctlplfl.Device {
+	return ctlplfl.Device{ID: d.ID, HypervisorID: d.HypervisorID, Name: d.Name, DevicePath: d.DevicePath, SerialNumber: d.SerialNumber, State: uint16(d.State), Size: d.Size, FailureDomain: d.FailureDomain}
+}
+
+func nisdFromRest(n restapi.NISD) ctlplfl.Nisd {
+	out := ctlplfl.Nisd{ID: n.ID, PeerPort: uint16(n.PeerPort), FailureDomain: n.FailureDomain, TotalSize: n.TotalSize, AvailableSize: n.AvailableSize, SocketPath: n.SocketPath}
+	for _, ni := range n.NetInfo {
+		out.NetInfo = append(out.NetInfo, ctlplfl.NetworkInfo{IPAddr: ni.IPAddr, Port: uint16(ni.Port)})
+	}
+	out.NetInfoCnt = len(out.NetInfo)
+	return out
+}
+
+func partitionFromRest(p restapi.Partition) ctlplfl.DevicePartition {
+	return ctlplfl.DevicePartition{PartitionID: p.PartitionID, PartitionPath: p.PartitionPath, NISDUUID: p.NISDUUID, DevID: p.DevID, Size: p.Size}
+}
+
+func pfsFromRest(p restapi.PFS) ctlplfl.PFS {
+	return ctlplfl.PFS{ID: p.ID, Name: p.Name, Offset: p.Offset, VdevIDs: p.VdevIDs}
+}
+
 // SetToken sets the auth JWT token used for all subsequent requests.
 func (ccf *CliCFuncs) SetToken(token string) {
 	ccf.token = token
@@ -247,7 +323,7 @@ func (ccf *CliCFuncs) CreateSnap(vdev string, chunkSeq []uint64, snapName string
 	if err != nil {
 		return err
 	}
-	body, err := ccf.restPost("/snap", jb, ccf.nextRncui())
+	body, err := ccf.restPost("/api/snap", jb, ccf.nextRncui())
 	if err != nil {
 		log.Error("failed to create snap: ", err)
 		return err
@@ -305,7 +381,7 @@ func (ccf *CliCFuncs) PutDevice(device *ctlplfl.Device) (*ctlplfl.ResponseXML, e
 		Size:          device.Size,
 		FailureDomain: device.FailureDomain,
 	}
-	return ccf.restWrite("/device", dto)
+	return ccf.restWriteResource("device", dto)
 }
 
 // TODO make changes to use new GetRequest struct
@@ -343,7 +419,7 @@ func (ccf *CliCFuncs) PutNisd(ncfg *ctlplfl.Nisd) (*ctlplfl.ResponseXML, error) 
 	for _, ni := range ncfg.NetInfo {
 		dto.NetInfo = append(dto.NetInfo, restapi.NetworkInfo{IPAddr: ni.IPAddr, Port: int(ni.Port)})
 	}
-	return ccf.restWrite("/nisd", dto)
+	return ccf.restWriteResource("nisd", dto)
 }
 
 func (ccf *CliCFuncs) GetNisds(req ctlplfl.GetReq) ([]ctlplfl.Nisd, error) {
@@ -452,7 +528,7 @@ func (ccf *CliCFuncs) PutPartition(devp *ctlplfl.DevicePartition) (*ctlplfl.Resp
 		DevID:         devp.DevID,
 		Size:          devp.Size,
 	}
-	return ccf.restWrite("/partition", dto)
+	return ccf.restWriteResource("partition", dto)
 }
 
 func (ccf *CliCFuncs) GetPartition(req ctlplfl.GetReq) ([]ctlplfl.DevicePartition, error) {
@@ -485,7 +561,7 @@ func (ccf *CliCFuncs) PutPDU(req *ctlplfl.PDU) (*ctlplfl.ResponseXML, error) {
 		Specification: req.Specification,
 		PowerCap:      req.PowerCapacity,
 	}
-	return ccf.restWrite("/pdu", dto)
+	return ccf.restWriteResource("pdu", dto)
 }
 
 func (ccf *CliCFuncs) GetPDUs(req *ctlplfl.GetReq) ([]ctlplfl.PDU, error) {
@@ -517,25 +593,27 @@ func (ccf *CliCFuncs) PutPFS(req *ctlplfl.PFS) (*ctlplfl.ResponseXML, error) {
 		Offset:  req.Offset,
 		VdevIDs: req.VdevIDs,
 	}
-	return ccf.restWrite("/pfs", dto)
+	return ccf.restWrite("/api/pfs", dto)
 }
 
 func (ccf *CliCFuncs) GetPFS(req *ctlplfl.GetReq) ([]ctlplfl.PFS, error) {
-	cpReq := &ctlplfl.CPReq{
-		Token:   ccf.token,
-		Payload: req,
+	path := "/api/pfs"
+	if req != nil && req.ID != "" {
+		path += "?id=" + url.QueryEscape(req.ID)
 	}
-	pfss := make([]ctlplfl.PFS, 0)
-	cpResp, err := ccf.get(cpReq, ctlplfl.GET_PFS, &pfss)
+	body, err := ccf.restGet(path)
 	if err != nil {
 		log.Error("GetPFS failed: ", err)
 		return nil, err
 	}
-
-	if err := cpResp.Err(); err != nil {
+	var resp restapi.GetPFSResponse
+	if err := json.Unmarshal(body, &resp); err != nil {
 		return nil, err
 	}
-
+	pfss := make([]ctlplfl.PFS, 0, len(resp.PFS))
+	for _, p := range resp.PFS {
+		pfss = append(pfss, pfsFromRest(p))
+	}
 	return pfss, nil
 }
 
@@ -550,7 +628,7 @@ func (ccf *CliCFuncs) PutRack(req *ctlplfl.Rack) (*ctlplfl.ResponseXML, error) {
 		Location:      req.Location,
 		Specification: req.Specification,
 	}
-	return ccf.restWrite("/rack", dto)
+	return ccf.restWriteResource("rack", dto)
 }
 
 func (ccf *CliCFuncs) GetRacks(req *ctlplfl.GetReq) ([]ctlplfl.Rack, error) {
@@ -585,7 +663,7 @@ func (ccf *CliCFuncs) PutHypervisor(req *ctlplfl.Hypervisor) (*ctlplfl.ResponseX
 		RDMAEnabled: req.RDMAEnabled,
 		IPAddrs:     req.IPAddrs,
 	}
-	return ccf.restWrite("/hypervisor", dto)
+	return ccf.restWriteResource("hypervisor", dto)
 }
 
 func (ccf *CliCFuncs) GetHypervisor(req *ctlplfl.GetReq) ([]ctlplfl.Hypervisor, error) {
@@ -620,25 +698,30 @@ func (ccf *CliCFuncs) PutNisdArgs(req *ctlplfl.NisdArgs) (*ctlplfl.ResponseXML, 
 		S3:                   req.S3,
 		DSync:                req.DSync,
 	}
-	return ccf.restWrite("/nisd_args", dto)
+	return ccf.restWrite("/api/nisd_args", dto)
 }
 
 func (ccf *CliCFuncs) GetNisdArgs(req ctlplfl.GetReq) (ctlplfl.NisdArgs, error) {
 	var args ctlplfl.NisdArgs
-	cpReq := &ctlplfl.CPReq{
-		Token:   ccf.token,
-		Payload: req,
-	}
-	cpResp, err := ccf.get(cpReq, ctlplfl.GET_NISD_ARGS, &args)
+	body, err := ccf.restGet("/api/nisd_args")
 	if err != nil {
 		log.Error("failed to get nisd args: ", err)
 		return args, err
 	}
-
-	if err := cpResp.Err(); err != nil {
+	var resp restapi.GetNisdArgsResponse
+	if err := json.Unmarshal(body, &resp); err != nil {
 		return args, err
 	}
-
+	a := resp.NisdArgs
+	args = ctlplfl.NisdArgs{
+		Defrag:               a.Defrag,
+		AllowDefragMCIBCache: a.AllowDefragMCIBCache,
+		MBCCnt:               a.MBCCnt,
+		MergeHCnt:            a.MergeHCnt,
+		MCIBReadCache:        a.MCIBReadCache,
+		S3:                   a.S3,
+		DSync:                a.DSync,
+	}
 	return args, nil
 }
 
@@ -735,20 +818,31 @@ func (ccf *CliCFuncs) GetChunkNisd(req *ctlplfl.GetReq) (ctlplfl.ChunkNisd, erro
 }
 
 func (ccf *CliCFuncs) GetResources(req *ctlplfl.GetResourceReq) (*ctlplfl.ResourceListResp, error) {
-	cpReq := &ctlplfl.CPReq{
-		Token:   ccf.token,
-		Payload: req,
-	}
-	resp := &ctlplfl.ResourceListResp{}
-	cpResp, err := ccf.get(cpReq, ctlplfl.GET_ALL_RESOURCES, resp)
+	resp, err := ccf.getResourceList(string(req.ResourceType))
 	if err != nil {
 		log.Errorf("GetResources failed for resource type %q: %v", req.ResourceType, err)
 		return nil, err
 	}
-	if err := cpResp.Err(); err != nil {
-		return nil, err
+	out := &ctlplfl.ResourceListResp{ResourceType: req.ResourceType}
+	for _, p := range resp.PDUs {
+		out.PDUs = append(out.PDUs, pduFromRest(p))
 	}
-	return resp, nil
+	for _, x := range resp.Racks {
+		out.Racks = append(out.Racks, rackFromRest(x))
+	}
+	for _, x := range resp.Hypervisors {
+		out.Hypervisors = append(out.Hypervisors, hypervisorFromRest(x))
+	}
+	for _, x := range resp.Devices {
+		out.Devices = append(out.Devices, deviceFromRest(x))
+	}
+	for _, x := range resp.Nisds {
+		out.Nisds = append(out.Nisds, nisdFromRest(x))
+	}
+	for _, x := range resp.Partitions {
+		out.Partitions = append(out.Partitions, partitionFromRest(x))
+	}
+	return out, nil
 }
 
 func (ccf *CliCFuncs) GetChunk(req *ctlplfl.GetReq) (ctlplfl.Chunk, error) {
@@ -808,7 +902,7 @@ func (ccf *CliCFuncs) MountVdev(req *ctlplfl.MountVdevRequest) (ctlplfl.VdevConf
 	if err != nil {
 		return vdev, err
 	}
-	body, err := ccf.restPost("/mount_vdev", jb, ccf.nextRncui())
+	body, err := ccf.restPost("/api/mount_vdev", jb, ccf.nextRncui())
 	if err != nil {
 		log.Error("MountVdev failed for vdev: ", req.VdevID, " with error: ", err)
 		return vdev, err
