@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 	"time"
 
 	cpLib "github.com/00pauln00/niova-mdsvc/controlplane/ctlplanefuncs/lib"
@@ -348,23 +349,16 @@ func (handler *proxyHandler) handleCreateSnap(w http.ResponseWriter, r *http.Req
 	})
 }
 
-// handleDeleteVdev backs POST /delete_vdev (DELETE_VDEV). A dedicated verb
-// endpoint (rather than DELETE /vdev) keeps it consistent with the other
-// action-style writes (/create_vdev, /snap, /mount_vdev) and leaves room for
-// future options (force/cascade) in the request body.
+// handleDeleteVdev backs DELETE /api/vdev/{id} (DELETE_VDEV), matching the TiDB
+// REST contract. The vdev id is taken from the path; the write requires the
+// X-RNCUI header like every other write.
 func (handler *proxyHandler) handleDeleteVdev(w http.ResponseWriter, r *http.Request) {
-	if !requireMethod(w, r, http.MethodPost) {
+	id := strings.TrimSpace(r.PathValue("id"))
+	if id == "" {
+		restapi.WriteError(w, http.StatusBadRequest, "vdev id is required")
 		return
 	}
-	var req restapi.DeleteVdevRequest
-	if !decodeJSONBody(w, r, &req) {
-		return
-	}
-	if req.VdevID == "" {
-		restapi.WriteError(w, http.StatusBadRequest, "vdev_id is required")
-		return
-	}
-	handler.runEntityWrite(w, r, cpLib.DELETE_VDEV, cpLib.DeleteVdevReq{ID: req.VdevID}, req.VdevID)
+	handler.runEntityWrite(w, r, cpLib.DELETE_VDEV, cpLib.DeleteVdevReq{ID: id}, id)
 }
 
 // POST /mount_vdev (MOUNT_VDEV)

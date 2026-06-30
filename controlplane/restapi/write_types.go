@@ -121,11 +121,8 @@ type CreateSnapResponse struct {
 	Error    string `json:"error,omitempty"`
 }
 
-// ---- /delete_vdev (DELETE_VDEV) ----
-
-type DeleteVdevRequest struct {
-	VdevID string `json:"vdev_id"`
-}
+// ---- DELETE /api/vdev/{id} (DELETE_VDEV) ----
+// The vdev id travels in the URL path, so no request body type is needed.
 
 // ---- /mount_vdev (MOUNT_VDEV) ----
 

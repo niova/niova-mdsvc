@@ -15,16 +15,36 @@ import (
 	log "github.com/00pauln00/niova-lookout/pkg/xlog"
 )
 
-// restRoutes returns the REST API route table registered on the HTTP server.
-// Routes are added here as each endpoint is implemented; they run alongside the
-// legacy /func endpoint until the migration to REST is complete.
+// restMux returns the TiDB-style REST router served under the /api/ prefix.
+// Unlike restRoutes (exact-path, method-agnostic), this uses ServeMux
+// method+pattern matching and path parameters (e.g. DELETE /api/vdev/{id}) so
+// the routes mirror the TiDB control-plane contract. The httpserver delegates
+// every /api/ request here (see HTTPServerHandler.RESTHandler).
+func (handler *proxyHandler) restMux() *http.ServeMux {
+	mux := http.NewServeMux()
+	// vdev lifecycle + reads.
+	mux.HandleFunc("POST /api/vdev", handler.handleCreateVdev)
+	mux.HandleFunc("GET /api/vdev", handler.handleGetVdev)
+	mux.HandleFunc("DELETE /api/vdev/{id}", handler.handleDeleteVdev)
+	// reads.
+	mux.HandleFunc("GET /api/nisd", handler.handleGetNisd)
+	mux.HandleFunc("GET /api/chunk", handler.handleGetChunk)
+	// Registered in subsequent milestones:
+	//   "POST /api/infra", "GET /api/infra"
+	//   "GET /api/chunks"        (paginated read)
+	//   "GET|PUT /api/resource"  (entity reads/upserts)
+	//   "POST /api/chunk/reassign", "POST|GET /api/pfs", "POST /api/reset"
+	return mux
+}
+
+// restRoutes returns the legacy exact-path REST route table. These niova-only
+// write endpoints have no TiDB equivalent yet; they keep their flat paths until
+// they are folded into the /api/ contract (e.g. PUT /api/resource) in a later
+// milestone. They run alongside restMux and the legacy /func endpoint.
 func (handler *proxyHandler) restRoutes() map[string]http.HandlerFunc {
 	return map[string]http.HandlerFunc{
-		// nisd: GET reads, POST writes (method-dispatched).
-		"/vdev":        handler.handleGetVdev,
-		"/nisd":        handler.handleNisd,
-		"/get_chunk":   handler.handleGetChunk,
-		"/create_vdev": handler.handleCreateVdev,
+		// nisd write (GET reads moved to GET /api/nisd; POST still served here).
+		"/nisd": handler.handleNisd,
 		// Single-entity infra writes.
 		"/pdu":        handler.handlePutPDU,
 		"/rack":       handler.handlePutRack,
@@ -34,12 +54,8 @@ func (handler *proxyHandler) restRoutes() map[string]http.HandlerFunc {
 		"/partition":  handler.handlePutPartition,
 		"/nisd_args":  handler.handlePutNisdArgs,
 		// Vdev lifecycle writes.
-		"/snap":        handler.handleCreateSnap,
-		"/delete_vdev": handler.handleDeleteVdev,
-		"/mount_vdev":  handler.handleMountVdev,
-		// Registered in subsequent milestones:
-		//   "/create_infra" (write)
-		//   "/get_chunks"   (paginated read)
+		"/snap":       handler.handleCreateSnap,
+		"/mount_vdev": handler.handleMountVdev,
 	}
 }
 

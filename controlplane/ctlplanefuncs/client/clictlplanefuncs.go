@@ -188,6 +188,25 @@ func (ccf *CliCFuncs) restPost(path string, jsonBody []byte, rncui string) ([]by
 	return restResult(body, status, err)
 }
 
+// restDelete issues a DELETE to a migrated REST endpoint, supplying the PumiceDB
+// write idempotency key via the X-RNCUI header (required by the proxy for
+// writes), and maps the generic WriteResponse back to a ResponseXML.
+func (ccf *CliCFuncs) restDelete(path string) (*ctlplfl.ResponseXML, error) {
+	ccf.sdObj.TillReady("PROXY", 5)
+	headers := ccf.restHeaders(false)
+	headers["X-RNCUI"] = ccf.nextRncui()
+	body, status, err := ccf.sdObj.RESTRequest(http.MethodDelete, path, nil, headers)
+	body, err = restResult(body, status, err)
+	if err != nil {
+		return nil, err
+	}
+	var resp restapi.WriteResponse
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return nil, err
+	}
+	return &ctlplfl.ResponseXML{ID: resp.ID, Success: resp.Success, Error: resp.Error}, nil
+}
+
 // nextRncui returns the next client write idempotency key, matching the legacy
 // _put scheme so writes stay dedup-stable per client.
 func (ccf *CliCFuncs) nextRncui() string {
@@ -348,7 +367,7 @@ func (ccf *CliCFuncs) GetNisds(req ctlplfl.GetReq) ([]ctlplfl.Nisd, error) {
 }
 
 func (ccf *CliCFuncs) GetNisd(req ctlplfl.GetReq) (*ctlplfl.Nisd, error) {
-	body, err := ccf.restGet("/nisd?id=" + url.QueryEscape(req.ID))
+	body, err := ccf.restGet("/api/nisd?id=" + url.QueryEscape(req.ID))
 	if err != nil {
 		log.Error("failed to fetch nisd info: ", err)
 		return nil, err
@@ -388,7 +407,7 @@ func (ccf *CliCFuncs) CreateVdev(vdev *ctlplfl.VdevReq) (*ctlplfl.ResponseXML, e
 		return nil, err
 	}
 
-	body, err := ccf.restPost("/create_vdev", jb, ccf.nextRncui())
+	body, err := ccf.restPost("/api/vdev", jb, ccf.nextRncui())
 	if err != nil {
 		log.Error("CreateVdev failed: ", err)
 		return nil, err
@@ -625,7 +644,7 @@ func (ccf *CliCFuncs) GetNisdArgs(req ctlplfl.GetReq) (ctlplfl.NisdArgs, error) 
 
 func (ccf *CliCFuncs) GetVdevConfig(req *ctlplfl.GetReq) (ctlplfl.VdevConfig, error) {
 	vdev := ctlplfl.VdevConfig{}
-	body, err := ccf.restGet("/vdev?id=" + url.QueryEscape(req.ID))
+	body, err := ccf.restGet("/api/vdev?id=" + url.QueryEscape(req.ID))
 	if err != nil {
 		log.Error("Read Vdev Cfg failed: ", err)
 		return vdev, err
@@ -697,7 +716,7 @@ func (ccf *CliCFuncs) GetChunkNisd(req *ctlplfl.GetReq) (ctlplfl.ChunkNisd, erro
 	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
 		return cn, fmt.Errorf("invalid chunk id %q: expected \"<vdevID>/<chunkIdx>\"", req.ID)
 	}
-	path := "/get_chunk?vdev_id=" + url.QueryEscape(parts[0]) + "&chunk_idx=" + url.QueryEscape(parts[1])
+	path := "/api/chunk?vdev_id=" + url.QueryEscape(parts[0]) + "&chunk_idx=" + url.QueryEscape(parts[1])
 
 	body, err := ccf.restGet(path)
 	if err != nil {
@@ -776,7 +795,7 @@ func (ccf *CliCFuncs) DeleteVdev(req *ctlplfl.DeleteVdevReq) (*ctlplfl.ResponseX
 	if req == nil || req.ID == "" {
 		return nil, fmt.Errorf("delete_vdev: missing id")
 	}
-	return ccf.restWrite("/delete_vdev", restapi.DeleteVdevRequest{VdevID: req.ID})
+	return ccf.restDelete("/api/vdev/" + url.PathEscape(req.ID))
 }
 
 func (ccf *CliCFuncs) MountVdev(req *ctlplfl.MountVdevRequest) (ctlplfl.VdevConfig, error) {

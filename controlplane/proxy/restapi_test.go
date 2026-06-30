@@ -259,7 +259,7 @@ func TestHandleGetChunk_NotFound_Empty(t *testing.T) {
 
 func createVdevReq(t *testing.T, body string, rncui string) *http.Request {
 	t.Helper()
-	req := httptest.NewRequest(http.MethodPost, "/create_vdev", strings.NewReader(body))
+	req := httptest.NewRequest(http.MethodPost, "/api/vdev", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	if rncui != "" {
 		req.Header.Set(rncuiHeader, rncui)
@@ -350,24 +350,42 @@ func TestHandleCreateVdev_NoIDReturned(t *testing.T) {
 func TestHandleCreateVdev_MethodNotAllowed(t *testing.T) {
 	h := newFakeHandler(nil, nil, nil)
 	rr := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/create_vdev", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/vdev", nil)
 	h.handleCreateVdev(rr, req)
 	if rr.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("status = %d, want 405", rr.Code)
 	}
 }
 
-// restRoutes must register exactly the implemented endpoints.
+// restRoutes must register exactly the legacy exact-path write endpoints.
 func TestRestRoutesRegistered(t *testing.T) {
 	h := &proxyHandler{}
 	routes := h.restRoutes()
 	for _, p := range []string{
-		"/vdev", "/nisd", "/get_chunk", "/create_vdev",
+		"/nisd",
 		"/pdu", "/rack", "/hypervisor", "/device", "/pfs", "/partition", "/nisd_args",
-		"/snap", "/delete_vdev", "/mount_vdev",
+		"/snap", "/mount_vdev",
 	} {
 		if routes[p] == nil {
 			t.Errorf("route %s not registered", p)
+		}
+	}
+}
+
+// restMux must register the TiDB-style /api/ routes with method matching.
+func TestRestMuxRegistered(t *testing.T) {
+	h := &proxyHandler{}
+	mux := h.restMux()
+	for _, c := range []struct{ method, target string }{
+		{http.MethodPost, "/api/vdev"},
+		{http.MethodGet, "/api/vdev"},
+		{http.MethodDelete, "/api/vdev/some-id"},
+		{http.MethodGet, "/api/nisd"},
+		{http.MethodGet, "/api/chunk"},
+	} {
+		req := httptest.NewRequest(c.method, c.target, nil)
+		if _, pattern := mux.Handler(req); pattern == "" {
+			t.Errorf("%s %s not registered", c.method, c.target)
 		}
 	}
 }
@@ -496,11 +514,23 @@ func TestHandleNisd_MethodDispatch(t *testing.T) {
 	}
 }
 
+// deleteVdevReq builds a DELETE /api/vdev/{id} request with the {id} path value
+// set (handlers read r.PathValue("id")) and an optional X-RNCUI header.
+func deleteVdevReq(t *testing.T, id, rncui string) *http.Request {
+	t.Helper()
+	r := httptest.NewRequest(http.MethodDelete, "/api/vdev/"+id, nil)
+	r.SetPathValue("id", id)
+	if rncui != "" {
+		r.Header.Set(rncuiHeader, rncui)
+	}
+	return r
+}
+
 func TestHandleDeleteVdev_Success(t *testing.T) {
 	var cap capturedCall
 	h := newFakeHandler(gobReply(t, cpLib.ResponseXML{ID: "v1", Success: true}), nil, &cap)
 	rr := httptest.NewRecorder()
-	h.handleDeleteVdev(rr, writeReq(t, http.MethodPost, "/delete_vdev", `{"vdev_id":"v1"}`, "r1"))
+	h.handleDeleteVdev(rr, deleteVdevReq(t, "v1", "r1"))
 	if rr.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200; body=%s", rr.Code, rr.Body.String())
 	}
@@ -521,7 +551,7 @@ func TestHandleDeleteVdev_Success(t *testing.T) {
 func TestHandleDeleteVdev_MissingID(t *testing.T) {
 	h := newFakeHandler(nil, nil, nil)
 	rr := httptest.NewRecorder()
-	h.handleDeleteVdev(rr, writeReq(t, http.MethodPost, "/delete_vdev", `{}`, "r1"))
+	h.handleDeleteVdev(rr, deleteVdevReq(t, "", "r1"))
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400", rr.Code)
 	}
@@ -530,7 +560,7 @@ func TestHandleDeleteVdev_MissingID(t *testing.T) {
 func TestHandleDeleteVdev_MissingRNCUI(t *testing.T) {
 	h := newFakeHandler(gobReply(t, cpLib.ResponseXML{Success: true}), nil, nil)
 	rr := httptest.NewRecorder()
-	h.handleDeleteVdev(rr, writeReq(t, http.MethodPost, "/delete_vdev", `{"vdev_id":"v1"}`, ""))
+	h.handleDeleteVdev(rr, deleteVdevReq(t, "v1", ""))
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400", rr.Code)
 	}
