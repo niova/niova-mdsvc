@@ -17,6 +17,186 @@ import (
 	cpLib "github.com/00pauln00/niova-mdsvc/controlplane/ctlplanefuncs/lib"
 )
 
+func redundancyName(r cpLib.RedundancyMode) string {
+	switch r {
+	case cpLib.RMReplica:
+		return "Replica"
+	case cpLib.RMEC32K:
+		return "EC32K"
+	case cpLib.RMEC64K:
+		return "EC64K"
+	case cpLib.RMEC128K:
+		return "EC128K"
+	default:
+		return fmt.Sprintf("Unknown(%d)", int(r))
+	}
+}
+
+// TestECDistributionReport creates a large hierarchy then spawns multiple vdevs
+// with different EC/replica configurations and prints:
+//  1. Per-vdev chunk placement table (nisd, device, block type, sequence)
+//  2. Per-nisd pick count broken down by data, parity, and replica blocks
+//  3. Per-device pick count broken down by data, parity, and replica blocks
+func TestECDistributionReport(t *testing.T) {
+	c := newClient(t)
+	adminToken := getAdminToken(t)
+	c.SetToken(adminToken)
+
+	setupLargeHierarchy(t, c)
+
+	// Build nisd -> device lookup from the registered NISDs.
+	allNisds, err := c.GetNisds(cpLib.GetReq{GetAll: true})
+	require.NoError(t, err)
+	nisdToDevice := make(map[string]string, len(allNisds))
+	for _, n := range allNisds {
+		nisdToDevice[n.ID] = n.FailureDomain[cpLib.DEVICE_IDX]
+	}
+
+	type vdevSpec struct {
+		name         string
+		redundancy   cpLib.RedundancyMode
+		dataBlkCnt   uint8
+		parityBlkCnt uint8
+		size         int64
+	}
+
+	specs := []vdevSpec{
+		{"replica1", cpLib.RMReplica, 1, 0, 8 * cpLib.CHUNK_SIZE},
+		{"replica3", cpLib.RMReplica, 3, 0, 16 * cpLib.CHUNK_SIZE},
+		{"ec32k4p2", cpLib.RMEC32K, 4, 2, 16 * cpLib.CHUNK_SIZE},
+		{"ec32k4p3", cpLib.RMEC32K, 4, 3, 24 * cpLib.CHUNK_SIZE},
+		{"ec64k6p3", cpLib.RMEC64K, 6, 3, 32 * cpLib.CHUNK_SIZE},
+		{"ec128k8p4", cpLib.RMEC128K, 8, 4, 32 * cpLib.CHUNK_SIZE},
+	}
+
+	type blockCounts struct {
+		data    int
+		parity  int
+		replica int
+	}
+	total := func(bc blockCounts) int { return bc.data + bc.parity + bc.replica }
+
+	nisdCounts := make(map[string]*blockCounts)
+	deviceCounts := make(map[string]*blockCounts)
+
+	// Pre-populate with zero counts so every known nisd/device appears in summary.
+	for nID, dID := range nisdToDevice {
+		nisdCounts[nID] = &blockCounts{}
+		if _, ok := deviceCounts[dID]; !ok {
+			deviceCounts[dID] = &blockCounts{}
+		}
+	}
+
+	type vdevResult struct {
+		spec   vdevSpec
+		vdevID string
+		chunks []cpLib.Chunk
+	}
+	results := make([]vdevResult, 0, len(specs))
+
+	for _, sp := range specs {
+		resp, err := c.CreateVdev(&cpLib.VdevReq{
+			Vdev: &cpLib.VdevConfig{
+				Name:         sp.name,
+				Size:         sp.size,
+				Redundancy:   sp.redundancy,
+				DataBlkCnt:   sp.dataBlkCnt,
+				ParityBlkCnt: sp.parityBlkCnt,
+			},
+		})
+		require.NoError(t, err, "create vdev %s", sp.name)
+
+		chunks, err := c.GetChunks(&cpLib.GetReq{ID: resp.ID})
+		require.NoError(t, err, "get chunks for vdev %s", sp.name)
+
+		results = append(results, vdevResult{spec: sp, vdevID: resp.ID, chunks: chunks})
+
+		for _, chunk := range chunks {
+			for _, p := range chunk.Placements {
+				bc := nisdCounts[p.NisdID]
+				if bc == nil {
+					bc = &blockCounts{}
+					nisdCounts[p.NisdID] = bc
+				}
+				devID := nisdToDevice[p.NisdID]
+				dbc := deviceCounts[devID]
+				if dbc == nil {
+					dbc = &blockCounts{}
+					deviceCounts[devID] = dbc
+				}
+				switch p.Type {
+				case cpLib.Data:
+					bc.data++
+					dbc.data++
+				case cpLib.Parity:
+					bc.parity++
+					dbc.parity++
+				case cpLib.Replica:
+					bc.replica++
+					dbc.replica++
+				}
+			}
+		}
+	}
+
+	// ── Section 1: per-vdev chunk placement table ──────────────────────────────
+	for _, r := range results {
+		t.Logf("\n=== Vdev: %s (%s, data=%d, parity=%d) | %d chunks ===",
+			r.spec.name, redundancyName(r.spec.redundancy),
+			r.spec.dataBlkCnt, r.spec.parityBlkCnt, len(r.chunks))
+		t.Logf("  %-5s  %-36s  %-22s  %-6s  %s",
+			"Chunk", "NisdID", "Device", "Type", "Seq")
+		for _, chunk := range r.chunks {
+			// Sort placements by sequence so output is deterministic.
+			placed := make([]cpLib.ChunkPlacement, len(chunk.Placements))
+			copy(placed, chunk.Placements)
+			sort.Slice(placed, func(i, j int) bool {
+				if placed[i].Type != placed[j].Type {
+					return placed[i].Type < placed[j].Type
+				}
+				return placed[i].Sequence < placed[j].Sequence
+			})
+			for _, p := range placed {
+				devID := nisdToDevice[p.NisdID]
+				t.Logf("  %-5d  %-36s  %-22s  %-6s  %d",
+					chunk.Index, p.NisdID, devID, cpLib.ChunkPrefix(p.Type), p.Sequence)
+			}
+		}
+	}
+
+	// ── Section 2: per-nisd pick count summary ─────────────────────────────────
+	t.Logf("\n=== NISD Pick Count Summary ===")
+	t.Logf("  %-36s  %6s  %6s  %7s  %5s", "NisdID", "Data", "Parity", "Replica", "Total")
+
+	nisdIDs := make([]string, 0, len(nisdCounts))
+	for id := range nisdCounts {
+		nisdIDs = append(nisdIDs, id)
+	}
+	sort.Strings(nisdIDs)
+
+	for _, id := range nisdIDs {
+		bc := nisdCounts[id]
+		t.Logf("  %-36s  %6d  %6d  %7d  %5d",
+			id, bc.data, bc.parity, bc.replica, total(*bc))
+	}
+
+	// ── Section 3: per-device pick count summary ───────────────────────────────
+	t.Logf("\n=== Device Pick Count Summary ===")
+	t.Logf("  %-22s  %6s  %6s  %7s  %5s", "Device", "Data", "Parity", "Replica", "Total")
+
+	devIDs := make([]string, 0, len(deviceCounts))
+	for id := range deviceCounts {
+		devIDs = append(devIDs, id)
+	}
+	sort.Strings(devIDs)
+
+	for _, id := range devIDs {
+		bc := deviceCounts[id]
+		t.Logf("  %-22s  %6d  %6d  %7d  %5d",
+			id, bc.data, bc.parity, bc.replica, total(*bc))
+	}
+}
+
 type VdevReportInfo struct {
 	ID        string
 	Name      string
@@ -47,11 +227,11 @@ func TestGenerateDistributionReport(t *testing.T) {
 		name := fmt.Sprintf("vdevp1%d", i)
 		vdevReq := &cpLib.VdevReq{
 			Vdev: &cpLib.VdevConfig{
-				Name:          name,
-				Size:          16 * cpLib.CHUNK_SIZE,
-				Redundancy:    cpLib.RMReplica,
+				Name:       name,
+				Size:       16 * cpLib.CHUNK_SIZE,
+				Redundancy: cpLib.RMReplica,
 				DataBlkCnt: 3,
-				PFSID:         pfs1ID,
+				PFSID:      pfs1ID,
 			},
 		}
 		resp, err := c.CreateVdev(vdevReq)
@@ -69,12 +249,12 @@ func TestGenerateDistributionReport(t *testing.T) {
 		name := fmt.Sprintf("vdevp2%d", i)
 		vdevReq := &cpLib.VdevReq{
 			Vdev: &cpLib.VdevConfig{
-				Name:            name,
-				Size:            32 * cpLib.CHUNK_SIZE,
-				Redundancy:      cpLib.RMEC32K,
+				Name:         name,
+				Size:         32 * cpLib.CHUNK_SIZE,
+				Redundancy:   cpLib.RMEC32K,
 				DataBlkCnt:   4,
 				ParityBlkCnt: 3,
-				PFSID:           pfs2ID,
+				PFSID:        pfs2ID,
 			},
 		}
 		resp, err := c.CreateVdev(vdevReq)
@@ -87,9 +267,9 @@ func TestGenerateDistributionReport(t *testing.T) {
 		name := fmt.Sprintf("vdevsa%d", i)
 		vdevReq := &cpLib.VdevReq{
 			Vdev: &cpLib.VdevConfig{
-				Name:          name,
-				Size:          8 * cpLib.CHUNK_SIZE,
-				Redundancy:    cpLib.RMReplica,
+				Name:       name,
+				Size:       8 * cpLib.CHUNK_SIZE,
+				Redundancy: cpLib.RMReplica,
 				DataBlkCnt: 2,
 			},
 		}
