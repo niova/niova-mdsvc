@@ -2,6 +2,8 @@ package clictlplanefuncs
 
 import (
 	"testing"
+	"fmt"
+	"os"
 
 	"github.com/google/uuid"
 	log "github.com/sirupsen/logrus"
@@ -238,4 +240,34 @@ func TestUserVdevCreationForMultipleBlockTest(t *testing.T) {
 	for i, v := range vdevList {
 		log.Infof("Index: %d, Vdev ID: %s", i, v.ID)
 	}
+}
+
+func TestCreateVdevForMountCounter(t *testing.T) {
+	c := newClient(t)
+
+	vdevID := setupVdev(t, c, 8*1024*1024*1024)
+
+	vdevCfg, err := c.GetVdevCfg(&cpLib.GetReq{ID: vdevID})
+	assert.NoError(t, err)
+	require.NotNil(t, vdevCfg)
+
+	t.Logf("Vdev ID: %s, initial mount counter: %d", vdevID, vdevCfg.VdevMountInfo.MountCounter)
+
+	// Print in a stable, greppable format for Ansible to capture
+	fmt.Printf("VDEV_ID=%s\n", vdevID)
+	fmt.Printf("INITIAL_MOUNT_COUNTER=%d\n", vdevCfg.VdevMountInfo.MountCounter)
+}
+
+func TestGetVdevMountCounter(t *testing.T) {
+	c := newClient(t)
+
+	vdevID := os.Getenv("VDEV_ID")
+	require.NotEmpty(t, vdevID, "VDEV_ID env var must be set")
+
+	vdevCfg, err := c.GetVdevCfg(&cpLib.GetReq{ID: vdevID})
+	assert.NoError(t, err)
+	require.NotNil(t, vdevCfg)
+
+	t.Logf("Vdev ID: %s, current mount counter: %d", vdevID, vdevCfg.VdevMountInfo.MountCounter)
+	fmt.Printf("CURRENT_MOUNT_COUNTER=%d\n", vdevCfg.VdevMountInfo.MountCounter)
 }
