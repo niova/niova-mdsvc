@@ -58,10 +58,13 @@ func (handler *proxyHandler) handleCreateVdev(w http.ResponseWriter, r *http.Req
 		filter.ID = req.EntityIDs[0]
 	}
 
-	// The server generates the vdev ID and chunk map.
+	// The server generates the vdev ID and chunk map. Name is a niova-only
+	// extension; the server validates it (alphanumeric) and indexes it for
+	// name-based lookup.
 	vdevCfg := &cpLib.VdevCfg{
 		Size:       req.SizeBytes,
 		NumReplica: uint8(req.NumReplicas),
+		Name:       strings.TrimSpace(req.Name),
 	}
 	// Optional PFS link, supplied as either the PFS id (UUID) or its name. The
 	// server records membership and applies the PFS placement offset; PFSName is

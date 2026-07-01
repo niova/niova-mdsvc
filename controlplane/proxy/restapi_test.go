@@ -352,6 +352,22 @@ func TestHandleCreateVdev_PFSByName(t *testing.T) {
 	}
 }
 
+func TestHandleCreateVdev_Name(t *testing.T) {
+	var cap capturedCall
+	h := newFakeHandler(gobReply(t, cpLib.ResponseXML{ID: "vdev-new", Success: true}), nil, &cap)
+	rr := httptest.NewRecorder()
+	req := createVdevReq(t,
+		`{"size_bytes":25769803776,"num_replicas":3,"name":"myvdev1"}`, "r1")
+	h.handleCreateVdev(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", rr.Code, rr.Body.String())
+	}
+	vr := cap.cpReq.Payload.(cpLib.VdevReq)
+	if vr.Vdev.Name != "myvdev1" {
+		t.Fatalf("name = %q, want myvdev1", vr.Vdev.Name)
+	}
+}
+
 func TestHandleCreateVdev_BadFailureDomain(t *testing.T) {
 	h := newFakeHandler(nil, nil, nil)
 	rr := httptest.NewRecorder()

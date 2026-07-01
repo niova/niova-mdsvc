@@ -478,11 +478,12 @@ func (ccf *CliCFuncs) CreateVdev(vdev *ctlplfl.VdevReq) (*ctlplfl.ResponseXML, e
 		return nil, fmt.Errorf("create_vdev: nil vdev request")
 	}
 	// NOTE: the REST /create_vdev contract carries size_bytes, num_replicas, the
-	// optional failure-domain filter, and an optional PFS link. Vdev Name is not
-	// part of the REST contract and is intentionally dropped here.
+	// optional failure-domain filter, and an optional PFS link. Name is a
+	// niova-only extension the proxy forwards for name-based lookup.
 	reqBody := restapi.CreateVdevRequest{
 		SizeBytes:   vdev.Vdev.Size,
 		NumReplicas: int(vdev.Vdev.DataBlkCnt),
+		Name:        vdev.Vdev.Name,
 	}
 	// Forward failure-domain scoping. FD_ANY means no scoping, so omit it.
 	if vdev.Filter.Type != ctlplfl.FD_ANY {

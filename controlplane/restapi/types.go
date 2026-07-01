@@ -91,6 +91,10 @@ type CreateVdevRequest struct {
 	// PFS id (UUID) or its name. The control plane records the membership and
 	// applies the PFS placement offset.
 	PFS string `json:"pfs,omitempty"`
+	// Name is a niova-only extension (not part of the TiDB contract): a
+	// human-readable vdev name the control plane indexes for name-based lookup.
+	// Must be alphanumeric; the server rejects invalid names.
+	Name string `json:"name,omitempty"`
 }
 
 type CreateVdevResponse struct {
