@@ -1,8 +1,8 @@
 package clictlplanefuncs
 
 import (
-	"testing"
 	"os"
+	"testing"
 
 	"github.com/google/uuid"
 	log "github.com/sirupsen/logrus"
