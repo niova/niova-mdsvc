@@ -2,7 +2,6 @@ package clictlplanefuncs
 
 import (
 	"testing"
-	"fmt"
 	"os"
 
 	"github.com/google/uuid"
@@ -251,11 +250,7 @@ func TestCreateVdevForMountCounter(t *testing.T) {
 	assert.NoError(t, err)
 	require.NotNil(t, vdevCfg)
 
-	t.Logf("Vdev ID: %s, initial mount counter: %d", vdevID, vdevCfg.VdevMountInfo.MountCounter)
-
-	// Print in a stable, greppable format for Ansible to capture
-	fmt.Printf("VDEV_ID=%s\n", vdevID)
-	fmt.Printf("INITIAL_MOUNT_COUNTER=%d\n", vdevCfg.VdevMountInfo.MountCounter)
+	log.Infof("Vdev ID: %s", vdevID)
 }
 
 func TestGetVdevMountCounter(t *testing.T) {
@@ -268,6 +263,5 @@ func TestGetVdevMountCounter(t *testing.T) {
 	assert.NoError(t, err)
 	require.NotNil(t, vdevCfg)
 
-	t.Logf("Vdev ID: %s, current mount counter: %d", vdevID, vdevCfg.VdevMountInfo.MountCounter)
-	fmt.Printf("CURRENT_MOUNT_COUNTER=%d\n", vdevCfg.VdevMountInfo.MountCounter)
+	log.Infof("Vdev ID: %s, current mount counter: %d", vdevID, vdevCfg.VdevMountInfo.MountCounter)
 }
