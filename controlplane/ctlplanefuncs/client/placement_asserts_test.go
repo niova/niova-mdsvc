@@ -29,11 +29,12 @@ import (
 // CheckResult is the uniform outcome of every evaluator.
 type CheckResult struct {
 	Name    string
+	Desc    string // one-line explanation of what the validation checks, for report readers
 	OK      bool
 	Reasons []string
 }
 
-func newCheck(name string) CheckResult { return CheckResult{Name: name, OK: true} }
+func newCheck(name, desc string) CheckResult { return CheckResult{Name: name, Desc: desc, OK: true} }
 
 func (r *CheckResult) fail(reason string) {
 	r.OK = false
@@ -95,7 +96,8 @@ func check(t *testing.T, r CheckResult, hard bool) bool {
 // (DataBlkCnt) and wantData/wantParity are 0; for EC, wantData/wantParity are
 // the stripe widths and wantReplica is 0.
 func evalVdevStructure(rows []PlacementRow, wantChunks, wantData, wantParity, wantReplica int) CheckResult {
-	res := newCheck("vdev structure (chunk count & block composition)")
+	res := newCheck("vdev structure (chunk count & block composition)",
+		"Every chunk has the exact data/parity/replica block counts expected for this vdev's redundancy mode, and the total chunk count matches.")
 	byChunk := make(map[uint32]map[cpLib.ChunkType]int)
 	for _, r := range rows {
 		if byChunk[r.ChunkID] == nil {
@@ -124,7 +126,8 @@ func evalVdevStructure(rows []PlacementRow, wantChunks, wantData, wantParity, wa
 // ── 1. Chunk uniqueness ─────────────────────────────────────────────────────
 // Rule: a single chunk must never place two of its blocks on the same NISD.
 func evalChunkUniqueness(rows []PlacementRow) CheckResult {
-	res := newCheck("chunk NISD uniqueness")
+	res := newCheck("chunk NISD uniqueness",
+		"No chunk places two of its own blocks on the same NISD (doing so would defeat redundancy).")
 	type key struct {
 		vdev  string
 		chunk uint32
@@ -152,7 +155,8 @@ func evalChunkUniqueness(rows []PlacementRow) CheckResult {
 // The achievable maximum is min(blocksPerChunk, eligibleEntities); a good
 // algorithm reaches it.
 func evalChunkDiversity(rows []PlacementRow, eligible *HierarchyModel, lvl Level) CheckResult {
-	res := newCheck(fmt.Sprintf("per-chunk %s diversity", lvl.Name()))
+	res := newCheck(fmt.Sprintf("per-chunk %s diversity", lvl.Name()),
+		fmt.Sprintf("Each chunk spreads its blocks across as many distinct %s entities as the topology allows (bounded by block count).", lvl.Name()))
 	maxEnt := eligible.EntityCount(lvl)
 
 	type key struct {
@@ -185,7 +189,8 @@ func evalChunkDiversity(rows []PlacementRow, eligible *HierarchyModel, lvl Level
 // catches piling everything onto a subset without being fooled by the many
 // necessarily-empty entities that would sink a Jain-style fairness score.
 func evalVdevSpread(rows []PlacementRow, eligible *HierarchyModel, lvl Level) CheckResult {
-	res := newCheck(fmt.Sprintf("vdev %s spread", lvl.Name()))
+	res := newCheck(fmt.Sprintf("vdev %s spread", lvl.Name()),
+		fmt.Sprintf("The whole vdev touches as many distinct %s entities as achievable, catching placements piled onto a subset.", lvl.Name()))
 	ideal := min2(len(rows), eligible.EntityCount(lvl))
 	distinct := uniqueCount(rows, lvl)
 	if distinct < ideal {
@@ -203,6 +208,7 @@ func evalFairness(rows []PlacementRow, eligible *HierarchyModel, lvl Level, clas
 	ok, reasons := s.Check(thr)
 	res := CheckResult{
 		Name:    fmt.Sprintf("fairness %s @ %s [%s]", class.Name(), lvl.Name(), thr.Description),
+		Desc:    "Placement counts across eligible entities are statistically even, measured via coefficient of variation, Jain's fairness index, max/min ratio, and skew.",
 		OK:      ok,
 		Reasons: reasons,
 	}
@@ -212,7 +218,8 @@ func evalFairness(rows []PlacementRow, eligible *HierarchyModel, lvl Level, clas
 // ── 4. Capacity compliance ──────────────────────────────────────────────────
 // Rules 16,18: bytes allocated to a NISD must never exceed its available size.
 func evalCapacityCompliance(rows []PlacementRow, model *HierarchyModel) CheckResult {
-	res := newCheck("capacity compliance")
+	res := newCheck("capacity compliance",
+		"No NISD is allocated more bytes than its available capacity.")
 	alloc := make(map[string]int64)
 	for _, r := range rows {
 		alloc[r.NisdID] += r.ChunkSize
@@ -241,7 +248,8 @@ func evalCapacityCompliance(rows []PlacementRow, model *HierarchyModel) CheckRes
 // track its share of available capacity, within tol (absolute share points).
 // For equal-sized storage this degenerates to "evenly distributed".
 func evalProportional(rows []PlacementRow, model *HierarchyModel, lvl Level, class TypeClass, tol float64) CheckResult {
-	res := newCheck(fmt.Sprintf("proportional %s @ %s (tol %.0f%%)", class.Name(), lvl.Name(), tol*100))
+	res := newCheck(fmt.Sprintf("proportional %s @ %s (tol %.0f%%)", class.Name(), lvl.Name(), tol*100),
+		"Each entity's share of placements tracks its share of available capacity within tolerance — the right target when device sizes differ.")
 	counts := CountsByLevel(rows, lvl, class, model)
 	capByE := model.CapacityByEntity(lvl)
 
@@ -330,7 +338,8 @@ func computeMovement(before, after []PlacementRow, isNew func(PlacementRow) bool
 // optimalPct*(1+slack)] and that moved blocks predominantly land on new capacity.
 // optimalPct is the theoretical minimum movement fraction = newCapacityShare.
 func evalRebalance(before, after []PlacementRow, isNew func(PlacementRow) bool, optimalPct, slack float64) (CheckResult, MovementStats) {
-	res := newCheck("rebalance minimal movement")
+	res := newCheck("rebalance minimal movement",
+		"After adding capacity, enough (but not excessive) data moved, landing mostly on the new capacity.")
 	ms := computeMovement(before, after, isNew)
 	lo := optimalPct * (1 - slack)
 	hi := optimalPct * (1 + slack)

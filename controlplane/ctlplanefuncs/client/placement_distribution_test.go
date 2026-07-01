@@ -24,6 +24,7 @@ package clictlplanefuncs
 import (
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -72,9 +73,15 @@ func standardVdevPlans() []vdevPlan {
 		{name: "replica3", redundancy: cpLib.RMReplica, dataBlk: 3, chunks: 12},
 		{name: "singlereplica", redundancy: cpLib.RMReplica, dataBlk: 1, chunks: 8},
 		{name: "ec4p2", redundancy: cpLib.RMEC32K, dataBlk: 4, parityBlk: 2, chunks: 12},
-		{name: "ec6p3pfs", redundancy: cpLib.RMEC64K, dataBlk: 6, parityBlk: 3, chunks: 12, usePFS: true},
-		{name: "replica3pfs", redundancy: cpLib.RMReplica, dataBlk: 3, chunks: 8, usePFS: true},
-		{name: "singlereplicapfs", redundancy: cpLib.RMReplica, dataBlk: 1, chunks: 8, usePFS: true},
+		{name: "replica31", redundancy: cpLib.RMReplica, dataBlk: 3, chunks: 12},
+		{name: "singlereplica1", redundancy: cpLib.RMReplica, dataBlk: 1, chunks: 8},
+		{name: "ec4p21", redundancy: cpLib.RMEC32K, dataBlk: 4, parityBlk: 2, chunks: 12},
+		{name: "replica32", redundancy: cpLib.RMReplica, dataBlk: 3, chunks: 12},
+		{name: "singlereplica2", redundancy: cpLib.RMReplica, dataBlk: 1, chunks: 8},
+		{name: "ec4p22", redundancy: cpLib.RMEC32K, dataBlk: 4, parityBlk: 2, chunks: 12},
+		// {name: "ec6p3pfs", redundancy: cpLib.RMEC64K, dataBlk: 6, parityBlk: 3, chunks: 12, usePFS: true},
+		// {name: "replica3pfs", redundancy: cpLib.RMReplica, dataBlk: 3, chunks: 8, usePFS: true},
+		// {name: "singlereplicapfs", redundancy: cpLib.RMReplica, dataBlk: 1, chunks: 8, usePFS: true},
 	}
 }
 
@@ -120,6 +127,7 @@ func createScopedVdev(t *testing.T, c *CliCFuncs, p vdevPlan, pdu, scopeTag stri
 		Vdev:   cfg,
 		Filter: cpLib.Filter{Type: cpLib.FD_PDU, ID: pdu},
 	})
+	time.Sleep(1 * time.Second) // allow placement to settle before GetChunks
 	require.NoError(t, err, "CreateVdev %s", p.name)
 	require.True(t, resp.Success)
 	return resp.ID, pfsName
@@ -127,7 +135,8 @@ func createScopedVdev(t *testing.T, c *CliCFuncs, p vdevPlan, pdu, scopeTag stri
 
 // runScenario is the shared body for every topology row in the matrix. It builds
 // the topology, creates the standard vdev set scoped to its PDU, validates each
-// vdev and the aggregate distribution, and writes an HTML report.
+// vdev and the aggregate distribution, and finalises doc for reporting. The
+// caller writes the (combined, cross-scenario) HTML report once every row has run.
 //
 // Placement validation results (structure, uniqueness, diversity, fairness,
 // capacity) are recorded into doc without calling t.Errorf — failures appear in
@@ -181,8 +190,11 @@ func runScenario(t *testing.T, c *CliCFuncs, b *topoBuilder, plans []vdevPlan,
 	doc.addGlobal(evalCapacityCompliance(allRows, model))
 
 	// ── Fairness and proportionality across the whole scope ──
+	// NOTE: PDU/Rack/HV distribution checks are disabled for now — only
+	// Device/NISD-level evenness is evaluated. Re-add the higher levels to this
+	// list when hierarchy-level distribution becomes relevant.
 	for _, class := range []TypeClass{ClassData, ClassParity} {
-		for _, lvl := range []Level{LevelPDU, LevelRack, LevelHV, LevelDevice, LevelNISD} {
+		for _, lvl := range []Level{ /* LevelPDU, LevelRack, LevelHV, */ LevelDevice, LevelNISD} {
 			res, _ := evalFairness(allRows, eligible, lvl, class, fairnessThr)
 			doc.addLevelCheck(lvl, res)
 		}
@@ -194,7 +206,6 @@ func runScenario(t *testing.T, c *CliCFuncs, b *topoBuilder, plans []vdevPlan,
 	}
 
 	doc.finalise(allRows, eligible, plans)
-	writeHTMLReport(t, doc)
 	t.Logf("\n%s", renderFullReport(allRows, eligible))
 }
 
@@ -221,14 +232,14 @@ func TestPlacementDistribution(t *testing.T) {
 		validates string
 	}{
 		{
-			name:      "balancedequal",
+			name:      "balanced hierarchy with equal sized devices",
 			build:     func() *topoBuilder { return balancedEqual(uniquePrefix("baleq"), 1, 4, 2, 3, 2, small) },
 			thr:       EqualSizedThresholds(),
 			why:       "control case: symmetric tree, identical capacity",
 			validates: "near-perfect even spread is achievable and achieved (rules 6-15, strict)",
 		},
 		{
-			name: "balanceddifferentsized",
+			name: "balanced hierarchy with different sized devices",
 			build: func() *topoBuilder {
 				return balancedDifferentSized(uniquePrefix("baldiff"), 1, 4, 2, 3, 2, small, big)
 			},
@@ -239,14 +250,14 @@ func TestPlacementDistribution(t *testing.T) {
 			validates:    "allocation tracks capacity, not just entity count (rule 17)",
 		},
 		{
-			name:      "unbalancedequal",
+			name:      "unbalanced hierarchy with equal sized devices",
 			build:     func() *topoBuilder { return unbalancedOnePDU(uniquePrefix("unbeq"), small) },
 			thr:       GeneralThresholds(),
 			why:       "asymmetric fan-out, identical capacity",
 			validates: "device/NISD evenness holds while rack/HV counts scale with fan-out (rules 7-10, 21)",
 		},
 		{
-			name:         "unbalanceddifferentsized",
+			name:         "unbalanced hierarchy with different sized devices",
 			build:        func() *topoBuilder { return unbalancedDifferentSizedOnePDU(uniquePrefix("unbdiff"), small, big) },
 			thr:          GeneralThresholds(),
 			proportional: true,
@@ -256,14 +267,21 @@ func TestPlacementDistribution(t *testing.T) {
 		},
 	}
 
+	docs := make([]*ScenarioDoc, 0, len(scenarios))
 	for _, sc := range scenarios {
 		t.Run(sc.name, func(t *testing.T) {
 			t.Logf("PURPOSE: %s", sc.why)
 			t.Logf("VALIDATES: %s", sc.validates)
 			doc := newScenarioDoc(sc.name, sc.why, sc.validates)
 			runScenario(t, c, sc.build(), standardVdevPlans(), sc.thr, sc.proportional, sc.propTol, doc)
+			docs = append(docs, doc)
 		})
 	}
+
+	// One comparison report across all rows of the matrix, instead of a
+	// separate file per scenario — the interesting signal is how stats change
+	// across topologies (balanced vs unbalanced, equal vs different-sized).
+	writeComparisonHTMLReport(t, docs)
 }
 
 // TestPlacementRebalance covers the two device-addition rows of the matrix

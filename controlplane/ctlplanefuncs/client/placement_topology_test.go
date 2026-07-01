@@ -89,6 +89,7 @@ func (b *topoBuilder) addRack(pdu string, hvs, devs, nisds int, sizeFn func(devG
 			}
 		}
 	}
+	time.Sleep(100 * time.Millisecond) // allow placement to settle before next addRack
 }
 
 // addBranch appends one full PDU subtree (racks identical racks). Repeated calls
