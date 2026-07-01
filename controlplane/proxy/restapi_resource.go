@@ -222,19 +222,22 @@ func (handler *proxyHandler) handlePutResource(w http.ResponseWriter, r *http.Re
 
 // ---- GET /api/resource?type= ----
 
-// getResourcesByType fetches one resource type's list via GET_ALL_RESOURCES.
-func (handler *proxyHandler) getResourcesByType(r *http.Request, rtype cpLib.ResourceType) (cpLib.ResourceListResp, *cpLib.CPResp, error) {
+// getResourcesByType fetches resources of one type via GET_ALL_RESOURCES. An
+// empty id lists all of that type; a non-empty id fetches just that entity
+// (ReadAllResources honors GetAll==false + ID server-side).
+func (handler *proxyHandler) getResourcesByType(r *http.Request, rtype cpLib.ResourceType, id string) (cpLib.ResourceListResp, *cpLib.CPResp, error) {
 	cpReq := cpLib.CPReq{
 		Token:   tokenFromRequest(r),
-		Payload: cpLib.GetResourceReq{ResourceType: rtype, GetAll: true},
+		Payload: cpLib.GetResourceReq{ResourceType: rtype, ID: id, GetAll: id == ""},
 	}
 	var rl cpLib.ResourceListResp
 	cpResp, err := handler.callFunc(cpLib.GET_ALL_RESOURCES, cpReq, false, "", 0, &rl)
 	return rl, cpResp, err
 }
 
-// handleGetResource lists infra entities of the ?type= given. Maps to
-// GET_ALL_RESOURCES (ReadAllResources) and returns the matching slice.
+// handleGetResource lists infra entities of the ?type= given, or fetches a
+// single entity when ?id= is also supplied. Maps to GET_ALL_RESOURCES
+// (ReadAllResources) and returns the matching slice.
 func (handler *proxyHandler) handleGetResource(w http.ResponseWriter, r *http.Request) {
 	rtype := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("type")))
 	if rtype == "" {
@@ -249,7 +252,8 @@ func (handler *proxyHandler) handleGetResource(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	rl, cpResp, err := handler.getResourcesByType(r, cpLib.ResourceType(rtype))
+	id := strings.TrimSpace(r.URL.Query().Get("id"))
+	rl, cpResp, err := handler.getResourcesByType(r, cpLib.ResourceType(rtype), id)
 	if err != nil || cpErrOf(cpResp) != nil {
 		writeCPError(w, err, cpErrOf(cpResp))
 		return
@@ -346,27 +350,27 @@ func (handler *proxyHandler) handleGetNisdArgs(w http.ResponseWriter, r *http.Re
 // Nisd.FailureDomain (ordered [pdu, rack, hv, device, partition]). This is a
 // non-atomic read assembled proxy-side.
 func (handler *proxyHandler) handleGetInfra(w http.ResponseWriter, r *http.Request) {
-	pduRL, cpResp, err := handler.getResourcesByType(r, cpLib.ResourcePDU)
+	pduRL, cpResp, err := handler.getResourcesByType(r, cpLib.ResourcePDU, "")
 	if err != nil || cpErrOf(cpResp) != nil {
 		writeCPError(w, err, cpErrOf(cpResp))
 		return
 	}
-	rackRL, cpResp, err := handler.getResourcesByType(r, cpLib.ResourceRack)
+	rackRL, cpResp, err := handler.getResourcesByType(r, cpLib.ResourceRack, "")
 	if err != nil || cpErrOf(cpResp) != nil {
 		writeCPError(w, err, cpErrOf(cpResp))
 		return
 	}
-	hvRL, cpResp, err := handler.getResourcesByType(r, cpLib.ResourceHypervisor)
+	hvRL, cpResp, err := handler.getResourcesByType(r, cpLib.ResourceHypervisor, "")
 	if err != nil || cpErrOf(cpResp) != nil {
 		writeCPError(w, err, cpErrOf(cpResp))
 		return
 	}
-	devRL, cpResp, err := handler.getResourcesByType(r, cpLib.ResourceDevice)
+	devRL, cpResp, err := handler.getResourcesByType(r, cpLib.ResourceDevice, "")
 	if err != nil || cpErrOf(cpResp) != nil {
 		writeCPError(w, err, cpErrOf(cpResp))
 		return
 	}
-	nisdRL, cpResp, err := handler.getResourcesByType(r, cpLib.ResourceNisd)
+	nisdRL, cpResp, err := handler.getResourcesByType(r, cpLib.ResourceNisd, "")
 	if err != nil || cpErrOf(cpResp) != nil {
 		writeCPError(w, err, cpErrOf(cpResp))
 		return

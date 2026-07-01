@@ -8,7 +8,6 @@ import (
 	"net/url"
 	"strings"
 	"sync/atomic"
-	"time"
 
 	log "github.com/00pauln00/niova-lookout/pkg/xlog"
 
@@ -257,13 +256,21 @@ func (ccf *CliCFuncs) restWriteResource(rtype string, dto any) (*ctlplfl.Respons
 	if err := json.Unmarshal(body, &resp); err != nil {
 		return nil, err
 	}
-	return &ctlplfl.ResponseXML{ID: resp.ID, Success: resp.Success, Error: resp.Error}, nil
+	// Legacy /func entity writes returned the entity id in ResponseXML.Name; the
+	// REST WriteResponse carries it as id. Populate both so callers that read
+	// either field stay compatible.
+	return &ctlplfl.ResponseXML{ID: resp.ID, Name: resp.ID, Success: resp.Success, Error: resp.Error}, nil
 }
 
-// getResourceList fetches GET /api/resource?type=rtype.
-func (ccf *CliCFuncs) getResourceList(rtype string) (restapi.GetResourceResponse, error) {
+// getResourceList fetches GET /api/resource?type=rtype. A non-empty id narrows
+// the request to a single entity (GET /api/resource?type=rtype&id=id).
+func (ccf *CliCFuncs) getResourceList(rtype, id string) (restapi.GetResourceResponse, error) {
 	var resp restapi.GetResourceResponse
-	body, err := ccf.restGet("/api/resource?type=" + url.QueryEscape(rtype))
+	path := "/api/resource?type=" + url.QueryEscape(rtype)
+	if id != "" {
+		path += "&id=" + url.QueryEscape(id)
+	}
+	body, err := ccf.restGet(path)
 	if err != nil {
 		return resp, err
 	}
@@ -818,7 +825,13 @@ func (ccf *CliCFuncs) GetChunkNisd(req *ctlplfl.GetReq) (ctlplfl.ChunkNisd, erro
 }
 
 func (ccf *CliCFuncs) GetResources(req *ctlplfl.GetResourceReq) (*ctlplfl.ResourceListResp, error) {
-	resp, err := ccf.getResourceList(string(req.ResourceType))
+	// A specific id (with GetAll unset) narrows the fetch to one entity; GetAll
+	// (or an empty id) lists all of that type.
+	id := ""
+	if !req.GetAll {
+		id = req.ID
+	}
+	resp, err := ccf.getResourceList(string(req.ResourceType), id)
 	if err != nil {
 		log.Errorf("GetResources failed for resource type %q: %v", req.ResourceType, err)
 		return nil, err
@@ -908,16 +921,10 @@ func (ccf *CliCFuncs) MountVdev(req *ctlplfl.MountVdevRequest) (ctlplfl.VdevConf
 		return vdev, err
 	}
 
-	var resp restapi.MountVdevResponse
-	if err := json.Unmarshal(body, &resp); err != nil {
+	// The proxy returns the full VdevCfg (mount info + AccessToken); decode it
+	// straight into the return value.
+	if err := json.Unmarshal(body, &vdev); err != nil {
 		return vdev, err
-	}
-	vdev.ID = req.VdevID
-	vdev.VdevMountInfo.MountCounter = resp.MountCounter
-	if resp.LastUpdatedLTS != "" {
-		if t, perr := time.Parse(time.RFC3339, resp.LastUpdatedLTS); perr == nil {
-			vdev.VdevMountInfo.LastUpdatedLTS = t
-		}
 	}
 	return vdev, nil
 }

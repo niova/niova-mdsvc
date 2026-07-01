@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"strings"
-	"time"
 
 	cpLib "github.com/00pauln00/niova-mdsvc/controlplane/ctlplanefuncs/lib"
 	restapi "github.com/00pauln00/niova-mdsvc/controlplane/restapi"
@@ -128,10 +127,10 @@ func (handler *proxyHandler) handlePutPFS(w http.ResponseWriter, r *http.Request
 	if !decodeJSONBody(w, r, &req) {
 		return
 	}
-	if req.ID == "" {
-		restapi.WriteError(w, http.StatusBadRequest, "id is required")
-		return
-	}
+	// Unlike the id-keyed infra upserts, PFS is a create: WPPFSCfg mints a UUID
+	// when none is supplied and returns it. So an empty id is valid here (create);
+	// a supplied id upserts a specific PFS. runEntityWrite echoes back whichever
+	// id the server returns.
 	payload := cpLib.PFS{
 		ID:      req.ID,
 		Name:    req.Name,
@@ -238,15 +237,15 @@ func (handler *proxyHandler) handleMountVdev(w http.ResponseWriter, r *http.Requ
 	}
 
 	cpReq := cpLib.CPReq{Token: tokenFromRequest(r), Payload: cpLib.MountVdevRequest{VdevID: req.VdevID}}
-	var resp cpLib.VdevMountInfo
+	// MOUNT_VDEV (APMountVdev) returns the full VdevCfg: it carries the updated
+	// mount info (counter, last-updated) plus the freshly minted AccessToken the
+	// data path needs to open the vdev. Return it verbatim rather than a
+	// projected subset so callers get the complete post-mount state.
+	var resp cpLib.VdevCfg
 	cpResp, err := handler.callFunc(cpLib.MOUNT_VDEV, cpReq, true, rncui, 0, &resp)
 	if err != nil || cpErrOf(cpResp) != nil {
 		writeCPError(w, err, cpErrOf(cpResp))
 		return
 	}
-	out := restapi.MountVdevResponse{Success: true, MountCounter: resp.MountCounter}
-	if !resp.LastUpdatedLTS.IsZero() {
-		out.LastUpdatedLTS = resp.LastUpdatedLTS.Format(time.RFC3339)
-	}
-	restapi.WriteJSON(w, http.StatusOK, out)
+	restapi.WriteJSON(w, http.StatusOK, resp)
 }

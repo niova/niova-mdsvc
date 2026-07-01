@@ -130,9 +130,5 @@ type MountVdevRequest struct {
 	VdevID string `json:"vdev_id"`
 }
 
-type MountVdevResponse struct {
-	Success        bool   `json:"success"`
-	MountCounter   uint64 `json:"mount_counter"`
-	LastUpdatedLTS string `json:"last_updated_lts,omitempty"`
-	Error          string `json:"error,omitempty"`
-}
+// MOUNT_VDEV returns the full cpLib.VdevCfg (mount info + AccessToken) verbatim,
+// so there is no dedicated response DTO here.

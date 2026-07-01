@@ -556,15 +556,20 @@ func TestHandleDeleteVdev_MissingRNCUI(t *testing.T) {
 
 func TestHandleMountVdev_Success(t *testing.T) {
 	var cap capturedCall
-	h := newFakeHandler(gobReply(t, cpLib.VdevMountInfo{MountCounter: 7}), nil, &cap)
+	reply := gobReply(t, cpLib.VdevCfg{
+		ID:            "v1",
+		AccessToken:   "tok-1",
+		VdevMountInfo: cpLib.VdevMountInfo{MountCounter: 7},
+	})
+	h := newFakeHandler(reply, nil, &cap)
 	rr := httptest.NewRecorder()
 	h.handleMountVdev(rr, writeReq(t, http.MethodPost, "/mount_vdev", `{"vdev_id":"v1"}`, "r1"))
 	if rr.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200; body=%s", rr.Code, rr.Body.String())
 	}
-	var got restapi.MountVdevResponse
+	var got cpLib.VdevCfg
 	decodeBody(t, rr, &got)
-	if !got.Success || got.MountCounter != 7 {
+	if got.ID != "v1" || got.AccessToken != "tok-1" || got.VdevMountInfo.MountCounter != 7 {
 		t.Fatalf("response = %+v", got)
 	}
 	if cap.name != cpLib.MOUNT_VDEV {
@@ -639,6 +644,30 @@ func TestHandleGetResource_PDU(t *testing.T) {
 	decodeBody(t, rr, &got)
 	if !got.Success || got.Type != "pdu" || len(got.PDUs) != 1 || got.PDUs[0].ID != "pdu-1" || got.PDUs[0].PowerCap != "5kW" {
 		t.Fatalf("response = %+v", got)
+	}
+}
+
+func TestHandleGetResource_SingleFetch(t *testing.T) {
+	var cap capturedCall
+	reply := gobReply(t, cpLib.ResourceListResp{
+		ResourceType: cpLib.ResourceNisd,
+		Nisds:        []cpLib.Nisd{{ID: "nisd-1"}},
+	})
+	h := newFakeHandler(reply, nil, &cap)
+	rr := httptest.NewRecorder()
+	h.handleGetResource(rr, httptest.NewRequest(http.MethodGet, "/api/resource?type=nisd&id=nisd-1", nil))
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", rr.Code, rr.Body.String())
+	}
+	var got restapi.GetResourceResponse
+	decodeBody(t, rr, &got)
+	if !got.Success || len(got.Nisds) != 1 || got.Nisds[0].ID != "nisd-1" {
+		t.Fatalf("response = %+v", got)
+	}
+	// A single-entity fetch must forward the id and disable GetAll.
+	gr, ok := cap.cpReq.Payload.(cpLib.GetResourceReq)
+	if !ok || gr.ID != "nisd-1" || gr.GetAll {
+		t.Fatalf("forwarded req = %#v", cap.cpReq.Payload)
 	}
 }
 
