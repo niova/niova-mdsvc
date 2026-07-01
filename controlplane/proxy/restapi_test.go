@@ -317,6 +317,41 @@ func TestHandleCreateVdev_Filter(t *testing.T) {
 	}
 }
 
+func TestHandleCreateVdev_PFSByID(t *testing.T) {
+	var cap capturedCall
+	h := newFakeHandler(gobReply(t, cpLib.ResponseXML{ID: "vdev-new", Success: true}), nil, &cap)
+	rr := httptest.NewRecorder()
+	const pfsID = "550e8400-e29b-41d4-a716-446655440000"
+	req := createVdevReq(t,
+		`{"size_bytes":25769803776,"num_replicas":3,"pfs":"`+pfsID+`"}`, "r1")
+	h.handleCreateVdev(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", rr.Code, rr.Body.String())
+	}
+	vr := cap.cpReq.Payload.(cpLib.VdevReq)
+	// A UUID goes to PFSID; PFSName stays empty.
+	if vr.Vdev.PFSID != pfsID || vr.Vdev.PFSName != "" {
+		t.Fatalf("pfs = {ID:%q Name:%q}, want ID=%q", vr.Vdev.PFSID, vr.Vdev.PFSName, pfsID)
+	}
+}
+
+func TestHandleCreateVdev_PFSByName(t *testing.T) {
+	var cap capturedCall
+	h := newFakeHandler(gobReply(t, cpLib.ResponseXML{ID: "vdev-new", Success: true}), nil, &cap)
+	rr := httptest.NewRecorder()
+	req := createVdevReq(t,
+		`{"size_bytes":25769803776,"num_replicas":3,"pfs":"my-pfs"}`, "r1")
+	h.handleCreateVdev(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", rr.Code, rr.Body.String())
+	}
+	vr := cap.cpReq.Payload.(cpLib.VdevReq)
+	// A non-UUID goes to PFSName; PFSID stays empty.
+	if vr.Vdev.PFSName != "my-pfs" || vr.Vdev.PFSID != "" {
+		t.Fatalf("pfs = {ID:%q Name:%q}, want Name=my-pfs", vr.Vdev.PFSID, vr.Vdev.PFSName)
+	}
+}
+
 func TestHandleCreateVdev_BadFailureDomain(t *testing.T) {
 	h := newFakeHandler(nil, nil, nil)
 	rr := httptest.NewRecorder()

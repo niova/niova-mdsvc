@@ -87,6 +87,10 @@ type CreateVdevRequest struct {
 	// EntityIDs restricts allocation to specific failure-domain entities. niova's
 	// allocator scopes to a single entity, so only the first id is applied.
 	EntityIDs []string `json:"entity_ids,omitempty"`
+	// PFS optionally links the vdev to a parallel file system, given as either the
+	// PFS id (UUID) or its name. The control plane records the membership and
+	// applies the PFS placement offset.
+	PFS string `json:"pfs,omitempty"`
 }
 
 type CreateVdevResponse struct {

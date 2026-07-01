@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/google/uuid"
+
 	cpLib "github.com/00pauln00/niova-mdsvc/controlplane/ctlplanefuncs/lib"
 	restapi "github.com/00pauln00/niova-mdsvc/controlplane/restapi"
 )
@@ -57,15 +59,23 @@ func (handler *proxyHandler) handleCreateVdev(w http.ResponseWriter, r *http.Req
 	}
 
 	// The server generates the vdev ID and chunk map.
+	vdevCfg := &cpLib.VdevCfg{
+		Size:       req.SizeBytes,
+		NumReplica: uint8(req.NumReplicas),
+	}
+	// Optional PFS link, supplied as either the PFS id (UUID) or its name. The
+	// server records membership and applies the PFS placement offset; PFSName is
+	// resolved to PFSID server-side (APCreateVdev).
+	if pfs := strings.TrimSpace(req.PFS); pfs != "" {
+		if uuid.Validate(pfs) == nil {
+			vdevCfg.PFSID = pfs
+		} else {
+			vdevCfg.PFSName = pfs
+		}
+	}
 	cpReq := cpLib.CPReq{
-		Token: tokenFromRequest(r),
-		Payload: cpLib.VdevReq{
-			Vdev: &cpLib.VdevCfg{
-				Size:       req.SizeBytes,
-				NumReplica: uint8(req.NumReplicas),
-			},
-			Filter: filter,
-		},
+		Token:   tokenFromRequest(r),
+		Payload: cpLib.VdevReq{Vdev: vdevCfg, Filter: filter},
 	}
 
 	var resp cpLib.ResponseXML
