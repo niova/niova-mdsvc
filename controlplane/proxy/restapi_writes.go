@@ -43,8 +43,20 @@ func (handler *proxyHandler) handleCreateVdev(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	// No failure-domain scoping or PFS in the REST contract: empty Filter means
-	// allocate across any NISDs. The server generates the vdev ID and chunk map.
+	// Optional failure-domain scoping. An empty failure_domain means FD_ANY
+	// (allocate across any NISDs). niova's allocator scopes to a single entity,
+	// so only the first entity_id is applied.
+	fdType, err := cpLib.ParseFD(req.FailureDomain)
+	if err != nil {
+		restapi.WriteError(w, http.StatusBadRequest, "%s", err.Error())
+		return
+	}
+	filter := cpLib.Filter{Type: fdType}
+	if len(req.EntityIDs) > 0 {
+		filter.ID = req.EntityIDs[0]
+	}
+
+	// The server generates the vdev ID and chunk map.
 	cpReq := cpLib.CPReq{
 		Token: tokenFromRequest(r),
 		Payload: cpLib.VdevReq{
@@ -52,7 +64,7 @@ func (handler *proxyHandler) handleCreateVdev(w http.ResponseWriter, r *http.Req
 				Size:       req.SizeBytes,
 				NumReplica: uint8(req.NumReplicas),
 			},
-			Filter: cpLib.Filter{},
+			Filter: filter,
 		},
 	}
 

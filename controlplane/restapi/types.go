@@ -81,6 +81,12 @@ type CreateInfraResponse struct {
 type CreateVdevRequest struct {
 	SizeBytes   int64 `json:"size_bytes"`
 	NumReplicas int   `json:"num_replicas"`
+	// FailureDomain scopes NISD allocation to a failure-domain level
+	// ("pdu"|"rack"|"hv"|"device"|"partition"); empty/"any" auto-picks.
+	FailureDomain string `json:"failure_domain,omitempty"`
+	// EntityIDs restricts allocation to specific failure-domain entities. niova's
+	// allocator scopes to a single entity, so only the first id is applied.
+	EntityIDs []string `json:"entity_ids,omitempty"`
 }
 
 type CreateVdevResponse struct {

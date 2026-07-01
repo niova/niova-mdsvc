@@ -296,6 +296,37 @@ func TestHandleCreateVdev_Success(t *testing.T) {
 	}
 }
 
+func TestHandleCreateVdev_Filter(t *testing.T) {
+	var cap capturedCall
+	h := newFakeHandler(gobReply(t, cpLib.ResponseXML{ID: "vdev-new", Success: true}), nil, &cap)
+	rr := httptest.NewRecorder()
+	req := createVdevReq(t,
+		`{"size_bytes":25769803776,"num_replicas":3,"failure_domain":"hv","entity_ids":["hv-1","hv-2"]}`,
+		"r1")
+	h.handleCreateVdev(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", rr.Code, rr.Body.String())
+	}
+	vr, ok := cap.cpReq.Payload.(cpLib.VdevReq)
+	if !ok {
+		t.Fatalf("payload = %#v", cap.cpReq.Payload)
+	}
+	// failure_domain -> Filter.Type; only the first entity_id is applied.
+	if vr.Filter.Type != cpLib.FD_HV || vr.Filter.ID != "hv-1" {
+		t.Fatalf("filter = %+v, want {Type:FD_HV ID:hv-1}", vr.Filter)
+	}
+}
+
+func TestHandleCreateVdev_BadFailureDomain(t *testing.T) {
+	h := newFakeHandler(nil, nil, nil)
+	rr := httptest.NewRecorder()
+	req := createVdevReq(t, `{"size_bytes":25769803776,"num_replicas":3,"failure_domain":"widget"}`, "r1")
+	h.handleCreateVdev(rr, req)
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", rr.Code)
+	}
+}
+
 func TestHandleCreateVdev_MissingRNCUI(t *testing.T) {
 	h := newFakeHandler(gobReply(t, cpLib.ResponseXML{ID: "x"}), nil, nil)
 	rr := httptest.NewRecorder()

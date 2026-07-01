@@ -477,12 +477,19 @@ func (ccf *CliCFuncs) CreateVdev(vdev *ctlplfl.VdevReq) (*ctlplfl.ResponseXML, e
 	if vdev == nil || vdev.Vdev == nil {
 		return nil, fmt.Errorf("create_vdev: nil vdev request")
 	}
-	// NOTE: the REST /create_vdev contract carries only size_bytes and
-	// num_replicas. Name, PFS, and failure-domain Filter are not part of the
+	// NOTE: the REST /create_vdev contract carries size_bytes, num_replicas, and
+	// the optional failure-domain filter. Vdev Name and PFS are not part of the
 	// REST contract and are intentionally dropped here.
 	reqBody := restapi.CreateVdevRequest{
 		SizeBytes:   vdev.Vdev.Size,
 		NumReplicas: int(vdev.Vdev.DataBlkCnt),
+	}
+	// Forward failure-domain scoping. FD_ANY means no scoping, so omit it.
+	if vdev.Filter.Type != ctlplfl.FD_ANY {
+		reqBody.FailureDomain = ctlplfl.FDName(vdev.Filter.Type)
+	}
+	if vdev.Filter.ID != "" {
+		reqBody.EntityIDs = []string{vdev.Filter.ID}
 	}
 	jb, err := json.Marshal(reqBody)
 	if err != nil {
