@@ -2,6 +2,7 @@ package srvctlplanefuncs
 
 import (
 	"fmt"
+	"math"
 
 	"github.com/tidwall/btree"
 
@@ -98,26 +99,30 @@ func getOrCreateDeviceInEntity(ent *Entities, devID string) *cpLib.DeviceAlloc {
 	return dn
 }
 
-// addNisdToDevice adds a NISD to a DeviceNode and incrementally updates AvailableSize.
+// addNisdToDevice adds a NISD to a DeviceNode and incrementally updates
+// AvailableSize and TotalSize.
 func addNisdToDevice(dn *cpLib.DeviceAlloc, n *cpLib.Nisd) {
 	// Check if NISD already exists; if so, update it.
 	for i, existing := range dn.Nisds {
 		if existing.ID == n.ID {
 			dn.AvailableSize += n.AvailableSize - existing.AvailableSize
+			dn.TotalSize += n.TotalSize - existing.TotalSize
 			dn.Nisds[i] = n
 			return
 		}
 	}
 	dn.Nisds = append(dn.Nisds, n)
 	dn.AvailableSize += n.AvailableSize
+	dn.TotalSize += n.TotalSize
 }
 
-// removeNisdFromDevice removes a NISD from a DeviceNode and decrements AvailableSize.
-// Returns true if the device is now empty (no NISDs left).
+// removeNisdFromDevice removes a NISD from a DeviceNode and decrements
+// AvailableSize/TotalSize. Returns true if the device is now empty (no NISDs left).
 func removeNisdFromDevice(dn *cpLib.DeviceAlloc, nisdID string) bool {
 	for i, existing := range dn.Nisds {
 		if existing.ID == nisdID {
 			dn.AvailableSize -= existing.AvailableSize
+			dn.TotalSize -= existing.TotalSize
 			dn.Nisds = append(dn.Nisds[:i], dn.Nisds[i+1:]...)
 			return len(dn.Nisds) == 0
 		}
@@ -292,6 +297,140 @@ func (hr *Hierarchy) PickDevice(ent *Entities, pickedDevices map[string]struct{}
 	}
 
 	return nil, fmt.Errorf("no suitable device found in entity %s", ent.ID)
+}
+
+// hybridAllocWeight (alpha) is the weight on the *workload* objective when
+// PickDeviceHybrid scores standalone-vdev placements; (1-alpha) weights the
+// *capacity* objective:
+//   - workload fairness: equalize the number of chunks per device (alpha=1 =>
+//     pure allocation-based; large devices get no preference).
+//   - capacity fairness: equalize utilization (used/total) per device (alpha=0
+//     => pure space-based; large empty devices are filled first).
+//
+// The two conflict for unequal-sized devices: equal chunk counts leave large
+// devices underutilized, while equal utilization piles proportionally more
+// chunks onto large devices. alpha in (0,1) is a Pareto compromise. 0.3 leans
+// toward capacity (fills large devices), matching the "capacity first" preset in
+// docs/placement_test_design.md.
+const hybridAllocWeight = 0.5
+
+// deviceUtilization returns the fraction of a device's total capacity already
+// consumed, given its (possibly in-flight-adjusted) available size. 0 when the
+// device's total size is unknown.
+func deviceUtilization(availSize, totalSize int64) float64 {
+	if totalSize <= 0 {
+		return 0
+	}
+	used := totalSize - availSize
+	if used < 0 {
+		used = 0
+	}
+	return float64(used) / float64(totalSize)
+}
+
+// PickDeviceHybrid selects the *least-loaded* device in an entity, where load
+// blends two lower-is-better signals — the device's chunk count (workload) and
+// its utilization (capacity) — each min-max normalized across the candidate
+// pool so the two are comparable regardless of units. A device that is
+// simultaneously below-average on chunks and below-average on utilization scores
+// lowest and is chosen, so large empty devices ARE preferred (their low
+// utilization drives the score down) without monopolizing placements (their
+// rising chunk count drives it back up). This is the Pareto compromise between
+// pure space-based and pure allocation-based policies; see hybridAllocWeight.
+//
+// The score is monotonic in each signal (lower is better) by design. A
+// deviation-from-mean score (|x - avg|) would instead symmetrically penalize a
+// big empty device for sitting far *below* the average utilization, so it would
+// never be chosen — which is exactly the failure mode this replaces.
+//
+// Within a chunk it prefers devices not yet picked (failure-domain diversity);
+// only if every eligible device is already picked does it score among them.
+func (hr *Hierarchy) PickDeviceHybrid(ent *Entities, pickedDevices map[string]struct{},
+	deviceUsage map[string]*DeviceUsageInfo) (*cpLib.DeviceAlloc, error) {
+
+	if ent.Devices.Len() == 0 {
+		return nil, fmt.Errorf("no devices in entity %s", ent.ID)
+	}
+
+	type candidate struct {
+		dn       *cpLib.DeviceAlloc
+		usage    float64
+		util     float64
+		unpicked bool
+	}
+
+	var candidates []candidate
+	ent.Devices.Scan(func(dn *cpLib.DeviceAlloc) bool {
+		usage := 0
+		availSize := dn.AvailableSize
+		if info, ok := deviceUsage[dn.ID]; ok {
+			usage = info.Usage
+			availSize = info.AvailableSize
+		}
+
+		// Skip devices without room for another chunk.
+		if availSize < ctlplfl.CHUNK_SIZE {
+			return true
+		}
+
+		_, picked := pickedDevices[dn.ID]
+		candidates = append(candidates, candidate{
+			dn:       dn,
+			usage:    float64(usage),
+			util:     deviceUtilization(availSize, dn.TotalSize),
+			unpicked: !picked,
+		})
+		return true
+	})
+
+	if len(candidates) == 0 {
+		return nil, fmt.Errorf("no suitable device found in entity %s", ent.ID)
+	}
+
+	// Diversity first: score only devices not yet used by this chunk, falling
+	// back to the full set when none remain (fewer devices than blocks).
+	var pool []candidate
+	for _, c := range candidates {
+		if c.unpicked {
+			pool = append(pool, c)
+		}
+	}
+	if len(pool) == 0 {
+		pool = candidates
+	}
+	if len(pool) == 1 {
+		return pool[0].dn, nil
+	}
+
+	// Min-max ranges so each objective contributes on a comparable [0,1] scale.
+	minUsage, maxUsage := pool[0].usage, pool[0].usage
+	minUtil, maxUtil := pool[0].util, pool[0].util
+	for _, c := range pool[1:] {
+		minUsage = math.Min(minUsage, c.usage)
+		maxUsage = math.Max(maxUsage, c.usage)
+		minUtil = math.Min(minUtil, c.util)
+		maxUtil = math.Max(maxUtil, c.util)
+	}
+
+	norm := func(x, lo, hi float64) float64 {
+		if hi <= lo {
+			return 0 // all devices equal on this axis -> no signal
+		}
+		return (x - lo) / (hi - lo)
+	}
+
+	best := pool[0].dn
+	bestScore := math.MaxFloat64
+	for _, c := range pool {
+		// Lower is better on both axes; large empty devices score low on util.
+		score := hybridAllocWeight*norm(c.usage, minUsage, maxUsage) +
+			(1-hybridAllocWeight)*norm(c.util, minUtil, maxUtil)
+		if score < bestScore {
+			bestScore = score
+			best = c.dn
+		}
+	}
+	return best, nil
 }
 
 // PickNISDFromDevice selects the optimal NISD within a device.

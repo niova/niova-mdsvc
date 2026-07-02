@@ -759,6 +759,20 @@ func allocateNisdPerChunk(req *ctlplfl.VdevReq, fd int, chunkIdx int,
 
 	totalBlocks := req.Vdev.TotalRedundancyBlocksPerChunk()
 
+	// Device-selection strategy depends on whether the vdev belongs to a PFS:
+	//   - PFS-backed vdevs rotate devices round-robin (offset-driven) so that
+	//     consecutive vdevs sharing a PFS land on different devices.
+	//   - standalone vdevs use a hybrid chunk-count/capacity score, so their
+	//     placements balance workload fairness against capacity utilization
+	//     instead of optimizing either alone (see hybridAllocWeight).
+	usePFSRoundRobin := req.Vdev.PFSID != ""
+	pickDevice := func(ent *Entities, blockIdx int) (*ctlplfl.DeviceAlloc, error) {
+		if usePFSRoundRobin {
+			return HR.PickDevice(ent, pickedDevices, deviceUsage, chunkIdx+offset+blockIdx)
+		}
+		return HR.PickDeviceHybrid(ent, pickedDevices, deviceUsage)
+	}
+
 	// Filtered allocation path
 	if req.Filter.ID != "" {
 		en, err := GetEntityByID(req.Filter)
@@ -782,10 +796,9 @@ func allocateNisdPerChunk(req *ctlplfl.VdevReq, fd int, chunkIdx int,
 				}
 			}
 
-			devOffset := chunkIdx + offset + i
-			dev, err := HR.PickDevice(en, pickedDevices, deviceUsage, devOffset)
+			dev, err := pickDevice(en, i)
 			if err != nil {
-				log.Error("PickDevice(): failed to pick device: ", err)
+				log.Error("pickDevice(): failed to pick device: ", err)
 				return err
 			}
 			nisd, err := HR.PickNISDFromDevice(dev, pickedNISD, nisdMap)
@@ -855,9 +868,9 @@ func allocateNisdPerChunk(req *ctlplfl.VdevReq, fd int, chunkIdx int,
 				continue
 			}
 
-			// Phase 1: Pick optimal device within this entity
-			devOffset := chunkIdx + offset + i
-			dev, devErr := HR.PickDevice(ent, pickedDevices, deviceUsage, devOffset)
+			// Phase 1: Pick device within this entity (space-based for standalone
+			// vdevs, round-robin for PFS-backed vdevs).
+			dev, devErr := pickDevice(ent, i)
 			if devErr != nil {
 				lastErr = devErr
 				continue

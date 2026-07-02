@@ -316,10 +316,14 @@ type NisdVdevAlloc struct {
 }
 
 // DeviceAlloc tracks a device in the hierarchy with its child NISDs.
-// AvailableSize is the sum of all child NISD AvailableSize values.
+// AvailableSize is the sum of all child NISD AvailableSize values; TotalSize is
+// the sum of their TotalSize values. TotalSize lets capacity-aware placement
+// policies score a device by how full it is relative to its own capacity rather
+// than by absolute free bytes.
 type DeviceAlloc struct {
 	ID            string
 	AvailableSize int64
+	TotalSize     int64
 	Nisds         []*Nisd
 }
 
@@ -330,6 +334,22 @@ type RedundancyBlock struct {
 	Type     ChunkType `xml:"Type,attr"`
 	Sequence int       `xml:"Sequence,attr"` // 0-based index within its ChunkType
 }
+
+// PlacementPolicy selects the device/NISD selection strategy used when a vdev's
+// chunks are allocated. The zero value (PolicyDefault) preserves the historical
+// behavior, so leaving the field unset changes nothing.
+type PlacementPolicy int
+
+const (
+	// PolicyDefault keeps the original selection: PFS-backed vdevs rotate
+	// devices round-robin, standalone vdevs fill by absolute free space.
+	PolicyDefault PlacementPolicy = iota
+	// PolicyBalancedFill selects the device/NISD that will remain emptiest
+	// relative to its own capacity (maximum projected free fraction). This
+	// spreads placement counts evenly across equal-sized entities and
+	// proportionally to capacity across different-sized ones, under one rule.
+	PolicyBalancedFill
+)
 
 type VdevConfig struct {
 	XMLName       xml.Name       `xml:"Vdev" json:"-"`
@@ -346,6 +366,9 @@ type VdevConfig struct {
 	FilterType    string         // failure domain level used at creation (e.g. "rack", "hv", "any")
 	FilterID      string         // specific entity UUID scoped at creation (empty = no scope)
 	PFSName       string
+	// PlacementPolicy selects the chunk placement strategy; zero value
+	// (PolicyDefault) preserves historical behavior.
+	PlacementPolicy PlacementPolicy `xml:"placement_policy" json:"PlacementPolicy"`
 }
 
 // TotalRedundancyBlocksPerChunk returns the number of blocks each chunk has based on redundancy mode.
