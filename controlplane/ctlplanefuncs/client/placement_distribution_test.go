@@ -70,15 +70,41 @@ func (p vdevPlan) blocksPerChunk() int {
 // repeating the (expensive) hierarchy setup.
 func standardVdevPlans() []vdevPlan {
 	return []vdevPlan{
-		{name: "replica3", redundancy: cpLib.RMReplica, dataBlk: 3, chunks: 12},
-		{name: "singlereplica", redundancy: cpLib.RMReplica, dataBlk: 1, chunks: 8},
-		{name: "ec4p2", redundancy: cpLib.RMEC32K, dataBlk: 4, parityBlk: 2, chunks: 12},
-		{name: "replica31", redundancy: cpLib.RMReplica, dataBlk: 3, chunks: 12},
-		{name: "singlereplica1", redundancy: cpLib.RMReplica, dataBlk: 1, chunks: 8},
-		{name: "ec4p21", redundancy: cpLib.RMEC32K, dataBlk: 4, parityBlk: 2, chunks: 12},
-		{name: "replica32", redundancy: cpLib.RMReplica, dataBlk: 3, chunks: 12},
-		{name: "singlereplica2", redundancy: cpLib.RMReplica, dataBlk: 1, chunks: 8},
-		{name: "ec4p22", redundancy: cpLib.RMEC32K, dataBlk: 4, parityBlk: 2, chunks: 12},
+		{name: "replica2x7", redundancy: cpLib.RMReplica, dataBlk: 2, chunks: 10},
+		{name: "replica4k19", redundancy: cpLib.RMReplica, dataBlk: 4, chunks: 16},
+		{name: "ec6p3m42", redundancy: cpLib.RMEC32K, dataBlk: 6, parityBlk: 3, chunks: 18},
+
+		{name: "replica5q91", redundancy: cpLib.RMReplica, dataBlk: 5, chunks: 10},
+		{name: "replica3z04", redundancy: cpLib.RMReplica, dataBlk: 3, chunks: 12},
+		{name: "ec8p2r77", redundancy: cpLib.RMEC32K, dataBlk: 4, parityBlk: 2, chunks: 20},
+
+		// {name: "replica1n58", redundancy: cpLib.RMReplica, dataBlk: 1, chunks: 8},
+		{name: "replica6a63", redundancy: cpLib.RMReplica, dataBlk: 6, chunks: 12},
+		{name: "ec5p2h12", redundancy: cpLib.RMEC32K, dataBlk: 5, parityBlk: 2, chunks: 14},
+
+		// {name: "replica7w35", redundancy: cpLib.RMReplica, dataBlk: 7, chunks: 28},
+		// {name: "replica2c88", redundancy: cpLib.RMReplica, dataBlk: 2, chunks: 12},
+		// {name: "ec4p4t51", redundancy: cpLib.RMEC32K, dataBlk: 4, parityBlk: 4, chunks: 16},
+
+		// {name: "replica8j29", redundancy: cpLib.RMReplica, dataBlk: 8, chunks: 32},
+		// {name: "replica5p74", redundancy: cpLib.RMReplica, dataBlk: 5, chunks: 15},
+		// {name: "ec7p3v06", redundancy: cpLib.RMEC32K, dataBlk: 7, parityBlk: 3, chunks: 20},
+
+		// {name: "replica4e93", redundancy: cpLib.RMReplica, dataBlk: 4, chunks: 16},
+		// {name: "replica2l17", redundancy: cpLib.RMReplica, dataBlk: 2, chunks: 8},
+		// {name: "ec3p2y68", redundancy: cpLib.RMEC32K, dataBlk: 3, parityBlk: 2, chunks: 10},
+
+		// {name: "replica6f40", redundancy: cpLib.RMReplica, dataBlk: 6, chunks: 18},
+		// {name: "replica3u85", redundancy: cpLib.RMReplica, dataBlk: 3, chunks: 15},
+		// {name: "ec9p3g24", redundancy: cpLib.RMEC32K, dataBlk: 9, parityBlk: 3, chunks: 24},
+
+		// {name: "replica5d56", redundancy: cpLib.RMReplica, dataBlk: 5, chunks: 25},
+		// {name: "replica7s31", redundancy: cpLib.RMReplica, dataBlk: 7, chunks: 21},
+		// {name: "ec6p4b79", redundancy: cpLib.RMEC32K, dataBlk: 6, parityBlk: 4, chunks: 20},
+
+		// {name: "replica9r62", redundancy: cpLib.RMReplica, dataBlk: 9, chunks: 36},
+		// {name: "replica4x11", redundancy: cpLib.RMReplica, dataBlk: 4, chunks: 20},
+		// // {name: "ec8p4n95", redundancy: cpLib.RMEC32K, dataBlk: 8, parityBlk: 4, chunks: 24},
 		// {name: "ec6p3pfs", redundancy: cpLib.RMEC64K, dataBlk: 6, parityBlk: 3, chunks: 12, usePFS: true},
 		// {name: "replica3pfs", redundancy: cpLib.RMReplica, dataBlk: 3, chunks: 8, usePFS: true},
 		// {name: "singlereplicapfs", redundancy: cpLib.RMReplica, dataBlk: 1, chunks: 8, usePFS: true},
@@ -218,8 +244,30 @@ func TestPlacementDistribution(t *testing.T) {
 	c := newClient(t)
 	c.SetToken(getAdminToken(t))
 
-	const small = 200 * gib
-	const big = 600 * gib // 3x, for proportional-allocation scenarios
+	// Fixed-total matrix: every scenario below produces the SAME total NISD
+	// count (48), the SAME total cluster capacity (9600 GiB), and runs the SAME
+	// vdev workload (standardVdevPlans). Only the hierarchy shape and/or device
+	// size mix differs between rows, so any difference in the resulting
+	// fairness/proportionality stats is attributable solely to hierarchy
+	// configuration — never to one scenario simply having a bigger or smaller
+	// cluster. See placement_topology_test.go's "Fixed-total presets" section
+	// for the exact device counts behind each number below.
+	const uniform = 200 * gib // baseline per-NISD size, used by scenarios 1 and 3
+
+	// Scenario 2's 15/6/3 medium/small/large mix must sum to the same total as
+	// 24 uniform devices: 15*medium + 6*small + 3*large == 24*medium requires
+	// 6*(medium-small) == 3*(large-medium). medium=200, small=100, large=400
+	// satisfies it: 6*100 == 3*200.
+	const mixMedium = 200 * gib
+	const mixSmall = 100 * gib
+	const mixLarge = 400 * gib
+
+	// Scenario 4's per-rack sizes (12/6/6 devices in racks A/B/C) must satisfy
+	// 12*rackA + 6*rackB + 6*rackC == 24*uniform == 4800*gib. rackA=100,
+	// rackB=150, rackC=450 gives 1200+900+2700 == 4800.
+	const rackASize = 100 * gib
+	const rackBSize = 150 * gib
+	const rackCSize = 450 * gib
 
 	scenarios := []struct {
 		name         string
@@ -233,7 +281,7 @@ func TestPlacementDistribution(t *testing.T) {
 	}{
 		{
 			name:      "balanced hierarchy with equal sized devices",
-			build:     func() *topoBuilder { return balancedEqual(uniquePrefix("baleq"), 1, 4, 2, 3, 2, small) },
+			build:     func() *topoBuilder { return balancedFixedTotal(uniquePrefix("baleq"), uniform) },
 			thr:       EqualSizedThresholds(),
 			why:       "control case: symmetric tree, identical capacity",
 			validates: "near-perfect even spread is achievable and achieved (rules 6-15, strict)",
@@ -241,28 +289,30 @@ func TestPlacementDistribution(t *testing.T) {
 		{
 			name: "balanced hierarchy with different sized devices",
 			build: func() *topoBuilder {
-				return balancedDifferentSized(uniquePrefix("baldiff"), 1, 4, 2, 3, 2, small, big)
+				return balancedFixedTotalMixedSized(uniquePrefix("baldiff"), mixMedium, mixSmall, mixLarge)
 			},
 			thr:          GeneralThresholds(),
 			proportional: true,
 			propTol:      0.12,
-			why:          "same structure, one 3x device per rack",
+			why:          "same structure and same total capacity as scenario 1, but a 15/6/3 medium/small/large device mix",
 			validates:    "allocation tracks capacity, not just entity count (rule 17)",
 		},
 		{
 			name:      "unbalanced hierarchy with equal sized devices",
-			build:     func() *topoBuilder { return unbalancedOnePDU(uniquePrefix("unbeq"), small) },
+			build:     func() *topoBuilder { return unbalancedFixedTotal(uniquePrefix("unbeq"), uniform) },
 			thr:       GeneralThresholds(),
-			why:       "asymmetric fan-out, identical capacity",
+			why:       "same total capacity and NISD count as scenario 1, but asymmetric rack/HV fan-out (rack A alone holds half the fleet)",
 			validates: "device/NISD evenness holds while rack/HV counts scale with fan-out (rules 7-10, 21)",
 		},
 		{
-			name:         "unbalanced hierarchy with different sized devices",
-			build:        func() *topoBuilder { return unbalancedDifferentSizedOnePDU(uniquePrefix("unbdiff"), small, big) },
+			name: "unbalanced hierarchy with different sized devices",
+			build: func() *topoBuilder {
+				return unbalancedFixedTotalMixedSized(uniquePrefix("unbdiff"), rackASize, rackBSize, rackCSize)
+			},
 			thr:          GeneralThresholds(),
 			proportional: true,
 			propTol:      0.15,
-			why:          "asymmetric fan-out AND capacity skew (hardest case)",
+			why:          "same rack/HV shape as scenario 3 and same total capacity as every other scenario, but the densely-populated rack holds many small devices while the sparse rack holds fewer large ones",
 			validates:    "proportional allocation under combined structural + capacity asymmetry (rules 16-18)",
 		},
 	}
@@ -278,7 +328,7 @@ func TestPlacementDistribution(t *testing.T) {
 		})
 	}
 
-	// One comparison report across all rows of the matrix, instead of a
+	// One comparisonreport across all rows of the matrix, instead of a
 	// separate file per scenario — the interesting signal is how stats change
 	// across topologies (balanced vs unbalanced, equal vs different-sized).
 	writeComparisonHTMLReport(t, docs)
@@ -363,7 +413,7 @@ func TestPlacementEdgeCases(t *testing.T) {
 		why             string
 	}{
 		{
-			name: "singledevicesinglenisd",
+			name: "single device single nisd",
 			build: func() *topoBuilder {
 				b := newTopo(uniquePrefix("e1nisd"))
 				p := b.startPDU()
@@ -374,7 +424,7 @@ func TestPlacementEdgeCases(t *testing.T) {
 			why:  "single replica on a single NISD: the no-diversity floor must still place every chunk",
 		},
 		{
-			name: "singlerackmanydevices",
+			name: "single rack many devices",
 			build: func() *topoBuilder {
 				b := newTopo(uniquePrefix("e1rack"))
 				p := b.startPDU()
@@ -385,7 +435,7 @@ func TestPlacementEdgeCases(t *testing.T) {
 			why:  "all candidates share one rack: rack/HV diversity is impossible, device diversity must still hold",
 		},
 		{
-			name: "morechunksthannisds",
+			name: "more chunks than nisd",
 			build: func() *topoBuilder {
 				b := newTopo(uniquePrefix("emorechunks"))
 				p := b.startPDU()
@@ -396,7 +446,7 @@ func TestPlacementEdgeCases(t *testing.T) {
 			why:  "20 single-replica chunks over 3 NISDs: each NISD must be reused evenly (rule 10/20)",
 		},
 		{
-			name: "morenisdstanchunks",
+			name: "more nisd than chunks",
 			build: func() *topoBuilder {
 				b := newTopo(uniquePrefix("emorenisds"))
 				p := b.startPDU()
@@ -407,7 +457,7 @@ func TestPlacementEdgeCases(t *testing.T) {
 			why:  "few chunks over many NISDs: must not pile onto a subset (bias detection, rule 19)",
 		},
 		{
-			name: "stripewiderthanfailuredomains",
+			name: "stripe wider than failure domains",
 			build: func() *topoBuilder {
 				b := newTopo(uniquePrefix("ewidestripe"))
 				p := b.startPDU()

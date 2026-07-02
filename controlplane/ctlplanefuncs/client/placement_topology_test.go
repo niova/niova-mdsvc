@@ -217,3 +217,101 @@ func unbalancedDifferentSizedOnePDU(prefix string, smallSize, bigSize int64) *to
 	b.addRack(pdu, 1, 1, 1, sizeFn)
 	return b
 }
+
+// ── Fixed-total presets ──────────────────────────────────────────────────────
+//
+// The four presets below are the ones TestPlacementDistribution runs as its
+// core matrix. Unlike the ad-hoc presets above (used by pure unit tests and
+// TestPlacementRebalance, where only one scenario's shape matters at a time),
+// these are designed as a set: every one produces the same total NISD count
+// (48) and the same total cluster capacity, so a fairness/proportionality
+// difference between scenarios can only be attributed to hierarchy shape or
+// device-size mix, never to a bigger or smaller cluster.
+
+// sizeTier is "count devices at this per-NISD capacity", the building block
+// for describing a device-size mix declaratively instead of listing every
+// device by hand.
+type sizeTier struct {
+	count       int
+	perNisdSize int64
+}
+
+// expandSizeTiers flattens tiers into one per-device-ordinal size slice.
+func expandSizeTiers(tiers []sizeTier) []int64 {
+	var out []int64
+	for _, t := range tiers {
+		for i := 0; i < t.count; i++ {
+			out = append(out, t.perNisdSize)
+		}
+	}
+	return out
+}
+
+// sizesFromList returns a size function that reads per-NISD capacity from
+// sizes, indexed by the builder-wide device ordinal. The caller must size the
+// slice to match the topology's total device count exactly.
+func sizesFromList(sizes []int64) func(devGlobalIdx int) int64 {
+	return func(devGlobalIdx int) int64 {
+		if devGlobalIdx < 0 || devGlobalIdx >= len(sizes) {
+			panic(fmt.Sprintf("sizesFromList: device index %d out of range (have %d sizes)", devGlobalIdx, len(sizes)))
+		}
+		return sizes[devGlobalIdx]
+	}
+}
+
+// balancedFixedTotal is scenario 1 of the fixed-total matrix: a symmetric tree
+// (1 PDU, 4 racks, 2 HVs/rack, 3 devices/HV, 2 NISDs/device = 24 devices, 48
+// NISDs), every device the same size. The control case every other scenario is
+// measured against.
+func balancedFixedTotal(prefix string, nisdSize int64) *topoBuilder {
+	b := newTopo(prefix)
+	b.addBranch(4, 2, 3, 2, uniformSize(nisdSize)) // 1 PDU, 24 devices, 48 NISDs
+	return b
+}
+
+// balancedFixedTotalMixedSized is scenario 2: the identical tree shape as
+// balancedFixedTotal, but its 24 devices are drawn from a 15/6/3
+// medium/small/large mix instead of one uniform size. The tier counts and
+// sizes are chosen so the total capacity exactly matches balancedFixedTotal
+// (15*medium + 6*small + 3*large == 24*medium when small/large are picked as
+// medium∓a matching delta) — see the call site for the concrete GiB values.
+func balancedFixedTotalMixedSized(prefix string, medium, small, large int64) *topoBuilder {
+	sizes := expandSizeTiers([]sizeTier{
+		{count: 15, perNisdSize: medium},
+		{count: 6, perNisdSize: small},
+		{count: 3, perNisdSize: large},
+	})
+	b := newTopo(prefix)
+	b.addBranch(4, 2, 3, 2, sizesFromList(sizes)) // 1 PDU, 24 devices, 48 NISDs
+	return b
+}
+
+// unbalancedFixedTotal is scenario 3: a single PDU with three racks of
+// deliberately uneven HV fan-out (4, 2, 1) — rack A alone holds half the
+// fleet — but the same total device count (24) and NISD count (48) as
+// balancedFixedTotal, all devices equal-sized. Isolates structural skew from
+// capacity skew and from cluster size.
+func unbalancedFixedTotal(prefix string, nisdSize int64) *topoBuilder {
+	b := newTopo(prefix)
+	pdu := b.startPDU()
+	b.addRack(pdu, 4, 3, 2, uniformSize(nisdSize)) // rack A (heavy): 12 devices, 24 NISDs
+	b.addRack(pdu, 2, 3, 2, uniformSize(nisdSize)) // rack B: 6 devices, 12 NISDs
+	b.addRack(pdu, 1, 6, 2, uniformSize(nisdSize)) // rack C: 6 devices, 12 NISDs
+	return b
+}
+
+// unbalancedFixedTotalMixedSized is scenario 4: the identical rack/HV/device
+// shape as unbalancedFixedTotal, but each rack is assigned its own device
+// size — rack A (12 devices) small, rack B (6 devices) medium, rack C (6
+// devices) large — so the densely-populated branch holds many small devices
+// and the sparsely-populated branch holds fewer large ones, combining
+// structural and capacity skew. Sizes are chosen so total capacity still
+// matches every other scenario in the matrix.
+func unbalancedFixedTotalMixedSized(prefix string, rackASize, rackBSize, rackCSize int64) *topoBuilder {
+	b := newTopo(prefix)
+	pdu := b.startPDU()
+	b.addRack(pdu, 4, 3, 2, uniformSize(rackASize)) // rack A: 12 devices, small
+	b.addRack(pdu, 2, 3, 2, uniformSize(rackBSize)) // rack B: 6 devices, medium
+	b.addRack(pdu, 1, 6, 2, uniformSize(rackCSize)) // rack C: 6 devices, large
+	return b
+}

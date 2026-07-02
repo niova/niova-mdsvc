@@ -220,7 +220,10 @@ tr:nth-child(even){background:#f9f9f9}
 .meta{color:#7f8c8d;font-style:italic;margin-bottom:.5em}
 .section{margin-bottom:1.5em}
 details summary{cursor:pointer}
-@media print{h2{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+.chart-wrap{overflow-x:auto;margin:.2em 0 1em;border:1px solid #eee;border-radius:3px}
+.chart{background:#fff;display:block}
+.chart-caption{color:#34495e;font-weight:bold;margin:.8em 0 .1em;font-size:.92em}
+@media print{h2{-webkit-print-color-adjust:exact;print-color-adjust:exact}.chart-wrap{overflow-x:visible}}
 </style>
 </head>
 <body>
@@ -357,23 +360,73 @@ details summary{cursor:pointer}
 			b.WriteString("</table>\n")
 		}
 
-		// Per-entity distribution: one small table per scenario, since the entity
-		// ids differ across topologies and cannot be pivoted into shared columns.
+		// Per-entity distribution: one small table + two charts per scenario,
+		// since the entity ids differ across topologies and cannot be pivoted
+		// into shared table columns. Size/utilization come from the same model
+		// snapshot + Chunk Placement Matrix as every other section (totalCapByLevel
+		// for capacity, allocByLevel for allocated bytes), so they stay consistent
+		// with §1's cluster-wide numbers.
 		b.WriteString("<p><strong>Per-entity distribution:</strong></p>\n")
 		for _, d := range docs {
 			ls, ok := levelSection(d, lvl)
 			if !ok || len(ls.DataCounts) == 0 {
 				continue
 			}
-			fmt.Fprintf(&b, "<p class=\"desc\">%s</p>\n", he(d.ScenarioName))
-			b.WriteString("<table><tr><th>Entity</th><th>Data</th><th>Parity</th><th>Total</th></tr>\n")
-			for _, e := range sortedKeys(ls.DataCounts) {
-				dc := ls.DataCounts[e]
-				pc := ls.ParityCounts[e]
-				fmt.Fprintf(&b, "<tr><td>%s</td><td>%d</td><td>%d</td><td>%d</td></tr>\n",
-					he(shortID(e)), dc, pc, dc+pc)
+			// Available comes from CapacityByEntity (sum of NISD AvailableSize),
+			// the same source section 1 uses for "Available" — so this table's
+			// utilization matches the cluster-wide Space Util figure instead of
+			// being computed against raw total capacity.
+			var availBytes, allocBytes map[string]int64
+			if d.Model != nil {
+				availBytes = d.Model.CapacityByEntity(lvl)
+				allocBytes = allocByLevel(d.Rows, lvl)
 			}
-			b.WriteString("</table>\n")
+
+			entities := sortedKeys(ls.DataCounts) // preserves existing sort/filter behaviour
+			labels := make([]string, 0, len(entities))
+			dataVals := make([]float64, 0, len(entities))
+			parityVals := make([]float64, 0, len(entities))
+			totalVals := make([]float64, 0, len(entities))
+			availVals := make([]float64, 0, len(entities))
+			usedVals := make([]float64, 0, len(entities))
+
+			fmt.Fprintf(&b, "<p class=\"desc\"><strong>%s</strong></p>\n", he(d.ScenarioName))
+			b.WriteString("<details><summary>Per-entity table (click to expand)</summary>\n")
+			b.WriteString("<table><tr><th>Entity</th><th>Data</th><th>Parity</th><th>Total</th>" +
+				"<th>Available (GB)</th><th>Used (GB)</th><th>Space Utilization (%)</th></tr>\n")
+			for _, e := range entities {
+				dc, pc := ls.DataCounts[e], ls.ParityCounts[e]
+				availB := availBytes[e]
+				availGB := float64(availB) / float64(gib)
+				usedGB := float64(allocBytes[e]) / float64(gib)
+				var util float64
+				if availB > 0 {
+					util = float64(allocBytes[e]) / float64(availB) * 100
+				}
+				fmt.Fprintf(&b, "<tr><td>%s</td><td>%d</td><td>%d</td><td>%d</td><td>%.1f</td><td>%.1f</td><td>%.1f%%</td></tr>\n",
+					he(shortID(e)), dc, pc, dc+pc, availGB, usedGB, util)
+
+				labels = append(labels, shortID(e))
+				dataVals = append(dataVals, float64(dc))
+				parityVals = append(parityVals, float64(pc))
+				totalVals = append(totalVals, float64(dc+pc))
+				availVals = append(availVals, availGB)
+				usedVals = append(usedVals, usedGB)
+			}
+			b.WriteString("</table>\n</details>\n")
+
+			b.WriteString("<p class=\"chart-caption\">Data Distribution — chunks/blocks per entity</p>\n")
+			b.WriteString(renderLineChart(labels, []chartSeries{
+				{name: "Data", color: chartColor["Data"], axis: "left", values: dataVals},
+				{name: "Parity", color: chartColor["Parity"], axis: "left", values: parityVals},
+				{name: "Total", color: chartColor["Total"], axis: "left", values: totalVals},
+			}, "Chunks / Blocks", ""))
+
+			b.WriteString("<p class=\"chart-caption\">Space Distribution — available vs. used size per entity</p>\n")
+			b.WriteString(renderLineChart(labels, []chartSeries{
+				{name: "Available Size (GB)", color: chartColor["Available Size (GB)"], axis: "left", values: availVals},
+				{name: "Used Size (GB)", color: chartColor["Used Size (GB)"], axis: "left", values: usedVals},
+			}, "Size (GB)", ""))
 		}
 		b.WriteString("</div>\n")
 	}
