@@ -262,6 +262,6 @@ func TestGetVdevMountCounter(t *testing.T) {
 	vdevCfg, err := c.GetVdevCfg(&cpLib.GetReq{ID: vdevID})
 	assert.NoError(t, err)
 	require.NotNil(t, vdevCfg)
-
-	log.Infof("Vdev ID: %s, current mount counter: %d", vdevID, vdevCfg.VdevMountInfo.MountCounter)
+	log.Infof("Vdev ID: %s", vdevID)
+	log.Infof("current mount counter: %d", vdevCfg.VdevMountInfo.MountCounter)
 }
