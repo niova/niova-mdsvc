@@ -579,7 +579,7 @@ func (n *Nisd) Validate() error {
 	if len(n.FailureDomain) != FD_MAX {
 		return fmt.Errorf("invalid NISD failure domain info %d", len(n.FailureDomain))
 	}
-	for i := 0; i < FD_DEVICE; i++ {
+	for i := 0; i < DEVICE_IDX; i++ {
 		if _, err := uuid.Parse(n.FailureDomain[i]); err != nil {
 			return fmt.Errorf("invalid FailureDomain[%d] uuid", i)
 		}

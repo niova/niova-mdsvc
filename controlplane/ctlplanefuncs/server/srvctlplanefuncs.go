@@ -2,7 +2,6 @@ package srvctlplanefuncs
 
 import (
 	"C"
-	"encoding/binary"
 	"fmt"
 	"math/rand"
 	"path"
@@ -417,39 +416,6 @@ func ApplyNisd(args ...interface{}) (interface{}, error) {
 		return ctlplfl.FuncError(fmt.Errorf("failed to encode response: %v", err))
 	}
 	return resp, nil
-}
-
-func ApplyNisd(args ...interface{}) (interface{}, error) {
-	cbargs, ok := args[1].(*PumiceDBServer.PmdbCbArgs)
-	if !ok {
-		err := fmt.Errorf("invalid argument: expecting type PmdbCbArgs")
-		return nil, err
-	}
-	nisd, ok := args[0].(ctlplfl.Nisd)
-	if !ok {
-		err := fmt.Errorf("invalid argument: expecting type Nisd")
-		return nil, err
-	}
-	var intrm funclib.FuncIntrm
-	buf := C.GoBytes(cbargs.AppData, C.int(cbargs.AppDataSize))
-	err := pmCmn.Decoder(pmCmn.GOB, buf, &intrm)
-	if err != nil {
-		log.Error("Failed to decode the apply changes: ", err)
-		return nil, fmt.Errorf("failed to decode apply changes: %v", err)
-	}
-
-	err = applyKV(intrm.Changes, cbargs)
-	if err != nil {
-		log.Error("applyKV(): ", err)
-		return nil, err
-	}
-
-	err = HR.AddNisd(&nisd)
-	if err != nil {
-		log.Error("AddNisd()", err)
-	}
-
-	return intrm.Response, nil
 }
 
 // TODO: This method needs to be tested
@@ -1901,13 +1867,6 @@ func ReadChunkNisd(args ...interface{}) (interface{}, error) {
 	chunkInfo := ctlplfl.ChunkNisd{
 		NisdUUIDs:   strings.Join(ids, ","),
 		NumReplicas: uint8(len(rqResult.ResultMap)),
-	}
-	for _, v := range rqResult.ResultMap {
-		ids = append(ids, string(v))
-	}
-	chunkInfo := ctlplfl.ChunkNisd{
-		NisdUUIDs:   strings.Join(ids, ","),
-		NumReplicas: uint8(len(rqResult.ResultMap)) - 1,
 	}
 
 	log.Debugf("ReadChunkNisd: returning chunk-nisd info for vdev %s chunk %s", vdevID, chunk)
