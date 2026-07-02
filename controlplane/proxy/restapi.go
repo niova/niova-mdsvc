@@ -39,6 +39,13 @@ func (handler *proxyHandler) restMux() *http.ServeMux {
 	// reads.
 	mux.HandleFunc("GET /api/nisd", handler.handleGetNisd)
 	mux.HandleFunc("GET /api/chunk", handler.handleGetChunk)
+	// user auth + management (mirrors the TiDB user endpoints). Login lives at
+	// /users/login (outside /api/), so the httpserver also delegates /users/.
+	mux.HandleFunc("POST /users/login", handler.handleLogin)
+	mux.HandleFunc("POST /api/users", handler.handleCreateUser)
+	mux.HandleFunc("GET /api/users", handler.handleListUsers)
+	mux.HandleFunc("GET /api/users/{id}", handler.handleGetUser)
+	mux.HandleFunc("PUT /api/users/{id}", handler.handleUpdateUser)
 	// Not implemented for now: GET /api/chunks (paginated chunk listing - mdsvc
 	// chunk ranging is deferred). Not implementable without server-side ops (no
 	// niova func): POST /api/infra (atomic create_infra),

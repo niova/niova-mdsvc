@@ -458,6 +458,11 @@ func TestRestMuxRegistered(t *testing.T) {
 		{http.MethodGet, "/api/pfs"},
 		{http.MethodPost, "/api/nisd_args"},
 		{http.MethodGet, "/api/nisd_args"},
+		{http.MethodPost, "/users/login"},
+		{http.MethodPost, "/api/users"},
+		{http.MethodGet, "/api/users"},
+		{http.MethodGet, "/api/users/some-id"},
+		{http.MethodPut, "/api/users/some-id"},
 	} {
 		req := httptest.NewRequest(c.method, c.target, nil)
 		if _, pattern := mux.Handler(req); pattern == "" {
