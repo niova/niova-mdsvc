@@ -170,6 +170,29 @@ func restResult(body []byte, status int, err error) ([]byte, error) {
 	return body, nil
 }
 
+// decodeEnvelope unmarshals an APIResponse[T] body and returns the payload.
+// Non-user endpoints report method errors inside the envelope (HTTP 200,
+// success:false); this surfaces them as a Go error so callers see failures
+// uniformly, whether they arrive as an HTTP error (restResult) or an envelope
+// error. On success with no payload it returns the zero value and a nil error.
+func decodeEnvelope[T any](body []byte) (T, error) {
+	var zero T
+	var resp restapi.APIResponse[T]
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return zero, err
+	}
+	if !resp.Success {
+		if resp.Error != "" {
+			return zero, errors.New(resp.Error)
+		}
+		return zero, errors.New("control plane request failed")
+	}
+	if resp.Payload == nil {
+		return zero, nil
+	}
+	return *resp.Payload, nil
+}
+
 // restGet issues a GET to a migrated REST endpoint (path includes any query).
 func (ccf *CliCFuncs) restGet(path string) ([]byte, error) {
 	ccf.sdObj.TillReady("PROXY", 5)
@@ -199,11 +222,11 @@ func (ccf *CliCFuncs) restDelete(path string) (*ctlplfl.ResponseXML, error) {
 	if err != nil {
 		return nil, err
 	}
-	var resp restapi.WriteResponse
-	if err := json.Unmarshal(body, &resp); err != nil {
+	payload, err := decodeEnvelope[restapi.WritePayload](body)
+	if err != nil {
 		return nil, err
 	}
-	return &ctlplfl.ResponseXML{ID: resp.ID, Success: resp.Success, Error: resp.Error}, nil
+	return &ctlplfl.ResponseXML{ID: payload.ID, Success: true}, nil
 }
 
 // nextRncui returns the next client write idempotency key, matching the legacy
@@ -224,11 +247,11 @@ func (ccf *CliCFuncs) restWrite(path string, dto any) (*ctlplfl.ResponseXML, err
 	if err != nil {
 		return nil, err
 	}
-	var resp restapi.WriteResponse
-	if err := json.Unmarshal(body, &resp); err != nil {
+	payload, err := decodeEnvelope[restapi.WritePayload](body)
+	if err != nil {
 		return nil, err
 	}
-	return &ctlplfl.ResponseXML{ID: resp.ID, Success: resp.Success, Error: resp.Error}, nil
+	return &ctlplfl.ResponseXML{ID: payload.ID, Success: true}, nil
 }
 
 // restPut issues a PUT to a migrated REST endpoint, supplying the PumiceDB write
@@ -252,32 +275,28 @@ func (ccf *CliCFuncs) restWriteResource(rtype string, dto any) (*ctlplfl.Respons
 	if err != nil {
 		return nil, err
 	}
-	var resp restapi.WriteResponse
-	if err := json.Unmarshal(body, &resp); err != nil {
+	payload, err := decodeEnvelope[restapi.WritePayload](body)
+	if err != nil {
 		return nil, err
 	}
 	// Legacy /func entity writes returned the entity id in ResponseXML.Name; the
-	// REST WriteResponse carries it as id. Populate both so callers that read
+	// REST WritePayload carries it as id. Populate both so callers that read
 	// either field stay compatible.
-	return &ctlplfl.ResponseXML{ID: resp.ID, Name: resp.ID, Success: resp.Success, Error: resp.Error}, nil
+	return &ctlplfl.ResponseXML{ID: payload.ID, Name: payload.ID, Success: true}, nil
 }
 
 // getResourceList fetches GET /api/resource?type=rtype. A non-empty id narrows
 // the request to a single entity (GET /api/resource?type=rtype&id=id).
-func (ccf *CliCFuncs) getResourceList(rtype, id string) (restapi.GetResourceResponse, error) {
-	var resp restapi.GetResourceResponse
+func (ccf *CliCFuncs) getResourceList(rtype, id string) (restapi.GetResourcePayload, error) {
 	path := "/api/resource?type=" + url.QueryEscape(rtype)
 	if id != "" {
 		path += "&id=" + url.QueryEscape(id)
 	}
 	body, err := ccf.restGet(path)
 	if err != nil {
-		return resp, err
+		return restapi.GetResourcePayload{}, err
 	}
-	if err := json.Unmarshal(body, &resp); err != nil {
-		return resp, err
-	}
-	return resp, nil
+	return decodeEnvelope[restapi.GetResourcePayload](body)
 }
 
 // ---- restapi DTO -> cpLib mapping (for REST reads) ----
@@ -336,12 +355,8 @@ func (ccf *CliCFuncs) CreateSnap(vdev string, chunkSeq []uint64, snapName string
 		return err
 	}
 
-	var resp restapi.CreateSnapResponse
-	if err := json.Unmarshal(body, &resp); err != nil {
+	if _, err := decodeEnvelope[restapi.CreateSnapPayload](body); err != nil {
 		return err
-	}
-	if !resp.Success {
-		return errors.New("Snap not created")
 	}
 	return nil
 }
@@ -456,8 +471,8 @@ func (ccf *CliCFuncs) GetNisd(req ctlplfl.GetReq) (*ctlplfl.Nisd, error) {
 		return nil, err
 	}
 
-	var resp restapi.GetNisdResponse
-	if err := json.Unmarshal(body, &resp); err != nil {
+	resp, err := decodeEnvelope[restapi.GetNisdPayload](body)
+	if err != nil {
 		log.Error("failed to decode nisd response: ", err)
 		return nil, err
 	}
@@ -510,13 +525,13 @@ func (ccf *CliCFuncs) CreateVdev(vdev *ctlplfl.VdevReq) (*ctlplfl.ResponseXML, e
 		return nil, err
 	}
 
-	var resp restapi.CreateVdevResponse
-	if err := json.Unmarshal(body, &resp); err != nil {
+	resp, err := decodeEnvelope[restapi.CreateVdevPayload](body)
+	if err != nil {
 		log.Error("failed to decode create_vdev response: ", err)
 		return nil, err
 	}
 
-	return &ctlplfl.ResponseXML{ID: resp.VdevID, Success: resp.Success, Error: resp.Error}, nil
+	return &ctlplfl.ResponseXML{ID: resp.VdevID, Success: true}, nil
 }
 
 func (ccf *CliCFuncs) GetVdevsWithChunkInfo(req *ctlplfl.GetReq) ([]ctlplfl.Vdev, error) {
@@ -627,8 +642,8 @@ func (ccf *CliCFuncs) GetPFS(req *ctlplfl.GetReq) ([]ctlplfl.PFS, error) {
 		log.Error("GetPFS failed: ", err)
 		return nil, err
 	}
-	var resp restapi.GetPFSResponse
-	if err := json.Unmarshal(body, &resp); err != nil {
+	resp, err := decodeEnvelope[restapi.GetPFSPayload](body)
+	if err != nil {
 		return nil, err
 	}
 	pfss := make([]ctlplfl.PFS, 0, len(resp.PFS))
@@ -729,8 +744,8 @@ func (ccf *CliCFuncs) GetNisdArgs(req ctlplfl.GetReq) (ctlplfl.NisdArgs, error) 
 		log.Error("failed to get nisd args: ", err)
 		return args, err
 	}
-	var resp restapi.GetNisdArgsResponse
-	if err := json.Unmarshal(body, &resp); err != nil {
+	resp, err := decodeEnvelope[restapi.GetNisdArgsPayload](body)
+	if err != nil {
 		return args, err
 	}
 	a := resp.NisdArgs
@@ -754,8 +769,8 @@ func (ccf *CliCFuncs) GetVdevConfig(req *ctlplfl.GetReq) (ctlplfl.VdevConfig, er
 		return vdev, err
 	}
 
-	var resp restapi.GetVdevResponse
-	if err := json.Unmarshal(body, &resp); err != nil {
+	resp, err := decodeEnvelope[restapi.GetVdevPayload](body)
+	if err != nil {
 		log.Error("failed to decode vdev response: ", err)
 		return vdev, err
 	}
@@ -828,8 +843,8 @@ func (ccf *CliCFuncs) GetChunkNisd(req *ctlplfl.GetReq) (ctlplfl.ChunkNisd, erro
 		return cn, err
 	}
 
-	var resp restapi.GetChunkResponse
-	if err := json.Unmarshal(body, &resp); err != nil {
+	resp, err := decodeEnvelope[restapi.GetChunkPayload](body)
+	if err != nil {
 		log.Error("failed to decode chunk response: ", err)
 		return cn, err
 	}
@@ -935,10 +950,11 @@ func (ccf *CliCFuncs) MountVdev(req *ctlplfl.MountVdevRequest) (ctlplfl.VdevConf
 		return vdev, err
 	}
 
-	// The proxy returns the full VdevCfg (mount info + AccessToken); decode it
-	// straight into the return value.
-	if err := json.Unmarshal(body, &vdev); err != nil {
+	// The proxy returns the full VdevCfg (mount info + AccessToken) as the
+	// envelope payload.
+	mounted, err := decodeEnvelope[ctlplfl.VdevCfg](body)
+	if err != nil {
 		return vdev, err
 	}
-	return vdev, nil
+	return mounted, nil
 }

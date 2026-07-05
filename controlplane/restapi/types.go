@@ -97,43 +97,39 @@ type CreateVdevRequest struct {
 	Name string `json:"name,omitempty"`
 }
 
-type CreateVdevResponse struct {
-	Success   bool   `json:"success"`
+// CreateVdevPayload is the payload of the create-vdev envelope
+// (APIResponse[CreateVdevPayload]).
+type CreateVdevPayload struct {
 	VdevID    string `json:"vdev_id,omitempty"`
 	NumChunks int    `json:"num_chunks,omitempty"`
-	Message   string `json:"message,omitempty"`
-	Error     string `json:"error,omitempty"`
 }
 
 // ---- /vdev ----
 
-type GetVdevResponse struct {
-	Success     bool   `json:"success"`
+// GetVdevPayload is the payload of the get-vdev envelope.
+type GetVdevPayload struct {
 	ID          string `json:"id,omitempty"`
 	Size        int64  `json:"size,omitempty"`
 	NumChunks   int    `json:"num_chunks,omitempty"`
 	NumReplicas int    `json:"num_replicas,omitempty"`
-	Error       string `json:"error,omitempty"`
 }
 
 // ---- /nisd ----
 
-type GetNisdResponse struct {
-	Success  bool          `json:"success"`
+// GetNisdPayload is the payload of the get-nisd envelope.
+type GetNisdPayload struct {
 	ID       string        `json:"id,omitempty"`
 	PeerPort int           `json:"peer_port,omitempty"`
 	NetInfo  []NetworkInfo `json:"net_info,omitempty"`
-	Error    string        `json:"error,omitempty"`
 }
 
 // ---- /get_chunk ----
 
-type GetChunkResponse struct {
-	Success  bool     `json:"success"`
+// GetChunkPayload is the payload of the get-chunk envelope.
+type GetChunkPayload struct {
 	VdevID   string   `json:"vdev_id,omitempty"`
 	ChunkIdx int      `json:"chunk_idx"`
 	NisdIDs  []string `json:"nisd_ids,omitempty"`
-	Error    string   `json:"error,omitempty"`
 }
 
 // ---- /get_chunks (paginated) ----

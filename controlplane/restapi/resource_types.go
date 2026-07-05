@@ -1,15 +1,14 @@
 package restapi
 
-// This file defines the response DTOs for the resource/pfs/infra read endpoints
-// (GET /api/resource, GET /api/pfs, GET /api/infra). They keep the flat
-// snake_case {success,...,error} envelope used by the other REST reads. The
-// per-entity item shapes reuse the write DTOs (PDU/Rack/.../NISD/Partition).
+// This file defines the payloads for the resource/pfs/infra read endpoints
+// (GET /api/resource, GET /api/pfs, GET /api/infra). Each is carried inside the
+// APIResponse[T] envelope. The per-entity item shapes reuse the write DTOs
+// (PDU/Rack/.../NISD/Partition).
 
-// GetResourceResponse is returned by GET /api/resource?type=. It mirrors the
+// GetResourcePayload is the payload of the get-resource envelope. It mirrors the
 // internal ResourceListResp: only the slice matching the requested type is
 // populated.
-type GetResourceResponse struct {
-	Success     bool         `json:"success"`
+type GetResourcePayload struct {
 	Type        string       `json:"type,omitempty"`
 	PDUs        []PDU        `json:"pdus,omitempty"`
 	Racks       []Rack       `json:"racks,omitempty"`
@@ -17,27 +16,21 @@ type GetResourceResponse struct {
 	Devices     []Device     `json:"devices,omitempty"`
 	Nisds       []NISD       `json:"nisds,omitempty"`
 	Partitions  []Partition  `json:"partitions,omitempty"`
-	Error       string       `json:"error,omitempty"`
 }
 
-// GetPFSResponse is returned by GET /api/pfs.
-type GetPFSResponse struct {
-	Success bool   `json:"success"`
-	PFS     []PFS  `json:"pfs,omitempty"`
-	Error   string `json:"error,omitempty"`
+// GetPFSPayload is the payload of the get-pfs envelope.
+type GetPFSPayload struct {
+	PFS []PFS `json:"pfs,omitempty"`
 }
 
-// GetNisdArgsResponse is returned by GET /api/nisd_args (singleton record).
-type GetNisdArgsResponse struct {
-	Success  bool     `json:"success"`
+// GetNisdArgsPayload is the payload of the get-nisd-args envelope (singleton).
+type GetNisdArgsPayload struct {
 	NisdArgs NisdArgs `json:"nisd_args"`
-	Error    string   `json:"error,omitempty"`
 }
 
-// GetInfraResponse is returned by GET /api/infra. infra carries the nested
-// PDU -> Rack -> Hypervisor -> Device -> NISD hierarchy assembled by the proxy.
-type GetInfraResponse struct {
-	Success bool               `json:"success"`
-	Infra   CreateInfraRequest `json:"infra"`
-	Error   string             `json:"error,omitempty"`
+// GetInfraPayload is the payload of the get-infra envelope. infra carries the
+// nested PDU -> Rack -> Hypervisor -> Device -> NISD hierarchy assembled by the
+// proxy.
+type GetInfraPayload struct {
+	Infra CreateInfraRequest `json:"infra"`
 }

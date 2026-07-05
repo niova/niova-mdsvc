@@ -97,18 +97,18 @@ func toRestPFS(p cpLib.PFS) restapi.PFS {
 func (handler *proxyHandler) handlePutResource(w http.ResponseWriter, r *http.Request) {
 	rtype := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("type")))
 	if rtype == "" {
-		restapi.WriteError(w, http.StatusBadRequest, "missing required query parameter: type")
+		restapi.WriteMethodError(w, "missing required query parameter: type")
 		return
 	}
 
 	switch cpLib.ResourceType(rtype) {
 	case cpLib.ResourcePDU:
 		var req restapi.PDU
-		if !decodeJSONBody(w, r, &req) {
+		if !decodeJSONBodyMethod(w, r, &req) {
 			return
 		}
 		if req.ID == "" {
-			restapi.WriteError(w, http.StatusBadRequest, "id is required")
+			restapi.WriteMethodError(w, "id is required")
 			return
 		}
 		handler.runEntityWrite(w, r, cpLib.PUT_PDU, cpLib.PDU{
@@ -121,11 +121,11 @@ func (handler *proxyHandler) handlePutResource(w http.ResponseWriter, r *http.Re
 
 	case cpLib.ResourceRack:
 		var req restapi.Rack
-		if !decodeJSONBody(w, r, &req) {
+		if !decodeJSONBodyMethod(w, r, &req) {
 			return
 		}
 		if req.ID == "" {
-			restapi.WriteError(w, http.StatusBadRequest, "id is required")
+			restapi.WriteMethodError(w, "id is required")
 			return
 		}
 		handler.runEntityWrite(w, r, cpLib.PUT_RACK, cpLib.Rack{
@@ -138,11 +138,11 @@ func (handler *proxyHandler) handlePutResource(w http.ResponseWriter, r *http.Re
 
 	case cpLib.ResourceHypervisor:
 		var req restapi.Hypervisor
-		if !decodeJSONBody(w, r, &req) {
+		if !decodeJSONBodyMethod(w, r, &req) {
 			return
 		}
 		if req.ID == "" {
-			restapi.WriteError(w, http.StatusBadRequest, "id is required")
+			restapi.WriteMethodError(w, "id is required")
 			return
 		}
 		handler.runEntityWrite(w, r, cpLib.PUT_HYPERVISOR, cpLib.Hypervisor{
@@ -157,11 +157,11 @@ func (handler *proxyHandler) handlePutResource(w http.ResponseWriter, r *http.Re
 
 	case cpLib.ResourceDevice:
 		var req restapi.Device
-		if !decodeJSONBody(w, r, &req) {
+		if !decodeJSONBodyMethod(w, r, &req) {
 			return
 		}
 		if req.ID == "" {
-			restapi.WriteError(w, http.StatusBadRequest, "id is required")
+			restapi.WriteMethodError(w, "id is required")
 			return
 		}
 		handler.runEntityWrite(w, r, cpLib.PUT_DEVICE, cpLib.Device{
@@ -177,11 +177,11 @@ func (handler *proxyHandler) handlePutResource(w http.ResponseWriter, r *http.Re
 
 	case cpLib.ResourceNisd:
 		var req restapi.NISD
-		if !decodeJSONBody(w, r, &req) {
+		if !decodeJSONBodyMethod(w, r, &req) {
 			return
 		}
 		if req.ID == "" {
-			restapi.WriteError(w, http.StatusBadRequest, "id is required")
+			restapi.WriteMethodError(w, "id is required")
 			return
 		}
 		nisd := cpLib.Nisd{
@@ -200,11 +200,11 @@ func (handler *proxyHandler) handlePutResource(w http.ResponseWriter, r *http.Re
 
 	case cpLib.ResourcePartition:
 		var req restapi.Partition
-		if !decodeJSONBody(w, r, &req) {
+		if !decodeJSONBodyMethod(w, r, &req) {
 			return
 		}
 		if req.PartitionID == "" {
-			restapi.WriteError(w, http.StatusBadRequest, "partition_id is required")
+			restapi.WriteMethodError(w, "partition_id is required")
 			return
 		}
 		handler.runEntityWrite(w, r, cpLib.PUT_PARTITION, cpLib.DevicePartition{
@@ -216,7 +216,7 @@ func (handler *proxyHandler) handlePutResource(w http.ResponseWriter, r *http.Re
 		}, req.PartitionID)
 
 	default:
-		restapi.WriteError(w, http.StatusBadRequest, "unsupported resource type: %s", rtype)
+		restapi.WriteMethodError(w, "unsupported resource type: %s", rtype)
 	}
 }
 
@@ -241,25 +241,25 @@ func (handler *proxyHandler) getResourcesByType(r *http.Request, rtype cpLib.Res
 func (handler *proxyHandler) handleGetResource(w http.ResponseWriter, r *http.Request) {
 	rtype := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("type")))
 	if rtype == "" {
-		restapi.WriteError(w, http.StatusBadRequest, "missing required query parameter: type")
+		restapi.WriteMethodError(w, "missing required query parameter: type")
 		return
 	}
 	switch cpLib.ResourceType(rtype) {
 	case cpLib.ResourcePDU, cpLib.ResourceRack, cpLib.ResourceHypervisor,
 		cpLib.ResourceDevice, cpLib.ResourceNisd, cpLib.ResourcePartition:
 	default:
-		restapi.WriteError(w, http.StatusBadRequest, "unsupported resource type: %s", rtype)
+		restapi.WriteMethodError(w, "unsupported resource type: %s", rtype)
 		return
 	}
 
 	id := strings.TrimSpace(r.URL.Query().Get("id"))
 	rl, cpResp, err := handler.getResourcesByType(r, cpLib.ResourceType(rtype), id)
 	if err != nil || cpErrOf(cpResp) != nil {
-		writeCPError(w, err, cpErrOf(cpResp))
+		writeMethodCPError(w, err, cpErrOf(cpResp))
 		return
 	}
 
-	resp := restapi.GetResourceResponse{Success: true, Type: rtype}
+	resp := restapi.GetResourcePayload{Type: rtype}
 	switch cpLib.ResourceType(rtype) {
 	case cpLib.ResourcePDU:
 		for _, p := range rl.PDUs {
@@ -286,7 +286,7 @@ func (handler *proxyHandler) handleGetResource(w http.ResponseWriter, r *http.Re
 			resp.Partitions = append(resp.Partitions, toRestPartition(x))
 		}
 	}
-	restapi.WriteJSON(w, http.StatusOK, resp)
+	restapi.WriteData(w, resp)
 }
 
 // ---- GET /api/pfs?id= ----
@@ -301,14 +301,14 @@ func (handler *proxyHandler) handleGetPFS(w http.ResponseWriter, r *http.Request
 	var pfs []cpLib.PFS
 	cpResp, err := handler.callFunc(cpLib.GET_PFS, cpReq, false, "", 0, &pfs)
 	if err != nil || cpErrOf(cpResp) != nil {
-		writeCPError(w, err, cpErrOf(cpResp))
+		writeMethodCPError(w, err, cpErrOf(cpResp))
 		return
 	}
-	resp := restapi.GetPFSResponse{Success: true}
+	resp := restapi.GetPFSPayload{}
 	for _, p := range pfs {
 		resp.PFS = append(resp.PFS, toRestPFS(p))
 	}
-	restapi.WriteJSON(w, http.StatusOK, resp)
+	restapi.WriteData(w, resp)
 }
 
 // ---- GET /api/nisd_args ----
@@ -320,11 +320,10 @@ func (handler *proxyHandler) handleGetNisdArgs(w http.ResponseWriter, r *http.Re
 	var args cpLib.NisdArgs
 	cpResp, err := handler.callFunc(cpLib.GET_NISD_ARGS, cpReq, false, "", 0, &args)
 	if err != nil || cpErrOf(cpResp) != nil {
-		writeCPError(w, err, cpErrOf(cpResp))
+		writeMethodCPError(w, err, cpErrOf(cpResp))
 		return
 	}
-	restapi.WriteJSON(w, http.StatusOK, restapi.GetNisdArgsResponse{
-		Success: true,
+	restapi.WriteData(w, restapi.GetNisdArgsPayload{
 		NisdArgs: restapi.NisdArgs{
 			Defrag:               args.Defrag,
 			AllowDefragMCIBCache: args.AllowDefragMCIBCache,
@@ -352,27 +351,27 @@ func (handler *proxyHandler) handleGetNisdArgs(w http.ResponseWriter, r *http.Re
 func (handler *proxyHandler) handleGetInfra(w http.ResponseWriter, r *http.Request) {
 	pduRL, cpResp, err := handler.getResourcesByType(r, cpLib.ResourcePDU, "")
 	if err != nil || cpErrOf(cpResp) != nil {
-		writeCPError(w, err, cpErrOf(cpResp))
+		writeMethodCPError(w, err, cpErrOf(cpResp))
 		return
 	}
 	rackRL, cpResp, err := handler.getResourcesByType(r, cpLib.ResourceRack, "")
 	if err != nil || cpErrOf(cpResp) != nil {
-		writeCPError(w, err, cpErrOf(cpResp))
+		writeMethodCPError(w, err, cpErrOf(cpResp))
 		return
 	}
 	hvRL, cpResp, err := handler.getResourcesByType(r, cpLib.ResourceHypervisor, "")
 	if err != nil || cpErrOf(cpResp) != nil {
-		writeCPError(w, err, cpErrOf(cpResp))
+		writeMethodCPError(w, err, cpErrOf(cpResp))
 		return
 	}
 	devRL, cpResp, err := handler.getResourcesByType(r, cpLib.ResourceDevice, "")
 	if err != nil || cpErrOf(cpResp) != nil {
-		writeCPError(w, err, cpErrOf(cpResp))
+		writeMethodCPError(w, err, cpErrOf(cpResp))
 		return
 	}
 	nisdRL, cpResp, err := handler.getResourcesByType(r, cpLib.ResourceNisd, "")
 	if err != nil || cpErrOf(cpResp) != nil {
-		writeCPError(w, err, cpErrOf(cpResp))
+		writeMethodCPError(w, err, cpErrOf(cpResp))
 		return
 	}
 
@@ -449,5 +448,5 @@ func (handler *proxyHandler) handleGetInfra(w http.ResponseWriter, r *http.Reque
 			Racks:         racksByPDU[p.ID],
 		})
 	}
-	restapi.WriteJSON(w, http.StatusOK, restapi.GetInfraResponse{Success: true, Infra: infra})
+	restapi.WriteData(w, restapi.GetInfraPayload{Infra: infra})
 }

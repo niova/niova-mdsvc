@@ -71,8 +71,7 @@ func (handler *proxyHandler) handleLogin(w http.ResponseWriter, r *http.Request)
 		restapi.WriteError(w, http.StatusUnauthorized, "invalid credentials")
 		return
 	}
-	restapi.WriteJSON(w, http.StatusOK, restapi.LoginResponse{
-		Success:     true,
+	restapi.WriteData(w, restapi.LoginPayload{
 		AccessToken: lr.AccessToken,
 		TokenType:   lr.TokenType,
 		ExpiresIn:   lr.ExpiresIn,
@@ -124,8 +123,7 @@ func (handler *proxyHandler) handleCreateUser(w http.ResponseWriter, r *http.Req
 		restapi.WriteError(w, statusForUserMsg(resp.Error), "%s", resp.Error)
 		return
 	}
-	restapi.WriteJSON(w, http.StatusCreated, restapi.UserResponse{
-		Success:   true,
+	restapi.WriteDataStatus(w, http.StatusCreated, restapi.UserPayload{
 		UserData:  userDataFromResp(resp),
 		SecretKey: resp.SecretKey,
 	})
@@ -166,8 +164,7 @@ func (handler *proxyHandler) handleCreateAdminUser(w http.ResponseWriter, r *htt
 	}
 	// The control plane returns the admin secret key (default or existing) so the
 	// bootstrapper can log in; mirrors the existing /func behavior.
-	restapi.WriteJSON(w, http.StatusOK, restapi.UserResponse{
-		Success:   true,
+	restapi.WriteData(w, restapi.UserPayload{
 		UserData:  userDataFromResp(resp),
 		SecretKey: resp.SecretKey,
 	})
@@ -192,7 +189,7 @@ func (handler *proxyHandler) handleListUsers(w http.ResponseWriter, r *http.Requ
 	for _, u := range users {
 		out = append(out, userDataFromResp(u))
 	}
-	restapi.WriteJSON(w, http.StatusOK, restapi.ListUsersResponse{Success: true, Users: out})
+	restapi.WriteData(w, restapi.ListUsersPayload{Users: out})
 }
 
 // handleGetUser backs GET /api/users/{id} (GetUserAPI by id). Self-or-admin
@@ -219,8 +216,7 @@ func (handler *proxyHandler) handleGetUser(w http.ResponseWriter, r *http.Reques
 	}
 	// A single-entity fetch returns the decrypted secret key (as the /func GetUser
 	// does); the collection endpoint (handleListUsers) deliberately omits it.
-	restapi.WriteJSON(w, http.StatusOK, restapi.UserResponse{
-		Success:   true,
+	restapi.WriteData(w, restapi.UserPayload{
 		UserData:  userDataFromResp(users[0]),
 		SecretKey: users[0].SecretKey,
 	})
@@ -273,8 +269,7 @@ func (handler *proxyHandler) handleUpdateUser(w http.ResponseWriter, r *http.Req
 		restapi.WriteError(w, statusForUserMsg(resp.Error), "%s", resp.Error)
 		return
 	}
-	restapi.WriteJSON(w, http.StatusOK, restapi.UserResponse{
-		Success:   true,
+	restapi.WriteData(w, restapi.UserPayload{
 		UserData:  userDataFromResp(resp),
 		SecretKey: resp.SecretKey, // populated only when the secret key was changed
 	})

@@ -122,6 +122,28 @@ func (c *Client) nextRncui() string {
 	return fmt.Sprintf("%s:0:0:0:%d", c.appUUID, seq)
 }
 
+// decodeEnvelope unmarshals an APIResponse[T] body and returns the payload. The
+// proxy reports failures either as a non-2xx status (handled by restResult before
+// this is called) or, on 2xx, as {success:false, error}; this surfaces the latter
+// as a Go error too.
+func decodeEnvelope[T any](body []byte) (T, error) {
+	var zero T
+	var resp restapi.APIResponse[T]
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return zero, err
+	}
+	if !resp.Success {
+		if resp.Error != "" {
+			return zero, fmt.Errorf("%s", resp.Error)
+		}
+		return zero, fmt.Errorf("control plane request failed")
+	}
+	if resp.Payload == nil {
+		return zero, nil
+	}
+	return *resp.Payload, nil
+}
+
 func (c *Client) restGet(token, path string) ([]byte, error) {
 	c.sd.TillReady("PROXY", 5)
 	body, status, err := c.sd.RESTRequest(http.MethodGet, path, nil, c.restHeaders(token, false))
@@ -137,20 +159,20 @@ func (c *Client) restWrite(method, token, path string, jsonBody []byte) ([]byte,
 	return restResult(body, status, err)
 }
 
-// userRespFromREST maps a REST UserResponse back to the internal UserResp.
+// userRespFromREST maps a REST UserPayload envelope back to the internal
+// UserResp. It is only called on a 2xx body, so success is implied.
 func userRespFromREST(body []byte) (*userlib.UserResp, error) {
-	var ur restapi.UserResponse
-	if err := json.Unmarshal(body, &ur); err != nil {
+	p, err := decodeEnvelope[restapi.UserPayload](body)
+	if err != nil {
 		return nil, err
 	}
 	return &userlib.UserResp{
-		UserID:    ur.ID,
-		Username:  ur.Username,
-		UserRole:  ur.Role,
-		Status:    userlib.Status(ur.Status),
-		SecretKey: ur.SecretKey,
-		Success:   ur.Success,
-		Error:     ur.Error,
+		UserID:    p.ID,
+		Username:  p.Username,
+		UserRole:  p.Role,
+		Status:    userlib.Status(p.Status),
+		SecretKey: p.SecretKey,
+		Success:   true,
 	}, nil
 }
 
@@ -221,8 +243,8 @@ func (c *Client) ListUsers(token string, req userlib.GetReq) ([]userlib.UserResp
 	if err != nil {
 		return nil, fmt.Errorf("failed to list users: %w", err)
 	}
-	var lr restapi.ListUsersResponse
-	if err := json.Unmarshal(body, &lr); err != nil {
+	lr, err := decodeEnvelope[restapi.ListUsersPayload](body)
+	if err != nil {
 		return nil, err
 	}
 	users := make([]userlib.UserResp, 0, len(lr.Users))
@@ -316,12 +338,9 @@ func (c *Client) Login(username, secretKey string) (*userlib.LoginResp, error) {
 	if err != nil {
 		return nil, fmt.Errorf("login failed: %w", err)
 	}
-	var lr restapi.LoginResponse
-	if err := json.Unmarshal(body, &lr); err != nil {
-		return nil, err
-	}
-	if !lr.Success {
-		return nil, fmt.Errorf("login failed: %s", lr.Error)
+	lr, err := decodeEnvelope[restapi.LoginPayload](body)
+	if err != nil {
+		return nil, fmt.Errorf("login failed: %w", err)
 	}
 	return &userlib.LoginResp{
 		AccessToken: lr.AccessToken,
@@ -331,6 +350,6 @@ func (c *Client) Login(username, secretKey string) (*userlib.LoginResp, error) {
 		Username:    lr.Username,
 		UserRole:    lr.Role,
 		IsAdmin:     lr.IsAdmin,
-		Success:     lr.Success,
+		Success:     true,
 	}, nil
 }

@@ -57,7 +57,8 @@ func isNotFoundMessage(msg string) bool {
 
 // writeCPError translates a failed control-plane call into a JSON HTTP error.
 // err is the transport error from callFunc (may be nil); cpErr is the structured
-// CPResp.Error (may be nil). At least one is expected to be non-nil.
+// CPResp.Error (may be nil). At least one is expected to be non-nil. Used by the
+// user/auth endpoints, which map errors to real HTTP status codes.
 func writeCPError(w http.ResponseWriter, err error, cpErr *cpLib.CPError) {
 	switch {
 	case cpErr != nil:
@@ -68,6 +69,20 @@ func writeCPError(w http.ResponseWriter, err error, cpErr *cpLib.CPError) {
 		restapi.WriteError(w, http.StatusInternalServerError, "%s", err.Error())
 	default:
 		restapi.WriteError(w, http.StatusInternalServerError, "unknown control-plane error")
+	}
+}
+
+// writeMethodCPError reports a failed control-plane call for a non-user endpoint:
+// HTTP 200 with the error in the APIResponse envelope ({success:false, error}),
+// never an HTTP error code. This is the non-user counterpart to writeCPError.
+func writeMethodCPError(w http.ResponseWriter, err error, cpErr *cpLib.CPError) {
+	switch {
+	case cpErr != nil:
+		restapi.WriteMethodError(w, "%s", cpErr.Message)
+	case err != nil:
+		restapi.WriteMethodError(w, "%s", err.Error())
+	default:
+		restapi.WriteMethodError(w, "unknown control-plane error")
 	}
 }
 
@@ -97,7 +112,7 @@ func (handler *proxyHandler) handleGetVdev(w http.ResponseWriter, r *http.Reques
 	}
 	id := strings.TrimSpace(r.URL.Query().Get("id"))
 	if id == "" {
-		restapi.WriteError(w, http.StatusBadRequest, "missing required query parameter: id")
+		restapi.WriteMethodError(w, "missing required query parameter: id")
 		return
 	}
 
@@ -108,16 +123,15 @@ func (handler *proxyHandler) handleGetVdev(w http.ResponseWriter, r *http.Reques
 	var vdev cpLib.VdevCfg
 	cpResp, err := handler.callFunc(cpLib.GET_VDEV_INFO, cpReq, false, "", 0, &vdev)
 	if err != nil || cpErrOf(cpResp) != nil {
-		writeCPError(w, err, cpErrOf(cpResp))
+		writeMethodCPError(w, err, cpErrOf(cpResp))
 		return
 	}
 	if vdev.ID == "" {
-		restapi.WriteError(w, http.StatusNotFound, "vdev %s not found", id)
+		restapi.WriteMethodError(w, "vdev %s not found", id)
 		return
 	}
 
-	restapi.WriteJSON(w, http.StatusOK, restapi.GetVdevResponse{
-		Success:     true,
+	restapi.WriteData(w, restapi.GetVdevPayload{
 		ID:          vdev.ID,
 		Size:        vdev.Size,
 		NumChunks:   int(vdev.NumChunks),
@@ -134,7 +148,7 @@ func (handler *proxyHandler) handleGetNisd(w http.ResponseWriter, r *http.Reques
 	}
 	id := strings.TrimSpace(r.URL.Query().Get("id"))
 	if id == "" {
-		restapi.WriteError(w, http.StatusBadRequest, "missing required query parameter: id")
+		restapi.WriteMethodError(w, "missing required query parameter: id")
 		return
 	}
 
@@ -145,11 +159,11 @@ func (handler *proxyHandler) handleGetNisd(w http.ResponseWriter, r *http.Reques
 	var nisd cpLib.Nisd
 	cpResp, err := handler.callFunc(cpLib.GET_NISD, cpReq, false, "", 0, &nisd)
 	if err != nil || cpErrOf(cpResp) != nil {
-		writeCPError(w, err, cpErrOf(cpResp))
+		writeMethodCPError(w, err, cpErrOf(cpResp))
 		return
 	}
 	if nisd.ID == "" {
-		restapi.WriteError(w, http.StatusNotFound, "nisd %s not found", id)
+		restapi.WriteMethodError(w, "nisd %s not found", id)
 		return
 	}
 
@@ -157,8 +171,7 @@ func (handler *proxyHandler) handleGetNisd(w http.ResponseWriter, r *http.Reques
 	for _, ni := range nisd.NetInfo {
 		netInfo = append(netInfo, restapi.NetworkInfo{IPAddr: ni.IPAddr, Port: int(ni.Port)})
 	}
-	restapi.WriteJSON(w, http.StatusOK, restapi.GetNisdResponse{
-		Success:  true,
+	restapi.WriteData(w, restapi.GetNisdPayload{
 		ID:       nisd.ID,
 		PeerPort: int(nisd.PeerPort),
 		NetInfo:  netInfo,
@@ -177,14 +190,12 @@ func (handler *proxyHandler) handleGetChunk(w http.ResponseWriter, r *http.Reque
 	vdevID := strings.TrimSpace(q.Get("vdev_id"))
 	chunkStr := strings.TrimSpace(q.Get("chunk_idx"))
 	if vdevID == "" || chunkStr == "" {
-		restapi.WriteError(w, http.StatusBadRequest,
-			"missing required query parameters: vdev_id and chunk_idx")
+		restapi.WriteMethodError(w, "missing required query parameters: vdev_id and chunk_idx")
 		return
 	}
 	chunkIdx, perr := strconv.Atoi(chunkStr)
 	if perr != nil || chunkIdx < 0 {
-		restapi.WriteError(w, http.StatusBadRequest,
-			"invalid chunk_idx %q: must be a non-negative integer", chunkStr)
+		restapi.WriteMethodError(w, "invalid chunk_idx %q: must be a non-negative integer", chunkStr)
 		return
 	}
 
@@ -195,19 +206,17 @@ func (handler *proxyHandler) handleGetChunk(w http.ResponseWriter, r *http.Reque
 	var cn cpLib.ChunkNisd
 	cpResp, err := handler.callFunc(cpLib.GET_CHUNK_NISD, cpReq, false, "", 0, &cn)
 	if err != nil || cpErrOf(cpResp) != nil {
-		writeCPError(w, err, cpErrOf(cpResp))
+		writeMethodCPError(w, err, cpErrOf(cpResp))
 		return
 	}
 
 	ids := splitCSV(cn.NisdUUIDs)
 	if len(ids) == 0 {
-		restapi.WriteError(w, http.StatusNotFound,
-			"chunk %d not found for vdev %s", chunkIdx, vdevID)
+		restapi.WriteMethodError(w, "chunk %d not found for vdev %s", chunkIdx, vdevID)
 		return
 	}
 
-	restapi.WriteJSON(w, http.StatusOK, restapi.GetChunkResponse{
-		Success:  true,
+	restapi.WriteData(w, restapi.GetChunkPayload{
 		VdevID:   vdevID,
 		ChunkIdx: chunkIdx,
 		NisdIDs:  ids,

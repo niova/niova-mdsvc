@@ -80,6 +80,46 @@ func decodeBody(t *testing.T, rr *httptest.ResponseRecorder, v any) {
 	}
 }
 
+// decodePayloadCode asserts a success envelope ({success:true, payload:{...}})
+// with the given HTTP status code and returns the decoded payload.
+func decodePayloadCode[T any](t *testing.T, rr *httptest.ResponseRecorder, wantCode int) T {
+	t.Helper()
+	if rr.Code != wantCode {
+		t.Fatalf("status = %d, want %d; body=%s", rr.Code, wantCode, rr.Body.String())
+	}
+	var resp restapi.APIResponse[T]
+	decodeBody(t, rr, &resp)
+	if !resp.Success {
+		t.Fatalf("want success:true; got %+v (body=%s)", resp, rr.Body.String())
+	}
+	if resp.Payload == nil {
+		t.Fatalf("want non-nil payload; body=%s", rr.Body.String())
+	}
+	return *resp.Payload
+}
+
+// decodePayload asserts an HTTP 200 success envelope and returns the payload.
+func decodePayload[T any](t *testing.T, rr *httptest.ResponseRecorder) T {
+	t.Helper()
+	return decodePayloadCode[T](t, rr, http.StatusOK)
+}
+
+// expectMethodError asserts a non-user endpoint reported a method error in the
+// envelope: HTTP 200 with {success:false, error:non-empty}. Under the unified
+// contract these endpoints never emit an HTTP error status (routing-level 405 is
+// the only exception; see requireMethod).
+func expectMethodError(t *testing.T, rr *httptest.ResponseRecorder) {
+	t.Helper()
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (method error in envelope); body=%s", rr.Code, rr.Body.String())
+	}
+	var got restapi.ErrorResponse
+	decodeBody(t, rr, &got)
+	if got.Success || got.Error == "" {
+		t.Fatalf("want {success:false, error:...}; got %+v", got)
+	}
+}
+
 // ---- GET /vdev ----
 
 func TestHandleGetVdev_Success(t *testing.T) {
@@ -90,13 +130,9 @@ func TestHandleGetVdev_Success(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/vdev?id=vdev-1", nil)
 	h.handleGetVdev(rr, req)
 
-	if rr.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200; body=%s", rr.Code, rr.Body.String())
-	}
-	var got restapi.GetVdevResponse
-	decodeBody(t, rr, &got)
-	if !got.Success || got.ID != "vdev-1" || got.Size != 16*cpLib.CHUNK_SIZE || got.NumChunks != 2 || got.NumReplicas != 3 {
-		t.Fatalf("unexpected response: %+v", got)
+	got := decodePayload[restapi.GetVdevPayload](t, rr)
+	if got.ID != "vdev-1" || got.Size != 16*cpLib.CHUNK_SIZE || got.NumChunks != 2 || got.NumReplicas != 3 {
+		t.Fatalf("unexpected payload: %+v", got)
 	}
 }
 
@@ -105,20 +141,16 @@ func TestHandleGetVdev_MissingID(t *testing.T) {
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/vdev", nil)
 	h.handleGetVdev(rr, req)
-	if rr.Code != http.StatusBadRequest {
-		t.Fatalf("status = %d, want 400; body=%s", rr.Code, rr.Body.String())
-	}
+	expectMethodError(t, rr)
 }
 
 func TestHandleGetVdev_NotFound_EmptyID(t *testing.T) {
-	// Server returns a zero-value VdevCfg (no such vdev) -> 404.
+	// Server returns a zero-value VdevCfg (no such vdev) -> method error in body.
 	h := newFakeHandler(gobReply(t, cpLib.VdevCfg{}), nil, nil)
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/vdev?id=missing", nil)
 	h.handleGetVdev(rr, req)
-	if rr.Code != http.StatusNotFound {
-		t.Fatalf("status = %d, want 404; body=%s", rr.Code, rr.Body.String())
-	}
+	expectMethodError(t, rr)
 }
 
 func TestHandleGetVdev_MethodNotAllowed(t *testing.T) {
@@ -132,23 +164,22 @@ func TestHandleGetVdev_MethodNotAllowed(t *testing.T) {
 }
 
 func TestHandleGetVdev_ServerFuncError_NotFound(t *testing.T) {
+	// A control-plane function error is reported in the envelope with HTTP 200.
 	h := newFakeHandler(gobFuncErr(t, "vdev not found"), nil, nil)
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/vdev?id=v", nil)
 	h.handleGetVdev(rr, req)
-	if rr.Code != http.StatusNotFound {
-		t.Fatalf("status = %d, want 404; body=%s", rr.Code, rr.Body.String())
-	}
+	expectMethodError(t, rr)
 }
 
 func TestHandleGetVdev_ServerAuthError(t *testing.T) {
+	// Even an auth error on a non-user (data) endpoint travels in the envelope
+	// with HTTP 200 — only the user/auth endpoints map errors to HTTP codes.
 	h := newFakeHandler(gobAuthErr(t, "Invalid Token"), nil, nil)
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/vdev?id=v", nil)
 	h.handleGetVdev(rr, req)
-	if rr.Code != http.StatusUnauthorized {
-		t.Fatalf("status = %d, want 401; body=%s", rr.Code, rr.Body.String())
-	}
+	expectMethodError(t, rr)
 }
 
 // ---- GET /nisd ----
@@ -164,13 +195,9 @@ func TestHandleGetNisd_Success(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/nisd?id=nisd-1", nil)
 	h.handleGetNisd(rr, req)
 
-	if rr.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200; body=%s", rr.Code, rr.Body.String())
-	}
-	var got restapi.GetNisdResponse
-	decodeBody(t, rr, &got)
-	if !got.Success || got.ID != "nisd-1" || got.PeerPort != 6000 || len(got.NetInfo) != 2 {
-		t.Fatalf("unexpected response: %+v", got)
+	got := decodePayload[restapi.GetNisdPayload](t, rr)
+	if got.ID != "nisd-1" || got.PeerPort != 6000 || len(got.NetInfo) != 2 {
+		t.Fatalf("unexpected payload: %+v", got)
 	}
 	if got.NetInfo[0].IPAddr != "10.0.0.1" || got.NetInfo[0].Port != 7000 {
 		t.Fatalf("net_info[0] = %+v", got.NetInfo[0])
@@ -182,9 +209,7 @@ func TestHandleGetNisd_MissingID(t *testing.T) {
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/nisd", nil)
 	h.handleGetNisd(rr, req)
-	if rr.Code != http.StatusBadRequest {
-		t.Fatalf("status = %d, want 400", rr.Code)
-	}
+	expectMethodError(t, rr)
 }
 
 func TestHandleGetNisd_NotFound(t *testing.T) {
@@ -192,9 +217,7 @@ func TestHandleGetNisd_NotFound(t *testing.T) {
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/nisd?id=missing", nil)
 	h.handleGetNisd(rr, req)
-	if rr.Code != http.StatusNotFound {
-		t.Fatalf("status = %d, want 404; body=%s", rr.Code, rr.Body.String())
-	}
+	expectMethodError(t, rr)
 }
 
 // ---- GET /get_chunk ----
@@ -207,13 +230,9 @@ func TestHandleGetChunk_Success(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/get_chunk?vdev_id=v1&chunk_idx=3", nil)
 	h.handleGetChunk(rr, req)
 
-	if rr.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200; body=%s", rr.Code, rr.Body.String())
-	}
-	var got restapi.GetChunkResponse
-	decodeBody(t, rr, &got)
-	if !got.Success || got.VdevID != "v1" || got.ChunkIdx != 3 {
-		t.Fatalf("unexpected response: %+v", got)
+	got := decodePayload[restapi.GetChunkPayload](t, rr)
+	if got.VdevID != "v1" || got.ChunkIdx != 3 {
+		t.Fatalf("unexpected payload: %+v", got)
 	}
 	if len(got.NisdIDs) != 2 || got.NisdIDs[0] != "nisd-a" || got.NisdIDs[1] != "nisd-b" {
 		t.Fatalf("nisd_ids = %v", got.NisdIDs)
@@ -230,9 +249,7 @@ func TestHandleGetChunk_MissingParams(t *testing.T) {
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/get_chunk?vdev_id=v1", nil)
 	h.handleGetChunk(rr, req)
-	if rr.Code != http.StatusBadRequest {
-		t.Fatalf("status = %d, want 400", rr.Code)
-	}
+	expectMethodError(t, rr)
 }
 
 func TestHandleGetChunk_InvalidChunkIdx(t *testing.T) {
@@ -240,9 +257,7 @@ func TestHandleGetChunk_InvalidChunkIdx(t *testing.T) {
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/get_chunk?vdev_id=v1&chunk_idx=-1", nil)
 	h.handleGetChunk(rr, req)
-	if rr.Code != http.StatusBadRequest {
-		t.Fatalf("status = %d, want 400", rr.Code)
-	}
+	expectMethodError(t, rr)
 }
 
 func TestHandleGetChunk_NotFound_Empty(t *testing.T) {
@@ -250,9 +265,7 @@ func TestHandleGetChunk_NotFound_Empty(t *testing.T) {
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/get_chunk?vdev_id=v1&chunk_idx=0", nil)
 	h.handleGetChunk(rr, req)
-	if rr.Code != http.StatusNotFound {
-		t.Fatalf("status = %d, want 404; body=%s", rr.Code, rr.Body.String())
-	}
+	expectMethodError(t, rr)
 }
 
 // ---- POST /create_vdev ----
@@ -275,14 +288,10 @@ func TestHandleCreateVdev_Success(t *testing.T) {
 	req := createVdevReq(t, `{"size_bytes":25769803776,"num_replicas":3}`, "client-rncui-1")
 	h.handleCreateVdev(rr, req)
 
-	if rr.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200; body=%s", rr.Code, rr.Body.String())
-	}
-	var got restapi.CreateVdevResponse
-	decodeBody(t, rr, &got)
+	got := decodePayload[restapi.CreateVdevPayload](t, rr)
 	wantChunks := int(cpLib.Count8GBChunks(size))
-	if !got.Success || got.VdevID != "vdev-new" || got.NumChunks != wantChunks {
-		t.Fatalf("unexpected response: %+v (wantChunks=%d)", got, wantChunks)
+	if got.VdevID != "vdev-new" || got.NumChunks != wantChunks {
+		t.Fatalf("unexpected payload: %+v (wantChunks=%d)", got, wantChunks)
 	}
 	// Write contract: must be a write, carrying the client-supplied RNCUI.
 	if !cap.isWrite {
@@ -373,9 +382,7 @@ func TestHandleCreateVdev_BadFailureDomain(t *testing.T) {
 	rr := httptest.NewRecorder()
 	req := createVdevReq(t, `{"size_bytes":25769803776,"num_replicas":3,"failure_domain":"widget"}`, "r1")
 	h.handleCreateVdev(rr, req)
-	if rr.Code != http.StatusBadRequest {
-		t.Fatalf("status = %d, want 400", rr.Code)
-	}
+	expectMethodError(t, rr)
 }
 
 func TestHandleCreateVdev_MissingRNCUI(t *testing.T) {
@@ -383,9 +390,7 @@ func TestHandleCreateVdev_MissingRNCUI(t *testing.T) {
 	rr := httptest.NewRecorder()
 	req := createVdevReq(t, `{"size_bytes":25769803776,"num_replicas":3}`, "")
 	h.handleCreateVdev(rr, req)
-	if rr.Code != http.StatusBadRequest {
-		t.Fatalf("status = %d, want 400; body=%s", rr.Code, rr.Body.String())
-	}
+	expectMethodError(t, rr)
 }
 
 func TestHandleCreateVdev_BadSize(t *testing.T) {
@@ -393,9 +398,7 @@ func TestHandleCreateVdev_BadSize(t *testing.T) {
 	rr := httptest.NewRecorder()
 	req := createVdevReq(t, `{"size_bytes":0,"num_replicas":3}`, "r1")
 	h.handleCreateVdev(rr, req)
-	if rr.Code != http.StatusBadRequest {
-		t.Fatalf("status = %d, want 400", rr.Code)
-	}
+	expectMethodError(t, rr)
 }
 
 func TestHandleCreateVdev_BadReplicas(t *testing.T) {
@@ -403,9 +406,7 @@ func TestHandleCreateVdev_BadReplicas(t *testing.T) {
 	rr := httptest.NewRecorder()
 	req := createVdevReq(t, `{"size_bytes":25769803776,"num_replicas":0}`, "r1")
 	h.handleCreateVdev(rr, req)
-	if rr.Code != http.StatusBadRequest {
-		t.Fatalf("status = %d, want 400", rr.Code)
-	}
+	expectMethodError(t, rr)
 }
 
 func TestHandleCreateVdev_InvalidJSON(t *testing.T) {
@@ -413,20 +414,16 @@ func TestHandleCreateVdev_InvalidJSON(t *testing.T) {
 	rr := httptest.NewRecorder()
 	req := createVdevReq(t, `{not json`, "r1")
 	h.handleCreateVdev(rr, req)
-	if rr.Code != http.StatusBadRequest {
-		t.Fatalf("status = %d, want 400", rr.Code)
-	}
+	expectMethodError(t, rr)
 }
 
 func TestHandleCreateVdev_NoIDReturned(t *testing.T) {
-	// Server reports success-shaped reply but with no ID -> 500.
+	// Server reports a success-shaped reply but with no ID -> method error in body.
 	h := newFakeHandler(gobReply(t, cpLib.ResponseXML{ID: ""}), nil, nil)
 	rr := httptest.NewRecorder()
 	req := createVdevReq(t, `{"size_bytes":25769803776,"num_replicas":3}`, "r1")
 	h.handleCreateVdev(rr, req)
-	if rr.Code != http.StatusInternalServerError {
-		t.Fatalf("status = %d, want 500; body=%s", rr.Code, rr.Body.String())
-	}
+	expectMethodError(t, rr)
 }
 
 func TestHandleCreateVdev_MethodNotAllowed(t *testing.T) {
@@ -497,13 +494,9 @@ func TestHandlePutResource_PDU(t *testing.T) {
 	h.handlePutResource(rr, writeReq(t, http.MethodPut, "/api/resource?type=pdu",
 		`{"id":"pdu-1","name":"p","power_cap":"5kW"}`, "r1"))
 
-	if rr.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200; body=%s", rr.Code, rr.Body.String())
-	}
-	var got restapi.WriteResponse
-	decodeBody(t, rr, &got)
-	if !got.Success || got.ID != "pdu-1" {
-		t.Fatalf("response = %+v", got)
+	got := decodePayload[restapi.WritePayload](t, rr)
+	if got.ID != "pdu-1" {
+		t.Fatalf("payload = %+v", got)
 	}
 	if !cap.isWrite || cap.rncui != "r1" || cap.name != cpLib.PUT_PDU {
 		t.Fatalf("captured = %+v", cap)
@@ -543,36 +536,28 @@ func TestHandlePutResource_MissingType(t *testing.T) {
 	h := newFakeHandler(nil, nil, nil)
 	rr := httptest.NewRecorder()
 	h.handlePutResource(rr, writeReq(t, http.MethodPut, "/api/resource", `{"id":"x"}`, "r1"))
-	if rr.Code != http.StatusBadRequest {
-		t.Fatalf("status = %d, want 400", rr.Code)
-	}
+	expectMethodError(t, rr)
 }
 
 func TestHandlePutResource_UnsupportedType(t *testing.T) {
 	h := newFakeHandler(nil, nil, nil)
 	rr := httptest.NewRecorder()
 	h.handlePutResource(rr, writeReq(t, http.MethodPut, "/api/resource?type=widget", `{"id":"x"}`, "r1"))
-	if rr.Code != http.StatusBadRequest {
-		t.Fatalf("status = %d, want 400", rr.Code)
-	}
+	expectMethodError(t, rr)
 }
 
 func TestHandlePutResource_MissingID(t *testing.T) {
 	h := newFakeHandler(nil, nil, nil)
 	rr := httptest.NewRecorder()
 	h.handlePutResource(rr, writeReq(t, http.MethodPut, "/api/resource?type=pdu", `{"name":"p"}`, "r1"))
-	if rr.Code != http.StatusBadRequest {
-		t.Fatalf("status = %d, want 400", rr.Code)
-	}
+	expectMethodError(t, rr)
 }
 
 func TestHandlePutResource_MissingRNCUI(t *testing.T) {
 	h := newFakeHandler(gobReply(t, cpLib.ResponseXML{ID: "x"}), nil, nil)
 	rr := httptest.NewRecorder()
 	h.handlePutResource(rr, writeReq(t, http.MethodPut, "/api/resource?type=pdu", `{"id":"x"}`, ""))
-	if rr.Code != http.StatusBadRequest {
-		t.Fatalf("status = %d, want 400", rr.Code)
-	}
+	expectMethodError(t, rr)
 }
 
 func TestHandlePutNisdArgs_Success(t *testing.T) {
@@ -607,13 +592,10 @@ func TestHandleDeleteVdev_Success(t *testing.T) {
 	h := newFakeHandler(gobReply(t, cpLib.ResponseXML{ID: "v1", Success: true}), nil, &cap)
 	rr := httptest.NewRecorder()
 	h.handleDeleteVdev(rr, deleteVdevReq(t, "v1", "r1"))
-	if rr.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200; body=%s", rr.Code, rr.Body.String())
-	}
-	var got restapi.WriteResponse
-	decodeBody(t, rr, &got)
-	if !got.Success || got.ID != "v1" {
-		t.Fatalf("response = %+v", got)
+
+	got := decodePayload[restapi.WritePayload](t, rr)
+	if got.ID != "v1" {
+		t.Fatalf("payload = %+v", got)
 	}
 	if cap.name != cpLib.DELETE_VDEV || !cap.isWrite || cap.rncui != "r1" {
 		t.Fatalf("captured = %+v", cap)
@@ -628,18 +610,14 @@ func TestHandleDeleteVdev_MissingID(t *testing.T) {
 	h := newFakeHandler(nil, nil, nil)
 	rr := httptest.NewRecorder()
 	h.handleDeleteVdev(rr, deleteVdevReq(t, "", "r1"))
-	if rr.Code != http.StatusBadRequest {
-		t.Fatalf("status = %d, want 400", rr.Code)
-	}
+	expectMethodError(t, rr)
 }
 
 func TestHandleDeleteVdev_MissingRNCUI(t *testing.T) {
 	h := newFakeHandler(gobReply(t, cpLib.ResponseXML{Success: true}), nil, nil)
 	rr := httptest.NewRecorder()
 	h.handleDeleteVdev(rr, deleteVdevReq(t, "v1", ""))
-	if rr.Code != http.StatusBadRequest {
-		t.Fatalf("status = %d, want 400", rr.Code)
-	}
+	expectMethodError(t, rr)
 }
 
 func TestHandleMountVdev_Success(t *testing.T) {
@@ -652,13 +630,10 @@ func TestHandleMountVdev_Success(t *testing.T) {
 	h := newFakeHandler(reply, nil, &cap)
 	rr := httptest.NewRecorder()
 	h.handleMountVdev(rr, writeReq(t, http.MethodPost, "/mount_vdev", `{"vdev_id":"v1"}`, "r1"))
-	if rr.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200; body=%s", rr.Code, rr.Body.String())
-	}
-	var got cpLib.VdevCfg
-	decodeBody(t, rr, &got)
+
+	got := decodePayload[cpLib.VdevCfg](t, rr)
 	if got.ID != "v1" || got.AccessToken != "tok-1" || got.VdevMountInfo.MountCounter != 7 {
-		t.Fatalf("response = %+v", got)
+		t.Fatalf("payload = %+v", got)
 	}
 	if cap.name != cpLib.MOUNT_VDEV {
 		t.Fatalf("op = %q", cap.name)
@@ -677,13 +652,9 @@ func TestHandleCreateSnap_Success(t *testing.T) {
 	h.handleCreateSnap(rr, writeReq(t, http.MethodPost, "/snap",
 		`{"vdev_id":"v1","snap_name":"snap-1","chunk_seq":[10,20,30]}`, "r1"))
 
-	if rr.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200; body=%s", rr.Code, rr.Body.String())
-	}
-	var got restapi.CreateSnapResponse
-	decodeBody(t, rr, &got)
-	if !got.Success || got.SnapName != "snap-1" {
-		t.Fatalf("response = %+v", got)
+	got := decodePayload[restapi.CreateSnapPayload](t, rr)
+	if got.SnapName != "snap-1" {
+		t.Fatalf("payload = %+v", got)
 	}
 	snap, ok := cap.cpReq.Payload.(cpLib.SnapXML)
 	if !ok || snap.Vdev != "v1" || snap.SnapName != "snap-1" || len(snap.Chunks) != 3 {
@@ -701,18 +672,14 @@ func TestHandleCreateSnap_NotCreated(t *testing.T) {
 	rr := httptest.NewRecorder()
 	h.handleCreateSnap(rr, writeReq(t, http.MethodPost, "/snap",
 		`{"vdev_id":"v1","snap_name":"s"}`, "r1"))
-	if rr.Code != http.StatusInternalServerError {
-		t.Fatalf("status = %d, want 500; body=%s", rr.Code, rr.Body.String())
-	}
+	expectMethodError(t, rr)
 }
 
 func TestHandleCreateSnap_MissingFields(t *testing.T) {
 	h := newFakeHandler(nil, nil, nil)
 	rr := httptest.NewRecorder()
 	h.handleCreateSnap(rr, writeReq(t, http.MethodPost, "/snap", `{"vdev_id":"v1"}`, "r1"))
-	if rr.Code != http.StatusBadRequest {
-		t.Fatalf("status = %d, want 400", rr.Code)
-	}
+	expectMethodError(t, rr)
 }
 
 // ---- GET /api/resource ----
@@ -725,13 +692,10 @@ func TestHandleGetResource_PDU(t *testing.T) {
 	h := newFakeHandler(reply, nil, nil)
 	rr := httptest.NewRecorder()
 	h.handleGetResource(rr, httptest.NewRequest(http.MethodGet, "/api/resource?type=pdu", nil))
-	if rr.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200; body=%s", rr.Code, rr.Body.String())
-	}
-	var got restapi.GetResourceResponse
-	decodeBody(t, rr, &got)
-	if !got.Success || got.Type != "pdu" || len(got.PDUs) != 1 || got.PDUs[0].ID != "pdu-1" || got.PDUs[0].PowerCap != "5kW" {
-		t.Fatalf("response = %+v", got)
+
+	got := decodePayload[restapi.GetResourcePayload](t, rr)
+	if got.Type != "pdu" || len(got.PDUs) != 1 || got.PDUs[0].ID != "pdu-1" || got.PDUs[0].PowerCap != "5kW" {
+		t.Fatalf("payload = %+v", got)
 	}
 }
 
@@ -744,13 +708,10 @@ func TestHandleGetResource_SingleFetch(t *testing.T) {
 	h := newFakeHandler(reply, nil, &cap)
 	rr := httptest.NewRecorder()
 	h.handleGetResource(rr, httptest.NewRequest(http.MethodGet, "/api/resource?type=nisd&id=nisd-1", nil))
-	if rr.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200; body=%s", rr.Code, rr.Body.String())
-	}
-	var got restapi.GetResourceResponse
-	decodeBody(t, rr, &got)
-	if !got.Success || len(got.Nisds) != 1 || got.Nisds[0].ID != "nisd-1" {
-		t.Fatalf("response = %+v", got)
+
+	got := decodePayload[restapi.GetResourcePayload](t, rr)
+	if len(got.Nisds) != 1 || got.Nisds[0].ID != "nisd-1" {
+		t.Fatalf("payload = %+v", got)
 	}
 	// A single-entity fetch must forward the id and disable GetAll.
 	gr, ok := cap.cpReq.Payload.(cpLib.GetResourceReq)
@@ -763,18 +724,14 @@ func TestHandleGetResource_MissingType(t *testing.T) {
 	h := newFakeHandler(nil, nil, nil)
 	rr := httptest.NewRecorder()
 	h.handleGetResource(rr, httptest.NewRequest(http.MethodGet, "/api/resource", nil))
-	if rr.Code != http.StatusBadRequest {
-		t.Fatalf("status = %d, want 400", rr.Code)
-	}
+	expectMethodError(t, rr)
 }
 
 func TestHandleGetResource_UnsupportedType(t *testing.T) {
 	h := newFakeHandler(nil, nil, nil)
 	rr := httptest.NewRecorder()
 	h.handleGetResource(rr, httptest.NewRequest(http.MethodGet, "/api/resource?type=widget", nil))
-	if rr.Code != http.StatusBadRequest {
-		t.Fatalf("status = %d, want 400", rr.Code)
-	}
+	expectMethodError(t, rr)
 }
 
 // ---- GET /api/pfs ----
@@ -784,13 +741,10 @@ func TestHandleGetPFS_Success(t *testing.T) {
 	h := newFakeHandler(reply, nil, nil)
 	rr := httptest.NewRecorder()
 	h.handleGetPFS(rr, httptest.NewRequest(http.MethodGet, "/api/pfs?id=pfs-1", nil))
-	if rr.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200; body=%s", rr.Code, rr.Body.String())
-	}
-	var got restapi.GetPFSResponse
-	decodeBody(t, rr, &got)
-	if !got.Success || len(got.PFS) != 1 || got.PFS[0].ID != "pfs-1" || len(got.PFS[0].VdevIDs) != 1 {
-		t.Fatalf("response = %+v", got)
+
+	got := decodePayload[restapi.GetPFSPayload](t, rr)
+	if len(got.PFS) != 1 || got.PFS[0].ID != "pfs-1" || len(got.PFS[0].VdevIDs) != 1 {
+		t.Fatalf("payload = %+v", got)
 	}
 }
 
@@ -801,13 +755,10 @@ func TestHandleGetNisdArgs_Success(t *testing.T) {
 	h := newFakeHandler(reply, nil, nil)
 	rr := httptest.NewRecorder()
 	h.handleGetNisdArgs(rr, httptest.NewRequest(http.MethodGet, "/api/nisd_args", nil))
-	if rr.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200; body=%s", rr.Code, rr.Body.String())
-	}
-	var got restapi.GetNisdArgsResponse
-	decodeBody(t, rr, &got)
-	if !got.Success || !got.NisdArgs.Defrag || got.NisdArgs.MBCCnt != 4 || got.NisdArgs.S3 != "bucket" {
-		t.Fatalf("response = %+v", got)
+
+	got := decodePayload[restapi.GetNisdArgsPayload](t, rr)
+	if !got.NisdArgs.Defrag || got.NisdArgs.MBCCnt != 4 || got.NisdArgs.S3 != "bucket" {
+		t.Fatalf("payload = %+v", got)
 	}
 }
 
@@ -842,11 +793,8 @@ func TestHandleGetInfra_AssemblesTree(t *testing.T) {
 	}
 	rr := httptest.NewRecorder()
 	h.handleGetInfra(rr, httptest.NewRequest(http.MethodGet, "/api/infra", nil))
-	if rr.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200; body=%s", rr.Code, rr.Body.String())
-	}
-	var got restapi.GetInfraResponse
-	decodeBody(t, rr, &got)
+
+	got := decodePayload[restapi.GetInfraPayload](t, rr)
 	if len(got.Infra.PDUs) != 1 || got.Infra.PDUs[0].ID != "pdu-1" {
 		t.Fatalf("pdus = %+v", got.Infra.PDUs)
 	}

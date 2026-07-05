@@ -6,13 +6,12 @@ package restapi
 // remaining /func write operations over REST. The PDU/Rack/Hypervisor/Device
 // NISD shapes mirror the flat schemas already declared in openapi.yaml.
 
-// WriteResponse is the generic result for writes that return only an id/status
-// (the internal ResponseXML). Endpoint-specific responses are defined below.
-type WriteResponse struct {
-	Success bool   `json:"success"`
+// WritePayload is the generic payload for writes that return only an id/status
+// (the internal ResponseXML), carried in APIResponse[WritePayload].
+// Endpoint-specific payloads are defined below.
+type WritePayload struct {
 	ID      string `json:"id,omitempty"`
 	Message string `json:"message,omitempty"`
-	Error   string `json:"error,omitempty"`
 }
 
 // ---- /pdu (PUT_PDU) ----
@@ -115,10 +114,9 @@ type CreateSnapRequest struct {
 	ChunkSeq []uint64 `json:"chunk_seq,omitempty"`
 }
 
-type CreateSnapResponse struct {
-	Success  bool   `json:"success"`
+// CreateSnapPayload is the payload of the create-snap envelope.
+type CreateSnapPayload struct {
 	SnapName string `json:"snap_name,omitempty"`
-	Error    string `json:"error,omitempty"`
 }
 
 // ---- DELETE /api/vdev/{id} (DELETE_VDEV) ----

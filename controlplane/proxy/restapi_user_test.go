@@ -23,13 +23,9 @@ func TestHandleLogin_Success(t *testing.T) {
 	h := newFakeHandler(reply, nil, &cap)
 	rr := httptest.NewRecorder()
 	h.handleLogin(rr, writeReq(t, http.MethodPost, "/users/login", `{"username":"alice","password":"secret"}`, ""))
-	if rr.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200; body=%s", rr.Code, rr.Body.String())
-	}
-	var got restapi.LoginResponse
-	decodeBody(t, rr, &got)
-	if !got.Success || got.AccessToken != "tok-1" || got.Role != "admin" || !got.IsAdmin {
-		t.Fatalf("response = %+v", got)
+	got := decodePayload[restapi.LoginPayload](t, rr)
+	if got.AccessToken != "tok-1" || got.Role != "admin" || !got.IsAdmin {
+		t.Fatalf("payload = %+v", got)
 	}
 	// niova authenticates with username:secretKey.
 	gr, ok := cap.cpReq.Payload.(cpLib.GetReq)
@@ -69,13 +65,9 @@ func TestHandleCreateUser_Success(t *testing.T) {
 	h := newFakeHandler(reply, nil, &cap)
 	rr := httptest.NewRecorder()
 	h.handleCreateUser(rr, writeReq(t, http.MethodPost, "/api/users", `{"username":"alice"}`, "r1"))
-	if rr.Code != http.StatusCreated {
-		t.Fatalf("status = %d, want 201; body=%s", rr.Code, rr.Body.String())
-	}
-	var got restapi.UserResponse
-	decodeBody(t, rr, &got)
-	if !got.Success || got.ID != "u1" || got.Username != "alice" || got.SecretKey != "generated-key" {
-		t.Fatalf("response = %+v", got)
+	got := decodePayloadCode[restapi.UserPayload](t, rr, http.StatusCreated)
+	if got.ID != "u1" || got.Username != "alice" || got.SecretKey != "generated-key" {
+		t.Fatalf("payload = %+v", got)
 	}
 	ur, ok := cap.cpReq.Payload.(userlib.UserReq)
 	if !ok || ur.Username != "alice" || ur.IsAdmin {
@@ -138,13 +130,9 @@ func TestHandleCreateAdminUser_Success(t *testing.T) {
 	h := newFakeHandler(reply, nil, &cap)
 	rr := httptest.NewRecorder()
 	h.handleCreateAdminUser(rr, writeReq(t, http.MethodPost, "/users/admin", `{"username":"admin"}`, "r1"))
-	if rr.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200; body=%s", rr.Code, rr.Body.String())
-	}
-	var got restapi.UserResponse
-	decodeBody(t, rr, &got)
-	if !got.Success || got.SecretKey != "admin-secret" {
-		t.Fatalf("response = %+v", got)
+	got := decodePayload[restapi.UserPayload](t, rr)
+	if got.SecretKey != "admin-secret" {
+		t.Fatalf("payload = %+v", got)
 	}
 	// Bootstrap carries no token; op is AdminUserAPI (write).
 	if cap.name != userlib.AdminUserAPI || !cap.isWrite || cap.cpReq.Token != "" {
@@ -174,13 +162,9 @@ func TestHandleListUsers_Success(t *testing.T) {
 	h := newFakeHandler(reply, nil, nil)
 	rr := httptest.NewRecorder()
 	h.handleListUsers(rr, httptest.NewRequest(http.MethodGet, "/api/users", nil))
-	if rr.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200; body=%s", rr.Code, rr.Body.String())
-	}
-	var got restapi.ListUsersResponse
-	decodeBody(t, rr, &got)
-	if !got.Success || len(got.Users) != 2 || got.Users[0].ID != "u1" || got.Users[1].Role != "admin" {
-		t.Fatalf("response = %+v", got)
+	got := decodePayload[restapi.ListUsersPayload](t, rr)
+	if len(got.Users) != 2 || got.Users[0].ID != "u1" || got.Users[1].Role != "admin" {
+		t.Fatalf("payload = %+v", got)
 	}
 }
 
@@ -190,13 +174,9 @@ func TestHandleListUsers_ByUsername(t *testing.T) {
 	h := newFakeHandler(reply, nil, &cap)
 	rr := httptest.NewRecorder()
 	h.handleListUsers(rr, httptest.NewRequest(http.MethodGet, "/api/users?username=alice", nil))
-	if rr.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200; body=%s", rr.Code, rr.Body.String())
-	}
-	var got restapi.ListUsersResponse
-	decodeBody(t, rr, &got)
-	if !got.Success || len(got.Users) != 1 || got.Users[0].Username != "alice" {
-		t.Fatalf("response = %+v", got)
+	got := decodePayload[restapi.ListUsersPayload](t, rr)
+	if len(got.Users) != 1 || got.Users[0].Username != "alice" {
+		t.Fatalf("payload = %+v", got)
 	}
 	// ?username= must forward as a GetReq username filter.
 	gr, ok := cap.cpReq.Payload.(userlib.GetReq)
@@ -214,14 +194,10 @@ func TestHandleGetUser_Success(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/api/users/"+testUserUUID, nil)
 	req.SetPathValue("id", testUserUUID)
 	h.handleGetUser(rr, req)
-	if rr.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200; body=%s", rr.Code, rr.Body.String())
-	}
-	var got restapi.UserResponse
-	decodeBody(t, rr, &got)
+	got := decodePayload[restapi.UserPayload](t, rr)
 	// Single-entity fetch returns the decrypted secret key.
-	if !got.Success || got.ID != testUserUUID || got.Username != "alice" || got.SecretKey != "sk" {
-		t.Fatalf("response = %+v", got)
+	if got.ID != testUserUUID || got.Username != "alice" || got.SecretKey != "sk" {
+		t.Fatalf("payload = %+v", got)
 	}
 }
 
@@ -257,13 +233,9 @@ func TestHandleUpdateUser_Success(t *testing.T) {
 	req := writeReq(t, http.MethodPut, "/api/users/"+testUserUUID, `{"username":"alice2"}`, "r1")
 	req.SetPathValue("id", testUserUUID)
 	h.handleUpdateUser(rr, req)
-	if rr.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200; body=%s", rr.Code, rr.Body.String())
-	}
-	var got restapi.UserResponse
-	decodeBody(t, rr, &got)
-	if !got.Success || got.Username != "alice2" {
-		t.Fatalf("response = %+v", got)
+	got := decodePayload[restapi.UserPayload](t, rr)
+	if got.Username != "alice2" {
+		t.Fatalf("payload = %+v", got)
 	}
 	ur, ok := cap.cpReq.Payload.(userlib.UserReq)
 	if !ok || !ur.IsUpdate || ur.UserID != testUserUUID || ur.Username != "alice2" {

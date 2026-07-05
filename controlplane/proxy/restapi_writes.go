@@ -26,22 +26,21 @@ func (handler *proxyHandler) handleCreateVdev(w http.ResponseWriter, r *http.Req
 
 	var req restapi.CreateVdevRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		restapi.WriteError(w, http.StatusBadRequest, "invalid request body: %v", err)
+		restapi.WriteMethodError(w, "invalid request body: %v", err)
 		return
 	}
 	if req.SizeBytes < 1 {
-		restapi.WriteError(w, http.StatusBadRequest, "size_bytes must be >= 1")
+		restapi.WriteMethodError(w, "size_bytes must be >= 1")
 		return
 	}
 	if req.NumReplicas < 1 || req.NumReplicas > maxVdevReplicas {
-		restapi.WriteError(w, http.StatusBadRequest,
-			"num_replicas must be between 1 and %d", maxVdevReplicas)
+		restapi.WriteMethodError(w, "num_replicas must be between 1 and %d", maxVdevReplicas)
 		return
 	}
 
 	rncui, err := rncuiFromRequest(r)
 	if err != nil {
-		restapi.WriteError(w, http.StatusBadRequest, "%s", err.Error())
+		restapi.WriteMethodError(w, "%s", err.Error())
 		return
 	}
 
@@ -50,7 +49,7 @@ func (handler *proxyHandler) handleCreateVdev(w http.ResponseWriter, r *http.Req
 	// so only the first entity_id is applied.
 	fdType, err := cpLib.ParseFD(req.FailureDomain)
 	if err != nil {
-		restapi.WriteError(w, http.StatusBadRequest, "%s", err.Error())
+		restapi.WriteMethodError(w, "%s", err.Error())
 		return
 	}
 	filter := cpLib.Filter{Type: fdType}
@@ -84,16 +83,15 @@ func (handler *proxyHandler) handleCreateVdev(w http.ResponseWriter, r *http.Req
 	var resp cpLib.ResponseXML
 	cpResp, err := handler.callFunc(cpLib.CREATE_VDEV, cpReq, true, rncui, 0, &resp)
 	if err != nil || cpErrOf(cpResp) != nil {
-		writeCPError(w, err, cpErrOf(cpResp))
+		writeMethodCPError(w, err, cpErrOf(cpResp))
 		return
 	}
 	if resp.ID == "" {
-		restapi.WriteError(w, http.StatusInternalServerError, "vdev creation returned no id")
+		restapi.WriteMethodError(w, "vdev creation returned no id")
 		return
 	}
 
-	restapi.WriteJSON(w, http.StatusOK, restapi.CreateVdevResponse{
-		Success:   true,
+	restapi.WriteData(w, restapi.CreateVdevPayload{
 		VdevID:    resp.ID,
 		NumChunks: int(cpLib.Count8GBChunks(req.SizeBytes)),
 	})
@@ -102,7 +100,7 @@ func (handler *proxyHandler) handleCreateVdev(w http.ResponseWriter, r *http.Req
 // ---- shared write helpers ----
 
 // decodeJSONBody decodes the JSON request body into dst, writing a 400 and
-// returning false on failure.
+// returning false on failure. Used by the user/auth endpoints (real HTTP codes).
 func decodeJSONBody(w http.ResponseWriter, r *http.Request, dst any) bool {
 	if err := json.NewDecoder(r.Body).Decode(dst); err != nil {
 		restapi.WriteError(w, http.StatusBadRequest, "invalid request body: %v", err)
@@ -111,13 +109,25 @@ func decodeJSONBody(w http.ResponseWriter, r *http.Request, dst any) bool {
 	return true
 }
 
+// decodeJSONBodyMethod is the non-user counterpart to decodeJSONBody: on a
+// malformed body it writes the error in the envelope with HTTP 200 (never an
+// HTTP error code) and returns false.
+func decodeJSONBodyMethod(w http.ResponseWriter, r *http.Request, dst any) bool {
+	if err := json.NewDecoder(r.Body).Decode(dst); err != nil {
+		restapi.WriteMethodError(w, "invalid request body: %v", err)
+		return false
+	}
+	return true
+}
+
 // runEntityWrite executes a write op whose server reply is a ResponseXML and
-// emits a generic WriteResponse. payload is the (value) CPReq payload; fallbackID
+// emits a WritePayload envelope. payload is the (value) CPReq payload; fallbackID
 // is echoed back when the server does not return an id. Writes require X-RNCUI.
+// Non-user endpoint: errors are reported in the envelope with HTTP 200.
 func (handler *proxyHandler) runEntityWrite(w http.ResponseWriter, r *http.Request, op string, payload any, fallbackID string) {
 	rncui, err := rncuiFromRequest(r)
 	if err != nil {
-		restapi.WriteError(w, http.StatusBadRequest, "%s", err.Error())
+		restapi.WriteMethodError(w, "%s", err.Error())
 		return
 	}
 	cpReq := cpLib.CPReq{Token: tokenFromRequest(r), Payload: payload}
@@ -125,7 +135,7 @@ func (handler *proxyHandler) runEntityWrite(w http.ResponseWriter, r *http.Reque
 	var resp cpLib.ResponseXML
 	cpResp, err := handler.callFunc(op, cpReq, true, rncui, 0, &resp)
 	if err != nil || cpErrOf(cpResp) != nil {
-		writeCPError(w, err, cpErrOf(cpResp))
+		writeMethodCPError(w, err, cpErrOf(cpResp))
 		return
 	}
 
@@ -133,7 +143,7 @@ func (handler *proxyHandler) runEntityWrite(w http.ResponseWriter, r *http.Reque
 	if id == "" {
 		id = fallbackID
 	}
-	restapi.WriteJSON(w, http.StatusOK, restapi.WriteResponse{Success: true, ID: id})
+	restapi.WriteData(w, restapi.WritePayload{ID: id})
 }
 
 // ---- single-entity infra writes ----
@@ -149,7 +159,7 @@ func (handler *proxyHandler) handlePutPFS(w http.ResponseWriter, r *http.Request
 		return
 	}
 	var req restapi.PFS
-	if !decodeJSONBody(w, r, &req) {
+	if !decodeJSONBodyMethod(w, r, &req) {
 		return
 	}
 	// Unlike the id-keyed infra upserts, PFS is a create: WPPFSCfg mints a UUID
@@ -171,7 +181,7 @@ func (handler *proxyHandler) handlePutNisdArgs(w http.ResponseWriter, r *http.Re
 		return
 	}
 	var req restapi.NisdArgs
-	if !decodeJSONBody(w, r, &req) {
+	if !decodeJSONBodyMethod(w, r, &req) {
 		return
 	}
 	payload := cpLib.NisdArgs{
@@ -194,16 +204,16 @@ func (handler *proxyHandler) handleCreateSnap(w http.ResponseWriter, r *http.Req
 		return
 	}
 	var req restapi.CreateSnapRequest
-	if !decodeJSONBody(w, r, &req) {
+	if !decodeJSONBodyMethod(w, r, &req) {
 		return
 	}
 	if req.VdevID == "" || req.SnapName == "" {
-		restapi.WriteError(w, http.StatusBadRequest, "vdev_id and snap_name are required")
+		restapi.WriteMethodError(w, "vdev_id and snap_name are required")
 		return
 	}
 	rncui, err := rncuiFromRequest(r)
 	if err != nil {
-		restapi.WriteError(w, http.StatusBadRequest, "%s", err.Error())
+		restapi.WriteMethodError(w, "%s", err.Error())
 		return
 	}
 
@@ -217,17 +227,14 @@ func (handler *proxyHandler) handleCreateSnap(w http.ResponseWriter, r *http.Req
 	var resp cpLib.SnapResponseXML
 	cpResp, err := handler.callFunc(cpLib.CREATE_SNAP, cpReq, true, rncui, 0, &resp)
 	if err != nil || cpErrOf(cpResp) != nil {
-		writeCPError(w, err, cpErrOf(cpResp))
+		writeMethodCPError(w, err, cpErrOf(cpResp))
 		return
 	}
 	if !resp.SnapName.Success {
-		restapi.WriteError(w, http.StatusInternalServerError, "snapshot %q was not created", req.SnapName)
+		restapi.WriteMethodError(w, "snapshot %q was not created", req.SnapName)
 		return
 	}
-	restapi.WriteJSON(w, http.StatusOK, restapi.CreateSnapResponse{
-		Success:  true,
-		SnapName: resp.SnapName.Name,
-	})
+	restapi.WriteData(w, restapi.CreateSnapPayload{SnapName: resp.SnapName.Name})
 }
 
 // handleDeleteVdev backs DELETE /api/vdev/{id} (DELETE_VDEV), matching the TiDB
@@ -236,7 +243,7 @@ func (handler *proxyHandler) handleCreateSnap(w http.ResponseWriter, r *http.Req
 func (handler *proxyHandler) handleDeleteVdev(w http.ResponseWriter, r *http.Request) {
 	id := strings.TrimSpace(r.PathValue("id"))
 	if id == "" {
-		restapi.WriteError(w, http.StatusBadRequest, "vdev id is required")
+		restapi.WriteMethodError(w, "vdev id is required")
 		return
 	}
 	handler.runEntityWrite(w, r, cpLib.DELETE_VDEV, cpLib.DeleteVdevReq{ID: id}, id)
@@ -248,29 +255,30 @@ func (handler *proxyHandler) handleMountVdev(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	var req restapi.MountVdevRequest
-	if !decodeJSONBody(w, r, &req) {
+	if !decodeJSONBodyMethod(w, r, &req) {
 		return
 	}
 	if req.VdevID == "" {
-		restapi.WriteError(w, http.StatusBadRequest, "vdev_id is required")
+		restapi.WriteMethodError(w, "vdev_id is required")
 		return
 	}
 	rncui, err := rncuiFromRequest(r)
 	if err != nil {
-		restapi.WriteError(w, http.StatusBadRequest, "%s", err.Error())
+		restapi.WriteMethodError(w, "%s", err.Error())
 		return
 	}
 
 	cpReq := cpLib.CPReq{Token: tokenFromRequest(r), Payload: cpLib.MountVdevRequest{VdevID: req.VdevID}}
 	// MOUNT_VDEV (APMountVdev) returns the full VdevCfg: it carries the updated
 	// mount info (counter, last-updated) plus the freshly minted AccessToken the
-	// data path needs to open the vdev. Return it verbatim rather than a
-	// projected subset so callers get the complete post-mount state.
+	// data path needs to open the vdev. Return it verbatim (as the envelope
+	// payload) rather than a projected subset so callers get the complete
+	// post-mount state.
 	var resp cpLib.VdevCfg
 	cpResp, err := handler.callFunc(cpLib.MOUNT_VDEV, cpReq, true, rncui, 0, &resp)
 	if err != nil || cpErrOf(cpResp) != nil {
-		writeCPError(w, err, cpErrOf(cpResp))
+		writeMethodCPError(w, err, cpErrOf(cpResp))
 		return
 	}
-	restapi.WriteJSON(w, http.StatusOK, resp)
+	restapi.WriteData(w, resp)
 }
