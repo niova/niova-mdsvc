@@ -131,12 +131,57 @@ func (handler *proxyHandler) handleCreateUser(w http.ResponseWriter, r *http.Req
 	})
 }
 
-// handleListUsers backs GET /api/users (GetUserAPI, all). Admin-only server-side.
+// handleCreateAdminUser backs POST /users/admin (AdminUserAPI). Bootstraps the
+// singleton admin (username must be "admin"); unauthenticated because it runs
+// before any token exists. Write, so it requires X-RNCUI. niova-only endpoint.
+func (handler *proxyHandler) handleCreateAdminUser(w http.ResponseWriter, r *http.Request) {
+	if !requireMethod(w, r, http.MethodPost) {
+		return
+	}
+	var req restapi.CreateAdminUserRequest
+	if !decodeJSONBody(w, r, &req) {
+		return
+	}
+	if strings.TrimSpace(req.Username) == "" {
+		restapi.WriteError(w, http.StatusBadRequest, "username is required")
+		return
+	}
+	rncui, err := rncuiFromRequest(r)
+	if err != nil {
+		restapi.WriteError(w, http.StatusBadRequest, "%s", err.Error())
+		return
+	}
+
+	// No token: admin bootstrap precedes auth. NewSecretKey is optional.
+	cpReq := cpLib.CPReq{Payload: userlib.UserReq{Username: req.Username, NewSecretKey: req.SecretKey}}
+	var resp userlib.UserResp
+	cpResp, err := handler.callFunc(userlib.AdminUserAPI, cpReq, true, rncui, 0, &resp)
+	if err != nil || cpErrOf(cpResp) != nil {
+		writeCPError(w, err, cpErrOf(cpResp))
+		return
+	}
+	if !resp.Success {
+		restapi.WriteError(w, statusForUserMsg(resp.Error), "%s", resp.Error)
+		return
+	}
+	// The control plane returns the admin secret key (default or existing) so the
+	// bootstrapper can log in; mirrors the existing /func behavior.
+	restapi.WriteJSON(w, http.StatusOK, restapi.UserResponse{
+		Success:   true,
+		UserData:  userDataFromResp(resp),
+		SecretKey: resp.SecretKey,
+	})
+}
+
+// handleListUsers backs GET /api/users (GetUserAPI). Lists all users, or filters
+// to one when ?username= is supplied. Admin-only server-side. Secret keys are not
+// included in the collection response.
 func (handler *proxyHandler) handleListUsers(w http.ResponseWriter, r *http.Request) {
 	if !requireMethod(w, r, http.MethodGet) {
 		return
 	}
-	cpReq := cpLib.CPReq{Token: tokenFromRequest(r), Payload: userlib.GetReq{}}
+	username := strings.TrimSpace(r.URL.Query().Get("username"))
+	cpReq := cpLib.CPReq{Token: tokenFromRequest(r), Payload: userlib.GetReq{Username: username}}
 	var users []userlib.UserResp
 	cpResp, err := handler.callFunc(userlib.GetUserAPI, cpReq, false, "", 0, &users)
 	if err != nil || cpErrOf(cpResp) != nil {
@@ -172,9 +217,12 @@ func (handler *proxyHandler) handleGetUser(w http.ResponseWriter, r *http.Reques
 		restapi.WriteError(w, http.StatusNotFound, "user not found: %s", id)
 		return
 	}
+	// A single-entity fetch returns the decrypted secret key (as the /func GetUser
+	// does); the collection endpoint (handleListUsers) deliberately omits it.
 	restapi.WriteJSON(w, http.StatusOK, restapi.UserResponse{
-		Success:  true,
-		UserData: userDataFromResp(users[0]),
+		Success:   true,
+		UserData:  userDataFromResp(users[0]),
+		SecretKey: users[0].SecretKey,
 	})
 }
 

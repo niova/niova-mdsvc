@@ -30,6 +30,17 @@ type LoginResponse struct {
 	Error       string `json:"error,omitempty"`
 }
 
+// ---- POST /users/admin (AdminUserAPI, bootstrap) ----
+
+// CreateAdminUserRequest bootstraps the singleton admin user. username must be
+// "admin". secret_key is optional — the control plane uses a default when empty.
+// This is a niova-only endpoint (TiDB has no admin-bootstrap route); it is
+// unauthenticated because it must run before any admin/token exists.
+type CreateAdminUserRequest struct {
+	Username  string `json:"username"`
+	SecretKey string `json:"secret_key,omitempty"`
+}
+
 // ---- POST /api/users (PutUserAPI, create) ----
 
 // CreateUserRequest is the create body. niova generates the secret key

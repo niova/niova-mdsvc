@@ -459,6 +459,7 @@ func TestRestMuxRegistered(t *testing.T) {
 		{http.MethodPost, "/api/nisd_args"},
 		{http.MethodGet, "/api/nisd_args"},
 		{http.MethodPost, "/users/login"},
+		{http.MethodPost, "/users/admin"},
 		{http.MethodPost, "/api/users"},
 		{http.MethodGet, "/api/users"},
 		{http.MethodGet, "/api/users/some-id"},

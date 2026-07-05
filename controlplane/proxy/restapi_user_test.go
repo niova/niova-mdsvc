@@ -128,6 +128,42 @@ func TestHandleCreateUser_Conflict(t *testing.T) {
 	}
 }
 
+// ---- POST /users/admin ----
+
+func TestHandleCreateAdminUser_Success(t *testing.T) {
+	var cap capturedCall
+	reply := gobReply(t, userlib.UserResp{
+		UserID: "admin-id", Username: "admin", UserRole: "admin", SecretKey: "admin-secret", Success: true,
+	})
+	h := newFakeHandler(reply, nil, &cap)
+	rr := httptest.NewRecorder()
+	h.handleCreateAdminUser(rr, writeReq(t, http.MethodPost, "/users/admin", `{"username":"admin"}`, "r1"))
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", rr.Code, rr.Body.String())
+	}
+	var got restapi.UserResponse
+	decodeBody(t, rr, &got)
+	if !got.Success || got.SecretKey != "admin-secret" {
+		t.Fatalf("response = %+v", got)
+	}
+	// Bootstrap carries no token; op is AdminUserAPI (write).
+	if cap.name != userlib.AdminUserAPI || !cap.isWrite || cap.cpReq.Token != "" {
+		t.Fatalf("captured = %+v", cap)
+	}
+	if ur, ok := cap.cpReq.Payload.(userlib.UserReq); !ok || ur.Username != "admin" {
+		t.Fatalf("payload = %#v", cap.cpReq.Payload)
+	}
+}
+
+func TestHandleCreateAdminUser_MissingRNCUI(t *testing.T) {
+	h := newFakeHandler(gobReply(t, userlib.UserResp{Success: true}), nil, nil)
+	rr := httptest.NewRecorder()
+	h.handleCreateAdminUser(rr, writeReq(t, http.MethodPost, "/users/admin", `{"username":"admin"}`, ""))
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", rr.Code)
+	}
+}
+
 // ---- GET /api/users ----
 
 func TestHandleListUsers_Success(t *testing.T) {
@@ -148,10 +184,31 @@ func TestHandleListUsers_Success(t *testing.T) {
 	}
 }
 
+func TestHandleListUsers_ByUsername(t *testing.T) {
+	var cap capturedCall
+	reply := gobReply(t, []userlib.UserResp{{UserID: "u1", Username: "alice", UserRole: "user"}})
+	h := newFakeHandler(reply, nil, &cap)
+	rr := httptest.NewRecorder()
+	h.handleListUsers(rr, httptest.NewRequest(http.MethodGet, "/api/users?username=alice", nil))
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", rr.Code, rr.Body.String())
+	}
+	var got restapi.ListUsersResponse
+	decodeBody(t, rr, &got)
+	if !got.Success || len(got.Users) != 1 || got.Users[0].Username != "alice" {
+		t.Fatalf("response = %+v", got)
+	}
+	// ?username= must forward as a GetReq username filter.
+	gr, ok := cap.cpReq.Payload.(userlib.GetReq)
+	if !ok || gr.Username != "alice" {
+		t.Fatalf("payload = %#v", cap.cpReq.Payload)
+	}
+}
+
 // ---- GET /api/users/{id} ----
 
 func TestHandleGetUser_Success(t *testing.T) {
-	reply := gobReply(t, []userlib.UserResp{{UserID: testUserUUID, Username: "alice", UserRole: "user"}})
+	reply := gobReply(t, []userlib.UserResp{{UserID: testUserUUID, Username: "alice", UserRole: "user", SecretKey: "sk"}})
 	h := newFakeHandler(reply, nil, nil)
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/api/users/"+testUserUUID, nil)
@@ -162,7 +219,8 @@ func TestHandleGetUser_Success(t *testing.T) {
 	}
 	var got restapi.UserResponse
 	decodeBody(t, rr, &got)
-	if !got.Success || got.ID != testUserUUID || got.Username != "alice" {
+	// Single-entity fetch returns the decrypted secret key.
+	if !got.Success || got.ID != testUserUUID || got.Username != "alice" || got.SecretKey != "sk" {
 		t.Fatalf("response = %+v", got)
 	}
 }
