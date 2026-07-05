@@ -950,9 +950,9 @@ func (ccf *CliCFuncs) MountVdev(req *ctlplfl.MountVdevRequest) (ctlplfl.VdevConf
 		return vdev, err
 	}
 
-	// The proxy returns the full VdevCfg (mount info + AccessToken) as the
+	// The proxy returns the full VdevConfig (mount info + AccessToken) as the
 	// envelope payload.
-	mounted, err := decodeEnvelope[ctlplfl.VdevCfg](body)
+	mounted, err := decodeEnvelope[ctlplfl.VdevConfig](body)
 	if err != nil {
 		return vdev, err
 	}
