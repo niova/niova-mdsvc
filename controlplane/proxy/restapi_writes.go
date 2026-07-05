@@ -91,9 +91,15 @@ func (handler *proxyHandler) handleCreateVdev(w http.ResponseWriter, r *http.Req
 		return
 	}
 
+	// Echo the applied request (TiDB parity). failure_domain is the normalized
+	// level; pfs_id is populated only when the PFS was supplied as a UUID (a
+	// name is resolved server-side and not returned here).
 	restapi.WriteData(w, restapi.CreateVdevPayload{
-		VdevID:    resp.ID,
-		NumChunks: int(cpLib.Count8GBChunks(req.SizeBytes)),
+		VdevID:        resp.ID,
+		Name:          vdevCfg.Name,
+		NumChunks:     int(cpLib.Count8GBChunks(req.SizeBytes)),
+		FailureDomain: cpLib.FDName(fdType),
+		PFSID:         vdevCfg.PFSID,
 	})
 }
 
@@ -271,14 +277,23 @@ func (handler *proxyHandler) handleMountVdev(w http.ResponseWriter, r *http.Requ
 	cpReq := cpLib.CPReq{Token: tokenFromRequest(r), Payload: cpLib.MountVdevRequest{VdevID: req.VdevID}}
 	// MOUNT_VDEV (APMountVdev) returns the full VdevCfg: it carries the updated
 	// mount info (counter, last-updated) plus the freshly minted AccessToken the
-	// data path needs to open the vdev. Return it verbatim (as the envelope
-	// payload) rather than a projected subset so callers get the complete
-	// post-mount state.
+	// data path needs to open the vdev. Project it into the flat snake_case
+	// MountVdevPayload so the whole REST surface stays snake_case.
 	var resp cpLib.VdevCfg
 	cpResp, err := handler.callFunc(cpLib.MOUNT_VDEV, cpReq, true, rncui, 0, &resp)
 	if err != nil || cpErrOf(cpResp) != nil {
 		writeMethodCPError(w, err, cpErrOf(cpResp))
 		return
 	}
-	restapi.WriteData(w, resp)
+	restapi.WriteData(w, restapi.MountVdevPayload{
+		ID:             resp.ID,
+		Name:           resp.Name,
+		Size:           resp.Size,
+		NumChunks:      int(resp.NumChunks),
+		NumReplica:     int(resp.NumReplica),
+		MountCounter:   resp.VdevMountInfo.MountCounter,
+		LastUpdatedLTS: resp.VdevMountInfo.LastUpdatedLTS,
+		PFSID:          resp.PFSID,
+		AccessToken:    resp.AccessToken,
+	})
 }

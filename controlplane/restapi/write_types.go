@@ -1,5 +1,7 @@
 package restapi
 
+import "time"
+
 // This file defines the flat snake_case DTOs for the niova-specific write
 // endpoints (single-entity infra writes plus the vdev lifecycle operations).
 // These endpoints are NOT part of the TiDB REST contract; they expose the
@@ -128,5 +130,17 @@ type MountVdevRequest struct {
 	VdevID string `json:"vdev_id"`
 }
 
-// MOUNT_VDEV returns the full cpLib.VdevCfg (mount info + AccessToken) verbatim,
-// so there is no dedicated response DTO here.
+// MountVdevPayload is the payload of the mount-vdev envelope: the post-mount
+// vdev state (updated mount info + the freshly minted access token). It is the
+// flat snake_case projection of the internal cpLib.VdevCfg the server returns.
+type MountVdevPayload struct {
+	ID             string    `json:"id"`
+	Name           string    `json:"name,omitempty"`
+	Size           int64     `json:"size,omitempty"`
+	NumChunks      int       `json:"num_chunks,omitempty"`
+	NumReplica     int       `json:"num_replica,omitempty"`
+	MountCounter   uint64    `json:"mount_counter"`
+	LastUpdatedLTS time.Time `json:"last_updated_lts"`
+	PFSID          string    `json:"pfs_id,omitempty"`
+	AccessToken    string    `json:"access_token,omitempty"`
+}

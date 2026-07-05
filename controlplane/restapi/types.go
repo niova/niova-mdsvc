@@ -98,20 +98,28 @@ type CreateVdevRequest struct {
 }
 
 // CreateVdevPayload is the payload of the create-vdev envelope
-// (APIResponse[CreateVdevPayload]).
+// (APIResponse[CreateVdevPayload]). name/failure_domain/pfs_id echo the applied
+// request for TiDB parity (failure_domain is the normalized level; pfs_id is set
+// only when the PFS was supplied as a UUID).
 type CreateVdevPayload struct {
-	VdevID    string `json:"vdev_id,omitempty"`
-	NumChunks int    `json:"num_chunks,omitempty"`
+	VdevID        string `json:"vdev_id,omitempty"`
+	Name          string `json:"name,omitempty"`
+	NumChunks     int    `json:"num_chunks,omitempty"`
+	FailureDomain string `json:"failure_domain,omitempty"`
+	PFSID         string `json:"pfs_id,omitempty"`
 }
 
 // ---- /vdev ----
 
-// GetVdevPayload is the payload of the get-vdev envelope.
+// GetVdevPayload is the payload of the get-vdev envelope. name/failure_domain are
+// included for TiDB parity (failure_domain is the level scoped at creation).
 type GetVdevPayload struct {
-	ID          string `json:"id,omitempty"`
-	Size        int64  `json:"size,omitempty"`
-	NumChunks   int    `json:"num_chunks,omitempty"`
-	NumReplicas int    `json:"num_replicas,omitempty"`
+	ID            string `json:"id,omitempty"`
+	Name          string `json:"name,omitempty"`
+	Size          int64  `json:"size,omitempty"`
+	NumChunks     int    `json:"num_chunks,omitempty"`
+	NumReplicas   int    `json:"num_replicas,omitempty"`
+	FailureDomain string `json:"failure_domain,omitempty"`
 }
 
 // ---- /nisd ----

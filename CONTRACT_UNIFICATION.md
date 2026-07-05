@@ -16,13 +16,23 @@ This document is the field-level reference for that work:
 Legend for request transport: **P** = URL path segment, **Q** = query param,
 **B** = JSON body field, **H** = HTTP header.
 
-Current top-level shapes (before unification):
+Top-level shapes:
 
-- **niova-mdsvc** — flat per-endpoint response: `{ success: bool, <fields…>, error?: string }`.
-  Writes require the `X-RNCUI` header. Domain errors map to HTTP 4xx/5xx.
-- **mdsvc-tidb** — every response embeds
+- **niova-mdsvc** — **IMPLEMENTED**: the unified envelope
+  `APIResponse[T]{ success: bool, error?: string, payload?: T }` (Design A, §6).
+  HTTP-code policy (Design 1, §7) is live: **data endpoints never emit an HTTP
+  error code** — a method error is `HTTP 200 {success:false, error}` — while the
+  **user/auth endpoints keep real HTTP codes** (401/400/409/404). Writes require
+  the `X-RNCUI` header.
+- **mdsvc-tidb** — **not yet ported**: every response still embeds
   `BaseResponse{ status: "success"|"failure", ncp_status_code: "NCP_*", message? }`
-  plus inline fields. Domain errors map to HTTP 4xx/5xx + an `ncp_status_code`.
+  plus inline fields; domain errors map to HTTP 4xx/5xx + an `ncp_status_code`.
+
+> **Implementation status (niova):** the envelope, the HTTP-code policy, and the
+> payload-shape alignments below (vdev `name`/`failure_domain`/`pfs_id` echoes,
+> user `account_status`, snake_case `mount_vdev`) are done. Still open: converting
+> `GET /api/resource` from typed slices to a generic array, and porting the whole
+> envelope to mdsvc-tidb.
 
 ---
 
@@ -78,14 +88,14 @@ For each: request fields (with transport) and response payload on both sides.
 | `name` | B | ✅ (niova extension) | ✅ (via `BaseRequest`) |
 | `X-RNCUI` | H | ✅ required | ❌ n/a |
 
-Response:
+Response payload (`payload` under the envelope on niova):
 
 | niova | tidb |
 |---|---|
-| `success`, `vdev_id`, `num_chunks`, `message?`, `error?` | `…BaseResponse`, `vdev_id`, `name`, `num_chunks`, `failure_domain`, `pfs_id` |
+| `vdev_id`, `name`, `num_chunks`, `failure_domain`, `pfs_id` | `…BaseResponse`, `vdev_id`, `name`, `num_chunks`, `failure_domain`, `pfs_id` |
 
-⚠️ **Response asymmetry:** tidb echoes `name`, `failure_domain`, `pfs_id`; niova
-does not. Unify on the richer set.
+✅ **Resolved:** niova now echoes `name`, `failure_domain` (normalized level), and
+`pfs_id` (populated when the PFS was supplied as a UUID). Field sets match.
 
 ### `GET /api/vdev` — vdev metadata
 
@@ -93,14 +103,15 @@ does not. Unify on the richer set.
 |---|:--:|:--:|:--:|
 | `id` | Q | ✅ (⚠️ resolves UUID **or name**) | ✅ (UUID) |
 
-Response:
+Response payload:
 
 | niova | tidb |
 |---|---|
-| `success`, `id`, `size`, `num_chunks`, `num_replicas`, `error?` | `…BaseResponse`, `id`, `name`, `size`, `num_chunks`, `num_replicas`, `failure_domain` |
+| `id`, `name`, `size`, `num_chunks`, `num_replicas`, `failure_domain` | `…BaseResponse`, `id`, `name`, `size`, `num_chunks`, `num_replicas`, `failure_domain` |
 
-⚠️ tidb returns `name` + `failure_domain`; niova omits both. ⚠️ niova accepts a
-name in `?id=`; tidb accepts UUID only.
+✅ **Resolved:** niova now returns `name` + `failure_domain`. Field sets match.
+Note niova still accepts a name in `?id=` (UUID or name); tidb accepts UUID only —
+a superset, not a conflict.
 
 ### `DELETE /api/vdev/{id}` — delete vdev
 
@@ -253,13 +264,13 @@ Response:
 
 Response:
 
-| niova | tidb |
+| niova payload | tidb |
 |---|---|
-| `success`, `id`, `username`, `role`, `status`, `secret_key` (returned once), `error?` | `…BaseResponse` + `UserData{id,username,role,account_status,created_at}` |
+| `id`, `username`, `role`, `account_status`, `secret_key` (returned once) | `…BaseResponse` + `UserData{id,username,role,account_status,created_at}` |
 
-⚠️ **User model:** niova generates and returns a `secret_key` once (no password
-input); tidb takes a `password`. ⚠️ **Status key:** niova `status`, tidb
-`account_status`. ⚠️ tidb adds `created_at`; niova has no `secret_key` analog.
+✅ **Status key resolved:** niova now uses `account_status`. ⚠️ **User model:** niova
+generates and returns a `secret_key` once (no password input); tidb takes a
+`password`. ⚠️ tidb adds `created_at`; niova has no `secret_key` analog.
 
 ### `GET /api/users` — list users
 
@@ -271,9 +282,9 @@ Response:
 
 | niova | tidb |
 |---|---|
-| `success`, `users[ {id,username,role,status} ]`, `error?` | `…BaseResponse`, `users[ {id,username,role,account_status,created_at} ]` |
+| `users[ {id,username,role,account_status} ]` (payload) | `…BaseResponse`, `users[ {id,username,role,account_status,created_at} ]` |
 
-⚠️ Same `status`/`account_status` key mismatch; tidb adds `created_at`.
+✅ `account_status` key now matches. ⚠️ tidb adds `created_at`.
 
 ### `GET /api/users/{id}` — get user
 
@@ -285,10 +296,10 @@ Response:
 
 | niova | tidb |
 |---|---|
-| `success`, `id`, `username`, `role`, `status`, `secret_key?`, `error?` | `…BaseResponse` + `UserData{…,account_status,created_at}` |
+| `id`, `username`, `role`, `account_status`, `secret_key?` (payload) | `…BaseResponse` + `UserData{…,account_status,created_at}` |
 
 ⚠️ niova returns the decrypted `secret_key` on a single-entity fetch; tidb never
-returns a secret. Same `status`/`account_status` mismatch.
+returns a secret. `account_status` key now matches.
 
 ### `PUT /api/users/{id}` — update user
 
@@ -306,7 +317,7 @@ Response:
 
 | niova | tidb |
 |---|---|
-| `success`, `id`, `username`, `role`, `status`, `secret_key?` (if key changed), `error?` | `…BaseResponse` + `UserData` |
+| `id`, `username`, `role`, `account_status`, `secret_key?` (if key changed) (payload) | `…BaseResponse` + `UserData` |
 
 ⚠️ **Divergent update semantics:** niova updates `username` + (admin) `secret_key`;
 tidb updates `role`/`status`/`password`. These are almost disjoint — the deepest
@@ -318,11 +329,11 @@ model difference in the contract.
 
 | Endpoint | Request | Response | Notes |
 |---|---|---|---|
-| `POST /api/mount_vdev` | `vdev_id` (B) + `X-RNCUI` (H) | full `VdevCfg`: `ID`, `Name`, `Size`, `NumChunks`, `NumReplica`, `VdevMountInfo{MountCounter,LastUpdatedLTS}`, `PFSID`, `AccessToken`, … | ⚠️ **PascalCase JSON** — the only endpoint that doesn't use flat snake_case |
-| `POST /api/snap` | `vdev_id`, `snap_name`, `chunk_seq[]?` (B) + `X-RNCUI` (H) | `success`, `snap_name`, `error?` | — |
-| `POST /api/nisd_args` | `defrag`, `allow_defrag_mcib_cache`, `mbc_cnt`, `merge_h_cnt`, `mcib_read_cache`, `s3`, `dsync` (B) + `X-RNCUI` (H) | `WriteResponse{success,id?,error?}` | Singleton record |
-| `GET /api/nisd_args` | — | `success`, `nisd_args{…}`, `error?` | — |
-| `POST /users/admin` | `username`, `secret_key?` (B) + `X-RNCUI` (H) | `success`, `id`, `username`, `role`, `status`, `secret_key`, `error?` | Unauthenticated bootstrap; ⚠️ returns admin secret key |
+| `POST /api/mount_vdev` | `vdev_id` (B) + `X-RNCUI` (H) | `MountVdevPayload`: `id`, `name`, `size`, `num_chunks`, `num_replica`, `mount_counter`, `last_updated_lts`, `pfs_id`, `access_token` | ✅ **now flat snake_case** (was PascalCase `VdevCfg`) |
+| `POST /api/snap` | `vdev_id`, `snap_name`, `chunk_seq[]?` (B) + `X-RNCUI` (H) | `snap_name` (payload) | — |
+| `POST /api/nisd_args` | `defrag`, `allow_defrag_mcib_cache`, `mbc_cnt`, `merge_h_cnt`, `mcib_read_cache`, `s3`, `dsync` (B) + `X-RNCUI` (H) | `WritePayload{id?}` | Singleton record |
+| `GET /api/nisd_args` | — | `nisd_args{…}` (payload) | — |
+| `POST /users/admin` | `username`, `secret_key?` (B) + `X-RNCUI` (H) | `id`, `username`, `role`, `account_status`, `secret_key` (payload) | Unauthenticated bootstrap; ⚠️ returns admin secret key |
 
 ---
 
@@ -349,29 +360,30 @@ inconsistency the unification should also fix.
 
 ## 5. Cross-cutting inconsistencies (summary)
 
-Ranked by blast radius:
+Ranked by blast radius (✅ = resolved on the niova side; the tidb port is still
+pending for the shared-envelope items):
 
-1. **Response envelope.** niova flat `{success,error}` vs tidb
-   `BaseResponse{status,ncp_status_code,message}`. Every endpoint differs at the top
-   level. → §6.
-2. **HTTP status semantics.** Both currently return 4xx/5xx for domain errors; the
-   target is 200-for-method-outcomes with a `success` flag. → §7.
+1. ✅ **Response envelope.** niova now uses `APIResponse[T]{success,error,payload}`
+   (§6, Design A). tidb still on `BaseResponse` — resolves fully once tidb ports.
+2. ✅ **HTTP status semantics.** niova implements the 200-for-method-outcomes policy
+   (§7, Design 1) on data endpoints; user/auth keep real codes. tidb pending.
 3. **User model.** Secret-key (niova) vs password + role/status (tidb). Update
    bodies are nearly disjoint (`username`/`new_secret_key` vs `role`/`status`/`new_password`).
-4. **`status` vs `account_status`** — same concept, different JSON key across every
-   user response.
-5. **Collection vs single.** `GET /api/pfs` and `GET /api/resource` return lists
-   (niova) vs single/generic objects (tidb).
-6. **Write-response `id`.** niova returns the mutated id (`WriteResponse.id`,
-   `pfs` → `id`); tidb returns status only, and uses `pfs_id` where niova uses `id`.
+   *(Unchanged — a genuine model difference, not a wire mismatch.)*
+4. ✅ **`status` vs `account_status`** — niova now emits `account_status`.
+5. **Collection vs single.** `GET /api/pfs` and `GET /api/resource`: niova returns
+   lists/typed-slices, tidb single/generic. niova PFS is already a list (tidb should
+   adopt it); **`GET /api/resource` typed→generic is the one remaining niova-side
+   decision** (see below).
+6. **Write-response `id`.** niova returns the mutated id (`WritePayload.id`); tidb
+   returns status only, and uses `pfs_id` where niova uses `id`.
 7. **`X-RNCUI` header.** Required on every niova write (PumiceDB dedup); unknown to
-   tidb. This is an intentional niova extension — keep it, but the request *body*
-   shapes must stay identical so clients are portable.
-8. **Casing.** `mount_vdev` returns PascalCase `VdevCfg`; everything else is
-   snake_case.
-9. **Richer echoes.** tidb echoes `name`/`failure_domain`/`pfs_id` on vdev
-   responses; niova login echoes `token_type`/`user_id`/`role`/`is_admin`. Union both.
-10. **Intra-tidb drift.** `AdminResetResponse` doesn't use `BaseResponse`.
+   tidb. Intentional niova extension — request *body* shapes stay identical.
+8. ✅ **Casing.** `mount_vdev` is now flat snake_case (`MountVdevPayload`); the whole
+   REST surface is snake_case.
+9. ✅ **Richer echoes.** niova vdev create/get now echo `name`/`failure_domain`
+   (+`pfs_id` on create); login already echoes `token_type`/`user_id`/`role`/`is_admin`.
+10. **Intra-tidb drift.** `AdminResetResponse` doesn't use `BaseResponse` (tidb-side).
 
 ---
 
@@ -380,7 +392,7 @@ Ranked by blast radius:
 All three keep `success` + an error message; they differ in where the
 method-specific data goes and whether a machine-readable code is retained.
 
-### Design A — nested `payload` envelope (recommended)
+### Design A — nested `payload` envelope (✅ implemented on niova)
 
 ```go
 type APIResponse[T any] struct {
@@ -452,7 +464,7 @@ nothing tidb has today.
 The stated target: **method (business) errors → HTTP 200 with `success:false`**;
 **login → real codes** when credentials are rejected. Three ways to draw the line.
 
-### Design 1 — outcome-in-body (recommended, matches the ask)
+### Design 1 — outcome-in-body (✅ implemented on niova)
 
 - **200** for every method outcome — success *and* domain failure (not found,
   conflict, insufficient capacity, invalid domain input, snapshot exists, …). The

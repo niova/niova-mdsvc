@@ -55,12 +55,13 @@ type CreateUserRequest struct {
 	Role     string `json:"role,omitempty"`
 }
 
-// UserData is the common user projection shared by create/get/list/update.
+// UserData is the common user projection shared by create/get/list/update. The
+// status field uses the JSON key "account_status" for TiDB parity.
 type UserData struct {
 	ID       string `json:"id,omitempty"`
 	Username string `json:"username,omitempty"`
 	Role     string `json:"role,omitempty"`
-	Status   int    `json:"status"`
+	Status   int    `json:"account_status"`
 }
 
 // UserPayload is the payload for create/get/update (APIResponse[UserPayload]).

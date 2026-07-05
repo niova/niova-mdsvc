@@ -777,9 +777,11 @@ func (ccf *CliCFuncs) GetVdevConfig(req *ctlplfl.GetReq) (ctlplfl.VdevConfig, er
 
 	// REST /vdev carries a subset of VdevConfig; only these fields are populated.
 	vdev.ID = resp.ID
+	vdev.Name = resp.Name
 	vdev.Size = resp.Size
 	vdev.ChunkCnt = uint32(resp.NumChunks)
 	vdev.DataBlkCnt = uint8(resp.NumReplicas)
+	vdev.FilterType = resp.FailureDomain
 	return vdev, nil
 }
 
@@ -950,11 +952,21 @@ func (ccf *CliCFuncs) MountVdev(req *ctlplfl.MountVdevRequest) (ctlplfl.VdevConf
 		return vdev, err
 	}
 
-	// The proxy returns the full VdevConfig (mount info + AccessToken) as the
-	// envelope payload.
-	mounted, err := decodeEnvelope[ctlplfl.VdevConfig](body)
+	// The proxy returns the flat snake_case MountVdevPayload (mount info +
+	// AccessToken); map it back into the internal VdevConfig the callers expect.
+	p, err := decodeEnvelope[restapi.MountVdevPayload](body)
 	if err != nil {
 		return vdev, err
 	}
-	return mounted, nil
+	vdev = ctlplfl.VdevConfig{
+		ID:            p.ID,
+		Name:          p.Name,
+		Size:          p.Size,
+		ChunkCnt:      uint32(p.NumChunks),
+		DataBlkCnt:    uint8(p.NumReplica),
+		VdevMountInfo: ctlplfl.VdevMountInfo{MountCounter: p.MountCounter, LastUpdatedLTS: p.LastUpdatedLTS},
+		PFSID:         p.PFSID,
+		AccessToken:   p.AccessToken,
+	}
+	return vdev, nil
 }

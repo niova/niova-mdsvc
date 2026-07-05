@@ -631,8 +631,8 @@ func TestHandleMountVdev_Success(t *testing.T) {
 	rr := httptest.NewRecorder()
 	h.handleMountVdev(rr, writeReq(t, http.MethodPost, "/mount_vdev", `{"vdev_id":"v1"}`, "r1"))
 
-	got := decodePayload[cpLib.VdevCfg](t, rr)
-	if got.ID != "v1" || got.AccessToken != "tok-1" || got.VdevMountInfo.MountCounter != 7 {
+	got := decodePayload[restapi.MountVdevPayload](t, rr)
+	if got.ID != "v1" || got.AccessToken != "tok-1" || got.MountCounter != 7 {
 		t.Fatalf("payload = %+v", got)
 	}
 	if cap.name != cpLib.MOUNT_VDEV {

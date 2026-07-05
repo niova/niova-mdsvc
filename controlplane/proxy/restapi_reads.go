@@ -132,10 +132,12 @@ func (handler *proxyHandler) handleGetVdev(w http.ResponseWriter, r *http.Reques
 	}
 
 	restapi.WriteData(w, restapi.GetVdevPayload{
-		ID:          vdev.ID,
-		Size:        vdev.Size,
-		NumChunks:   int(vdev.NumChunks),
-		NumReplicas: int(vdev.NumReplica),
+		ID:            vdev.ID,
+		Name:          vdev.Name,
+		Size:          vdev.Size,
+		NumChunks:     int(vdev.NumChunks),
+		NumReplicas:   int(vdev.NumReplica),
+		FailureDomain: vdev.FilterType,
 	})
 }
 
