@@ -47,11 +47,11 @@ func TestGenerateDistributionReport(t *testing.T) {
 		name := fmt.Sprintf("vdevp1%d", i)
 		vdevReq := &cpLib.VdevReq{
 			Vdev: &cpLib.VdevConfig{
-				Name:          name,
-				Size:          16 * cpLib.CHUNK_SIZE,
-				Redundancy:    cpLib.RMReplica,
+				Name:       name,
+				Size:       16 * cpLib.CHUNK_SIZE,
+				Redundancy: cpLib.RMReplica,
 				DataBlkCnt: 3,
-				PFSID:         pfs1ID,
+				PFSID:      pfs1ID,
 			},
 		}
 		resp, err := c.CreateVdev(vdevReq)
@@ -69,12 +69,12 @@ func TestGenerateDistributionReport(t *testing.T) {
 		name := fmt.Sprintf("vdevp2%d", i)
 		vdevReq := &cpLib.VdevReq{
 			Vdev: &cpLib.VdevConfig{
-				Name:            name,
-				Size:            32 * cpLib.CHUNK_SIZE,
-				Redundancy:      cpLib.RMEC32K,
+				Name:         name,
+				Size:         32 * cpLib.CHUNK_SIZE,
+				Redundancy:   cpLib.RMEC32K,
 				DataBlkCnt:   4,
 				ParityBlkCnt: 3,
-				PFSID:           pfs2ID,
+				PFSID:        pfs2ID,
 			},
 		}
 		resp, err := c.CreateVdev(vdevReq)
@@ -87,9 +87,9 @@ func TestGenerateDistributionReport(t *testing.T) {
 		name := fmt.Sprintf("vdevsa%d", i)
 		vdevReq := &cpLib.VdevReq{
 			Vdev: &cpLib.VdevConfig{
-				Name:          name,
-				Size:          8 * cpLib.CHUNK_SIZE,
-				Redundancy:    cpLib.RMReplica,
+				Name:       name,
+				Size:       8 * cpLib.CHUNK_SIZE,
+				Redundancy: cpLib.RMReplica,
 				DataBlkCnt: 2,
 			},
 		}

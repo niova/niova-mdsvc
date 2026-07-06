@@ -107,7 +107,7 @@ func TestVdevLifecycle(t *testing.T) {
 	scenarios := []struct {
 		name            string
 		redundancy      cpLib.RedundancyMode
-		DataBlkCnt   uint8
+		DataBlkCnt      uint8
 		totalDataBlks   uint8
 		totalParityBlks uint8
 		size            int64
@@ -121,9 +121,9 @@ func TestVdevLifecycle(t *testing.T) {
 		t.Run(sc.name, func(t *testing.T) {
 			vdevReq := &cpLib.VdevReq{
 				Vdev: &cpLib.VdevConfig{
-					Name:            sc.name,
-					Size:            sc.size,
-					Redundancy:      sc.redundancy,
+					Name:         sc.name,
+					Size:         sc.size,
+					Redundancy:   sc.redundancy,
 					DataBlkCnt:   sc.totalDataBlks,
 					ParityBlkCnt: sc.totalParityBlks,
 				},
@@ -166,7 +166,7 @@ func TestVdevCreationWithFilters(t *testing.T) {
 			c.SetToken(adminToken)
 			vdevReq := &cpLib.VdevReq{
 				Vdev: &cpLib.VdevConfig{
-					Size:          16 * cpLib.CHUNK_SIZE,
+					Size:       16 * cpLib.CHUNK_SIZE,
 					DataBlkCnt: 1,
 				},
 				Filter: cpLib.Filter{Type: tc.filterType, ID: tc.filterID},

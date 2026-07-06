@@ -81,9 +81,9 @@ func TestVdev(t *testing.T) {
 		t.Run(sc.name, func(t *testing.T) {
 			// a. WPCreateVdev
 			vdevConfig := &ctlplfl.VdevConfig{
-				Name:            sc.name,
-				Size:            sc.size,
-				Redundancy:      sc.redundancy,
+				Name:         sc.name,
+				Size:         sc.size,
+				Redundancy:   sc.redundancy,
 				DataBlkCnt:   sc.totalDataBlks,
 				ParityBlkCnt: sc.totalParityBlks,
 			}
