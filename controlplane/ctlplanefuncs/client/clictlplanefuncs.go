@@ -868,23 +868,47 @@ func (ccf *CliCFuncs) GetResources(req *ctlplfl.GetResourceReq) (*ctlplfl.Resour
 		return nil, err
 	}
 	out := &ctlplfl.ResourceListResp{ResourceType: req.ResourceType}
-	for _, p := range resp.PDUs {
-		out.PDUs = append(out.PDUs, pduFromRest(p))
-	}
-	for _, x := range resp.Racks {
-		out.Racks = append(out.Racks, rackFromRest(x))
-	}
-	for _, x := range resp.Hypervisors {
-		out.Hypervisors = append(out.Hypervisors, hypervisorFromRest(x))
-	}
-	for _, x := range resp.Devices {
-		out.Devices = append(out.Devices, deviceFromRest(x))
-	}
-	for _, x := range resp.Nisds {
-		out.Nisds = append(out.Nisds, nisdFromRest(x))
-	}
-	for _, x := range resp.Partitions {
-		out.Partitions = append(out.Partitions, partitionFromRest(x))
+	// The proxy returns a single generic `resources` array (TiDB shape); every
+	// element is the DTO for the requested type. Decode each into that type.
+	for _, raw := range resp.Resources {
+		switch req.ResourceType {
+		case ctlplfl.ResourcePDU:
+			var v restapi.PDU
+			if err := json.Unmarshal(raw, &v); err != nil {
+				return nil, err
+			}
+			out.PDUs = append(out.PDUs, pduFromRest(v))
+		case ctlplfl.ResourceRack:
+			var v restapi.Rack
+			if err := json.Unmarshal(raw, &v); err != nil {
+				return nil, err
+			}
+			out.Racks = append(out.Racks, rackFromRest(v))
+		case ctlplfl.ResourceHypervisor:
+			var v restapi.Hypervisor
+			if err := json.Unmarshal(raw, &v); err != nil {
+				return nil, err
+			}
+			out.Hypervisors = append(out.Hypervisors, hypervisorFromRest(v))
+		case ctlplfl.ResourceDevice:
+			var v restapi.Device
+			if err := json.Unmarshal(raw, &v); err != nil {
+				return nil, err
+			}
+			out.Devices = append(out.Devices, deviceFromRest(v))
+		case ctlplfl.ResourceNisd:
+			var v restapi.NISD
+			if err := json.Unmarshal(raw, &v); err != nil {
+				return nil, err
+			}
+			out.Nisds = append(out.Nisds, nisdFromRest(v))
+		case ctlplfl.ResourcePartition:
+			var v restapi.Partition
+			if err := json.Unmarshal(raw, &v); err != nil {
+				return nil, err
+			}
+			out.Partitions = append(out.Partitions, partitionFromRest(v))
+		}
 	}
 	return out, nil
 }

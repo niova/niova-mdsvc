@@ -30,9 +30,9 @@ Top-level shapes:
 
 > **Implementation status (niova):** the envelope, the HTTP-code policy, and the
 > payload-shape alignments below (vdev `name`/`failure_domain`/`pfs_id` echoes,
-> user `account_status`, snake_case `mount_vdev`) are done. Still open: converting
-> `GET /api/resource` from typed slices to a generic array, and porting the whole
-> envelope to mdsvc-tidb.
+> user `account_status`, snake_case `mount_vdev`, and `GET /api/resource`'s generic
+> `resources` array) are all done. Still open: porting the whole envelope to
+> mdsvc-tidb.
 
 ---
 
@@ -162,15 +162,16 @@ Response (fields align):
 | `type` | Q | ✅ | ✅ |
 | `id` | Q | ✅ (single-fetch) | ⚠️ not supported |
 
-Response:
+Response payload:
 
 | niova | tidb |
 |---|---|
-| `success`, `type`, **typed slices** `pdus[]`/`racks[]`/`hypervisors[]`/`devices[]`/`nisds[]`/`partitions[]`, `error?` | `…BaseResponse`, `type`, **generic** `resources` (array) |
+| `type`, **generic** `resources` (array of flat entity objects) | `…BaseResponse`, `type`, **generic** `resources` (array) |
 
-⚠️ **Shape mismatch:** niova returns one typed slice per resource type; tidb
-returns a single generic `resources` array. ⚠️ niova has a **`partition`** resource
-type tidb lacks. ⚠️ niova supports single-fetch via `?id=`; tidb does not.
+✅ **Resolved:** niova now returns a single generic `resources` array (matching
+TiDB), not typed per-type slices; all elements are of the requested `type`. niova
+keeps two non-conflicting extras: the **`partition`** type (tidb lacks it) and
+single-fetch via `?id=` — both carried in the same generic array.
 
 ### `PUT /api/resource` — upsert one entity
 
@@ -371,10 +372,9 @@ pending for the shared-envelope items):
    bodies are nearly disjoint (`username`/`new_secret_key` vs `role`/`status`/`new_password`).
    *(Unchanged — a genuine model difference, not a wire mismatch.)*
 4. ✅ **`status` vs `account_status`** — niova now emits `account_status`.
-5. **Collection vs single.** `GET /api/pfs` and `GET /api/resource`: niova returns
-   lists/typed-slices, tidb single/generic. niova PFS is already a list (tidb should
-   adopt it); **`GET /api/resource` typed→generic is the one remaining niova-side
-   decision** (see below).
+5. ✅ **Collection vs single.** `GET /api/resource` now returns a generic
+   `resources` array (matching tidb). `GET /api/pfs` is a list on niova (a superset;
+   tidb should adopt the list) — no niova change needed.
 6. **Write-response `id`.** niova returns the mutated id (`WritePayload.id`); tidb
    returns status only, and uses `pfs_id` where niova uses `id`.
 7. **`X-RNCUI` header.** Required on every niova write (PumiceDB dedup); unknown to

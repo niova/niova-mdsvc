@@ -694,8 +694,15 @@ func TestHandleGetResource_PDU(t *testing.T) {
 	h.handleGetResource(rr, httptest.NewRequest(http.MethodGet, "/api/resource?type=pdu", nil))
 
 	got := decodePayload[restapi.GetResourcePayload](t, rr)
-	if got.Type != "pdu" || len(got.PDUs) != 1 || got.PDUs[0].ID != "pdu-1" || got.PDUs[0].PowerCap != "5kW" {
+	if got.Type != "pdu" || len(got.Resources) != 1 {
 		t.Fatalf("payload = %+v", got)
+	}
+	var pdu restapi.PDU
+	if err := json.Unmarshal(got.Resources[0], &pdu); err != nil {
+		t.Fatalf("unmarshal resource: %v", err)
+	}
+	if pdu.ID != "pdu-1" || pdu.PowerCap != "5kW" {
+		t.Fatalf("pdu = %+v", pdu)
 	}
 }
 
@@ -710,8 +717,15 @@ func TestHandleGetResource_SingleFetch(t *testing.T) {
 	h.handleGetResource(rr, httptest.NewRequest(http.MethodGet, "/api/resource?type=nisd&id=nisd-1", nil))
 
 	got := decodePayload[restapi.GetResourcePayload](t, rr)
-	if len(got.Nisds) != 1 || got.Nisds[0].ID != "nisd-1" {
+	if len(got.Resources) != 1 {
 		t.Fatalf("payload = %+v", got)
+	}
+	var nisd restapi.NISD
+	if err := json.Unmarshal(got.Resources[0], &nisd); err != nil {
+		t.Fatalf("unmarshal resource: %v", err)
+	}
+	if nisd.ID != "nisd-1" {
+		t.Fatalf("nisd = %+v", nisd)
 	}
 	// A single-entity fetch must forward the id and disable GetAll.
 	gr, ok := cap.cpReq.Payload.(cpLib.GetResourceReq)

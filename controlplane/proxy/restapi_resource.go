@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"net/http"
 	"strings"
 
@@ -259,31 +260,40 @@ func (handler *proxyHandler) handleGetResource(w http.ResponseWriter, r *http.Re
 		return
 	}
 
+	// Emit a single generic `resources` array (TiDB shape). Every element is the
+	// flat per-type DTO of the requested type, carried as raw JSON.
 	resp := restapi.GetResourcePayload{Type: rtype}
+	appendResource := func(v any) {
+		b, mErr := json.Marshal(v)
+		if mErr != nil {
+			return
+		}
+		resp.Resources = append(resp.Resources, b)
+	}
 	switch cpLib.ResourceType(rtype) {
 	case cpLib.ResourcePDU:
 		for _, p := range rl.PDUs {
-			resp.PDUs = append(resp.PDUs, toRestPDU(p))
+			appendResource(toRestPDU(p))
 		}
 	case cpLib.ResourceRack:
 		for _, x := range rl.Racks {
-			resp.Racks = append(resp.Racks, toRestRack(x))
+			appendResource(toRestRack(x))
 		}
 	case cpLib.ResourceHypervisor:
 		for _, x := range rl.Hypervisors {
-			resp.Hypervisors = append(resp.Hypervisors, toRestHypervisor(x))
+			appendResource(toRestHypervisor(x))
 		}
 	case cpLib.ResourceDevice:
 		for _, x := range rl.Devices {
-			resp.Devices = append(resp.Devices, toRestDevice(x))
+			appendResource(toRestDevice(x))
 		}
 	case cpLib.ResourceNisd:
 		for _, x := range rl.Nisds {
-			resp.Nisds = append(resp.Nisds, toRestNISD(x))
+			appendResource(toRestNISD(x))
 		}
 	case cpLib.ResourcePartition:
 		for _, x := range rl.Partitions {
-			resp.Partitions = append(resp.Partitions, toRestPartition(x))
+			appendResource(toRestPartition(x))
 		}
 	}
 	restapi.WriteData(w, resp)

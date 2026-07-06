@@ -1,21 +1,20 @@
 package restapi
 
+import "encoding/json"
+
 // This file defines the payloads for the resource/pfs/infra read endpoints
 // (GET /api/resource, GET /api/pfs, GET /api/infra). Each is carried inside the
 // APIResponse[T] envelope. The per-entity item shapes reuse the write DTOs
 // (PDU/Rack/.../NISD/Partition).
 
 // GetResourcePayload is the payload of the get-resource envelope. It mirrors the
-// internal ResourceListResp: only the slice matching the requested type is
-// populated.
+// TiDB shape: a single generic `resources` array (rather than typed per-type
+// slices), where every element is a flat entity object of the requested `type`.
+// Elements are carried as json.RawMessage so the proxy can emit the per-type DTO
+// and the client can decode it back into the matching type.
 type GetResourcePayload struct {
-	Type        string       `json:"type,omitempty"`
-	PDUs        []PDU        `json:"pdus,omitempty"`
-	Racks       []Rack       `json:"racks,omitempty"`
-	Hypervisors []Hypervisor `json:"hypervisors,omitempty"`
-	Devices     []Device     `json:"devices,omitempty"`
-	Nisds       []NISD       `json:"nisds,omitempty"`
-	Partitions  []Partition  `json:"partitions,omitempty"`
+	Type      string            `json:"type,omitempty"`
+	Resources []json.RawMessage `json:"resources,omitempty"`
 }
 
 // GetPFSPayload is the payload of the get-pfs envelope.
