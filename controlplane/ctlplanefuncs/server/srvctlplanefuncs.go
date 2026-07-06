@@ -1039,7 +1039,7 @@ func APCreateVdev(args ...interface{}) (interface{}, error) {
 		log.Infof("APCreateVdev: resolved PFS name %q to ID %s for vdev %s", req.Vdev.PFSName, req.Vdev.PFSID, req.Vdev.ID)
 	}
 
-	offset := 0
+	offset := rand.Intn(HR.GetEntityCnt(ctlplfl.DEVICE_IDX) + 1)
 	if req.Vdev.PFSID != "" {
 		offsetKey := fmt.Sprintf("%s/%s/offset", pfsKey, req.Vdev.PFSID)
 		res, err := cbArgs.Store.Read(offsetKey, colmfamily)
