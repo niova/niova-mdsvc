@@ -107,7 +107,7 @@ func TestUserAuthVdevCreation(t *testing.T) {
 
 	// Step 3: Admin creates a vdev with their access token
 	vdev1 := &cpLib.VdevReq{
-		Vdev: &cpLib.VdevCfg{
+		Vdev: &cpLib.VdevConfig{
 			Name:       vdevName,
 			Size:       8 * 1024 * 1024 * 1024, // 8 GB
 			DataBlkCnt: 1,
@@ -246,7 +246,7 @@ func TestCreateVdevForMountCounter(t *testing.T) {
 
 	vdevID := setupVdev(t, c, 8*1024*1024*1024)
 
-	vdevCfg, err := c.GetVdevCfg(&cpLib.GetReq{ID: vdevID})
+	vdevCfg, err := c.GetVdevConfigs(&cpLib.GetReq{ID: vdevID})
 	assert.NoError(t, err)
 	require.NotNil(t, vdevCfg)
 
@@ -259,9 +259,9 @@ func TestGetVdevMountCounter(t *testing.T) {
 	vdevID := os.Getenv("VDEV_ID")
 	require.NotEmpty(t, vdevID, "VDEV_ID env var must be set")
 
-	vdevCfg, err := c.GetVdevCfg(&cpLib.GetReq{ID: vdevID})
+	vdevCfg, err := c.GetVdevConfigs(&cpLib.GetReq{ID: vdevID})
 	assert.NoError(t, err)
 	require.NotNil(t, vdevCfg)
 	log.Infof("Vdev ID: %s", vdevID)
-	log.Infof("current mount counter: %d", vdevCfg.VdevMountInfo.MountCounter)
+	log.Infof("current mount counter: %d", vdevCfg[0].VdevMountInfo.MountCounter)
 }
