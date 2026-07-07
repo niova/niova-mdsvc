@@ -95,7 +95,7 @@ func vdevConfigCollector() metricCollector {
 		payload:  nil,
 		errLabel: "VDev config",
 		render: func(payload any, proxyStr string, b *strings.Builder) {
-			vdevList, ok := payload.([]cpLib.VdevCfg)
+			vdevList, ok := payload.([]cpLib.VdevConfig)
 			if !ok {
 				return
 			}
@@ -110,8 +110,8 @@ func vdevConfigCollector() metricCollector {
 			for _, v := range vdevList {
 				vl := fmt.Sprintf(`proxy="%s",vdev="%s"`, proxyStr, v.ID)
 				fmt.Fprintf(b, "proxy_vdev_size_bytes{%s} %d\n", vl, v.Size)
-				fmt.Fprintf(b, "proxy_vdev_num_chunks{%s} %d\n", vl, uint64(v.NumChunks))
-				fmt.Fprintf(b, "proxy_vdev_num_replicas{%s} %d\n", vl, uint64(v.NumReplica))
+				fmt.Fprintf(b, "proxy_vdev_num_chunks{%s} %d\n", vl, uint64(v.ChunkCnt))
+				fmt.Fprintf(b, "proxy_vdev_num_replicas{%s} %d\n", vl, uint64(v.DataBlkCnt))
 				fdType := v.FilterType
 				if fdType == "" {
 					fdType = "any"

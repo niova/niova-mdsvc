@@ -560,8 +560,8 @@ func (ccf *CliCFuncs) GetNisdArgs(req ctlplfl.GetReq) (ctlplfl.NisdArgs, error) 
 	return args, nil
 }
 
-func (ccf *CliCFuncs) GetVdevCfg(req *ctlplfl.GetReq) (ctlplfl.VdevCfg, error) {
-	vdev := ctlplfl.VdevCfg{}
+func (ccf *CliCFuncs) GetVdevConfig(req *ctlplfl.GetReq) (ctlplfl.VdevConfig, error) {
+	vdev := ctlplfl.VdevConfig{}
 	cpReq := &ctlplfl.CPReq{
 		Token:   ccf.token,
 		Payload: req,
@@ -579,12 +579,12 @@ func (ccf *CliCFuncs) GetVdevCfg(req *ctlplfl.GetReq) (ctlplfl.VdevCfg, error) {
 	return vdev, nil
 }
 
-func (ccf *CliCFuncs) GetVdevCfgs(req *ctlplfl.GetReq) ([]ctlplfl.VdevCfg, error) {
+func (ccf *CliCFuncs) GetVdevConfigs(req *ctlplfl.GetReq) ([]ctlplfl.VdevConfig, error) {
 	cpReq := &ctlplfl.CPReq{
 		Token:   ccf.token,
 		Payload: req,
 	}
-	vdevs := make([]ctlplfl.VdevCfg, 0)
+	vdevs := make([]ctlplfl.VdevConfig, 0)
 	cpResp, err := ccf.get(cpReq, ctlplfl.GET_ALL_VDEV, &vdevs)
 	if err != nil {
 		log.Error("Read Vdev Cfg failed: ", err)
@@ -658,6 +658,46 @@ func (ccf *CliCFuncs) GetResources(req *ctlplfl.GetResourceReq) (*ctlplfl.Resour
 	return resp, nil
 }
 
+func (ccf *CliCFuncs) GetChunk(req *ctlplfl.GetReq) (ctlplfl.Chunk, error) {
+	cn := ctlplfl.Chunk{}
+	log.Info("fetching chunk Info for:", req.ID)
+	cpReq := &ctlplfl.CPReq{
+		Token:   ccf.token,
+		Payload: req,
+	}
+	cpResp, err := ccf.get(cpReq, ctlplfl.GET_CHUNK, &cn)
+	if err != nil {
+		log.Error("GetChunk failed: ", err)
+		return cn, err
+	}
+
+	if err := cpResp.Err(); err != nil {
+		return cn, err
+	}
+
+	return cn, nil
+}
+
+func (ccf *CliCFuncs) GetChunks(req *ctlplfl.GetReq) ([]ctlplfl.Chunk, error) {
+	var chunks []ctlplfl.Chunk
+	log.Info("fetching bulk chunks for:", req.ID)
+	cpReq := &ctlplfl.CPReq{
+		Token:   ccf.token,
+		Payload: req,
+	}
+	cpResp, err := ccf.get(cpReq, ctlplfl.GET_CHUNK, &chunks)
+	if err != nil {
+		log.Error("GetChunks failed: ", err)
+		return nil, err
+	}
+
+	if err := cpResp.Err(); err != nil {
+		return nil, err
+	}
+
+	return chunks, nil
+}
+
 func (ccf *CliCFuncs) DeleteVdev(req *ctlplfl.DeleteVdevReq) (*ctlplfl.ResponseXML, error) {
 	resp := &ctlplfl.ResponseXML{}
 	cpreq := &ctlplfl.CPReq{
@@ -676,8 +716,8 @@ func (ccf *CliCFuncs) DeleteVdev(req *ctlplfl.DeleteVdevReq) (*ctlplfl.ResponseX
 	return resp, nil
 }
 
-func (ccf *CliCFuncs) MountVdev(req *ctlplfl.MountVdevRequest) (ctlplfl.VdevCfg, error) {
-	vdev := ctlplfl.VdevCfg{}
+func (ccf *CliCFuncs) MountVdev(req *ctlplfl.MountVdevRequest) (ctlplfl.VdevConfig, error) {
+	vdev := ctlplfl.VdevConfig{}
 	cpReq := &ctlplfl.CPReq{
 		Token:   ccf.token,
 		Payload: req,

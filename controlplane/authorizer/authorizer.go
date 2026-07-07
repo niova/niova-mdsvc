@@ -44,16 +44,18 @@ const (
 	ReadVdevInfo                  FunctionName = "ReadVdevInfo"
 	APDeleteVdev                  FunctionName = "APDeleteVdev"
 	ReadAllVdevInfo               FunctionName = "ReadAllVdevInfo"
+	ReadChunk                     FunctionName = "ReadChunk"
 	ReadChunkNisd                 FunctionName = "ReadChunkNisd"
-	RdNisdArgs                    FunctionName = "RdNisdArgs"
-	WPMountVdev                   FunctionName = "WPMountVdev"
-	APMountVdev                   FunctionName = "APMountVdev"
-	WPPFSCfg                      FunctionName = "WPPFSCfg"
-	ReadPFSCfg                    FunctionName = "ReadPFSCfg"
-	PutUser                       FunctionName = "PutUser"
-	GetUser                       FunctionName = "GetUser"
-	CreateAdminUser               FunctionName = "CreateAdminUser"
-	Login                         FunctionName = "Login"
+
+	RdNisdArgs      FunctionName = "RdNisdArgs"
+	WPMountVdev     FunctionName = "WPMountVdev"
+	APMountVdev     FunctionName = "APMountVdev"
+	WPPFSCfg        FunctionName = "WPPFSCfg"
+	ReadPFSCfg      FunctionName = "ReadPFSCfg"
+	PutUser         FunctionName = "PutUser"
+	GetUser         FunctionName = "GetUser"
+	CreateAdminUser FunctionName = "CreateAdminUser"
+	Login           FunctionName = "Login"
 )
 
 // defaultPolicies defines the full RBAC/ABAC policy for every registered function.
@@ -125,6 +127,12 @@ var defaultPolicies = map[FunctionName]FunctionPolicy{
 	},
 	ReadAllVdevInfo: {
 		RBAC: []string{"admin"},
+	},
+	ReadChunk: {
+		RBAC: []string{"user", "admin"},
+		ABAC: []ABACRule{
+			{Argument: "vdev", Prefix: "v/"},
+		},
 	},
 	ReadChunkNisd: {
 		RBAC: []string{"user", "admin"},

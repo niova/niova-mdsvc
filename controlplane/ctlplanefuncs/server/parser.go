@@ -22,6 +22,15 @@ const ( // Key Prefixes
 	NET_IDX = 3
 )
 
+const (
+	CHUNK_REDUNDANCY = 0
+	CHUNK_SEQ        = 1
+	CHUNK_PLACMENT   = 4
+
+	MIN_CHUNK_KEY_LEN           = 5
+	MIN_CHUNK_PLACEMENT_KEY_LEN = 2
+)
+
 type Entity interface{}
 
 type ParseEntity interface {
@@ -31,17 +40,17 @@ type ParseEntity interface {
 	GetEntity(entity Entity) Entity
 }
 
-func ParseEntitiesRR[T Entity](readResult []map[string][]byte, pe ParseEntity) []T {
+func ParseEntitiesRR[T Entity](readResult []map[string][]byte, pe ParseEntity, idIdx int) []T {
 	entityMap := make(map[string]Entity)
 
 	for i := range readResult {
 		for k, v := range readResult[i] {
 			parts := strings.Split(strings.Trim(k, "/"), "/")
-			if len(parts) < ELEMENT_KEY || parts[BASE_KEY] != pe.GetRootKey() {
+			if len(parts) <= idIdx || parts[BASE_KEY] != pe.GetRootKey() {
 				continue
 			}
 
-			id := parts[BASE_UUID_PREFIX]
+			id := parts[idIdx]
 			entity, exists := entityMap[id]
 			if !exists {
 				entity = pe.NewEntity(id)
@@ -59,16 +68,16 @@ func ParseEntitiesRR[T Entity](readResult []map[string][]byte, pe ParseEntity) [
 	return result
 }
 
-func ParseEntities[T Entity](readResult map[string][]byte, pe ParseEntity) []T {
+func ParseEntities[T Entity](readResult map[string][]byte, pe ParseEntity, idIdx int) []T {
 	entityMap := make(map[string]Entity)
 
 	for k, v := range readResult {
 		parts := strings.Split(strings.Trim(k, "/"), "/")
-		if len(parts) < ELEMENT_KEY || parts[BASE_KEY] != pe.GetRootKey() {
+		if len(parts) <= idIdx || parts[BASE_KEY] != pe.GetRootKey() {
 			continue
 		}
 
-		id := parts[BASE_UUID_PREFIX]
+		id := parts[idIdx]
 		entity, exists := entityMap[id]
 		if !exists {
 			entity = pe.NewEntity(id)
@@ -84,17 +93,17 @@ func ParseEntities[T Entity](readResult map[string][]byte, pe ParseEntity) []T {
 	return result
 }
 
-func ParseEntitiesMap(readResult map[string][]byte, pe ParseEntity) map[string]Entity {
+func ParseEntitiesMap(readResult map[string][]byte, pe ParseEntity, idIdx int) map[string]Entity {
 	entityMap := make(map[string]Entity)
 
 	for k, v := range readResult {
 		parts := strings.Split(strings.Trim(k, "/"), "/")
 		// require at least ELEMENT_KEY to be present and that base key matches parser root
-		if len(parts) <= ELEMENT_KEY || parts[BASE_KEY] != pe.GetRootKey() {
+		if len(parts) <= idIdx || parts[BASE_KEY] != pe.GetRootKey() {
 			continue
 		}
 
-		id := parts[BASE_UUID_PREFIX]
+		id := parts[idIdx]
 		entity, exists := entityMap[id]
 		if !exists {
 			entity = pe.NewEntity(id)
@@ -198,6 +207,7 @@ func (deviceParser) ParseField(entity Entity, parts []string, value []byte) {
 }
 func (deviceParser) GetEntity(entity Entity) Entity { return *entity.(*ctlplfl.Device) }
 */
+
 // nisd parser
 type NisdParser struct{}
 
@@ -381,10 +391,10 @@ type vdevParser struct{}
 
 func (vdevParser) GetRootKey() string { return vdevKey }
 func (vdevParser) NewEntity(id string) Entity {
-	return &ctlplfl.VdevCfg{ID: id}
+	return &ctlplfl.VdevConfig{ID: id}
 }
 func (vdevParser) ParseField(entity Entity, parts []string, value []byte) {
-	vdev := entity.(*ctlplfl.VdevCfg)
+	vdev := entity.(*ctlplfl.VdevConfig)
 	if len(parts) > VDEV_ELEMENT_KEY && parts[VDEV_CFG_C_KEY] == cfgkey {
 		switch parts[VDEV_ELEMENT_KEY] {
 		case SIZE:
@@ -393,11 +403,19 @@ func (vdevParser) ParseField(entity Entity, parts []string, value []byte) {
 			}
 		case NUM_CHUNKS:
 			if nc, err := strconv.ParseUint(string(value), 10, 32); err == nil {
-				vdev.NumChunks = uint32(nc)
+				vdev.ChunkCnt = uint32(nc)
 			}
-		case NUM_REPLICAS:
-			if nr, err := strconv.ParseUint(string(value), 10, 8); err == nil {
-				vdev.NumReplica = uint8(nr)
+		case TOTAL_DATA_BLKS:
+			if nd, err := strconv.ParseUint(string(value), 10, 8); err == nil {
+				vdev.DataBlkCnt = uint8(nd)
+			}
+		case TOTAL_PARITY_BLKS:
+			if np, err := strconv.ParseUint(string(value), 10, 8); err == nil {
+				vdev.ParityBlkCnt = uint8(np)
+			}
+		case REDUNDANCY_MODE:
+			if rm, err := strconv.Atoi(string(value)); err == nil {
+				vdev.Redundancy = ctlplfl.RedundancyMode(rm)
 			}
 		case pfsKey:
 			vdev.PFSID = string(value)
@@ -422,4 +440,130 @@ func (vdevParser) ParseField(entity Entity, parts []string, value []byte) {
 	}
 }
 
-func (vdevParser) GetEntity(entity Entity) Entity { return *entity.(*ctlplfl.VdevCfg) }
+func (vdevParser) GetEntity(entity Entity) Entity { return *entity.(*ctlplfl.VdevConfig) }
+
+// Chunk parser
+// Key format: v/<vdevID>/c/<chunkIdx>/<Placement>
+// Replication: v/<vdevID>/c/0/D.0 -> nisd-1
+// EC:          v/<vdevID>/c/0/D.0 -> nisd-1
+//
+//	v/<vdevID>/c/0/P.0 -> nisd-2
+type chunkParser struct{}
+
+func (chunkParser) GetRootKey() string { return vdevKey }
+
+func (chunkParser) NewEntity(id string) Entity {
+	idx, _ := strconv.ParseUint(id, 10, 32)
+	return &ctlplfl.Chunk{
+		Index:      uint32(idx),
+		Placements: make([]ctlplfl.ChunkPlacement, 0),
+	}
+}
+
+func (chunkParser) ParseField(entity Entity, parts []string, value []byte) {
+	chunk := entity.(*ctlplfl.Chunk)
+	if len(parts) < MIN_CHUNK_KEY_LEN {
+		return
+	}
+
+	placementStr := parts[CHUNK_PLACMENT] // e.g. "D.0", "P.0"
+	pParts := strings.Split(placementStr, ".")
+	if len(pParts) != MIN_CHUNK_PLACEMENT_KEY_LEN {
+		return
+	}
+	seq, err := strconv.ParseUint(pParts[CHUNK_SEQ], 10, 8)
+	if err != nil {
+		return
+	}
+
+	placement := ctlplfl.ChunkPlacement{
+		Sequence: uint8(seq),
+		NisdID:   string(value),
+	}
+
+	// "D" is shared by replica and EC-data placements; the caller resolves
+	// which one it actually is from the vdev-level redundancy mode.
+	switch pParts[CHUNK_REDUNDANCY] {
+	case "D":
+		placement.Type = ctlplfl.Data
+		chunk.Redundancy = ctlplfl.RMEC32K
+	case "P":
+		placement.Type = ctlplfl.Parity
+		chunk.Redundancy = ctlplfl.RMEC32K
+	}
+
+	chunk.Placements = append(chunk.Placements, placement)
+}
+
+func (chunkParser) GetEntity(entity Entity) Entity { return *entity.(*ctlplfl.Chunk) }
+
+type cnInternal struct {
+	cn     ctlplfl.ChunkNisd
+	data   map[uint8]string
+	parity map[uint8]string
+}
+
+type chunkNisdParser struct{}
+
+func (chunkNisdParser) GetRootKey() string { return vdevKey }
+
+func (chunkNisdParser) NewEntity(id string) Entity {
+	return &cnInternal{
+		data:   make(map[uint8]string),
+		parity: make(map[uint8]string),
+	}
+}
+
+func (chunkNisdParser) ParseField(entity Entity, parts []string, value []byte) {
+	in := entity.(*cnInternal)
+
+	if len(parts) < MIN_CHUNK_KEY_LEN {
+		return
+	}
+
+	placement := strings.Split(parts[CHUNK_PLACMENT], ".")
+	if len(placement) != MIN_CHUNK_PLACEMENT_KEY_LEN {
+		return
+	}
+
+	seq, err := strconv.ParseUint(placement[CHUNK_SEQ], 10, 8)
+	if err != nil {
+		return
+	}
+
+	idx := uint8(seq)
+	nisdID := string(value)
+
+	switch placement[CHUNK_REDUNDANCY] {
+	case "D":
+		in.data[idx] = nisdID
+	case "P":
+		in.parity[idx] = nisdID
+	}
+}
+
+func (chunkNisdParser) GetEntity(entity Entity) Entity {
+	in := entity.(*cnInternal)
+
+	var ids []string
+
+	// Replica and EC-data blocks share "D" and are ordered by sequence number;
+	// parity blocks (EC only) are appended in sequence order after them.
+	for i := uint8(0); ; i++ {
+		id, ok := in.data[i]
+		if !ok {
+			break
+		}
+		ids = append(ids, id)
+	}
+	for i := uint8(0); ; i++ {
+		id, ok := in.parity[i]
+		if !ok {
+			break
+		}
+		ids = append(ids, id)
+	}
+
+	in.cn.NisdIDs = strings.Join(ids, ",")
+	return in.cn
+}

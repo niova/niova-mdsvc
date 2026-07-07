@@ -101,7 +101,7 @@ func PopulateHierarchy() error {
 		key = readResult.LastKey
 		prefix = filepath.Dir(readResult.LastKey)
 	}
-	nisdList := srvctlplanefuncs.ParseEntitiesRR[cpLib.Nisd](rangeReadContOut, srvctlplanefuncs.NisdParser{})
+	nisdList := srvctlplanefuncs.ParseEntitiesRR[cpLib.Nisd](rangeReadContOut, srvctlplanefuncs.NisdParser{}, srvctlplanefuncs.BASE_UUID_PREFIX)
 	for i := 0; i < len(nisdList); i++ {
 		err := srvctlplanefuncs.HR.AddNisd(&nisdList[i])
 		if err != nil {
@@ -195,7 +195,9 @@ func main() {
 	cpAPI.RegisterWritePrepFunc(cpLib.PUT_NISD_ARGS, srvctlplanefuncs.WPNisdArgs)
 	cpAPI.RegisterReadFunc(cpLib.GET_VDEV_INFO, srvctlplanefuncs.ReadVdevInfo)
 	cpAPI.RegisterReadFunc(cpLib.GET_ALL_VDEV, srvctlplanefuncs.ReadAllVdevInfo)
+	cpAPI.RegisterReadFunc(cpLib.GET_CHUNK, srvctlplanefuncs.ReadChunk)
 	cpAPI.RegisterReadFunc(cpLib.GET_CHUNK_NISD, srvctlplanefuncs.ReadChunkNisd)
+
 	cpAPI.RegisterReadFunc(cpLib.GET_NISD_AVAILABLE_SIZES, srvctlplanefuncs.ReadAllNisdConfigs)
 	cpAPI.RegisterReadFunc(cpLib.GET_ALL_RESOURCES, srvctlplanefuncs.ReadAllResources)
 	cpAPI.RegisterApplyFunc(cpLib.DELETE_VDEV, srvctlplanefuncs.APDeleteVdev)

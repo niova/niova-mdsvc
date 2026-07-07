@@ -104,9 +104,9 @@ func TestUserAuthVdevCreation(t *testing.T) {
 
 	// Step 3: Admin creates a vdev with their access token
 	vdev1 := &cpLib.VdevReq{
-		Vdev: &cpLib.VdevCfg{
+		Vdev: &cpLib.VdevConfig{
 			Size:       8 * 1024 * 1024 * 1024, // 8 GB
-			NumReplica: 1,
+			DataBlkCnt: 1,
 		},
 	}
 	vdevResp, err := ctlClient.CreateVdev(vdev1)
@@ -121,10 +121,10 @@ func TestUserAuthVdevCreation(t *testing.T) {
 	getReqUser := &cpLib.GetReq{
 		ID: vdevID,
 	}
-	vdevCfg, err := ctlClient.GetVdevCfg(getReqUser)
+	vdevCfg, err := ctlClient.GetVdevConfigs(getReqUser)
 	assert.NoError(t, err, "user should be able to read their own vdev")
-	assert.Equal(t, vdevID, vdevCfg.ID, "fetched vdev ID should match")
-	log.Infof("User successfully accessed their vdev: %s", vdevCfg.ID)
+	assert.Equal(t, vdevID, vdevCfg[0].ID, "fetched vdev ID should match")
+	log.Infof("User successfully accessed their vdev: %s", vdevCfg[0].ID)
 
 	// Step 5: Create normal user2
 	user2Username := "unauthorized_user_" + uuid.New().String()[:8]
@@ -209,9 +209,9 @@ func TestUserVdevCreationForMultipleBlockTest(t *testing.T) {
 
 	for i := 0; i < numVdevs; i++ {
 		vdevReq := &cpLib.VdevReq{
-			Vdev: &cpLib.VdevCfg{
+			Vdev: &cpLib.VdevConfig{
 				Size:       8 * 1024 * 1024 * 1024, // 8 GB
-				NumReplica: 1,
+				DataBlkCnt: 1,
 			},
 		}
 
@@ -227,7 +227,7 @@ func TestUserVdevCreationForMultipleBlockTest(t *testing.T) {
 	// validation
 	assert.Equal(t, numVdevs, len(vdevIDs), "should create all vdevs")
 	getReq := &cpLib.GetReq{}
-	vdevList, err := c.GetVdevCfgs(getReq)
+	vdevList, err := c.GetVdevConfigs(getReq)
 	assert.NoError(t, err, "should fetch all vdevs")
 	require.NotNil(t, vdevList, "vdev list should not be nil")
 	// vdevList now contains all vdevs

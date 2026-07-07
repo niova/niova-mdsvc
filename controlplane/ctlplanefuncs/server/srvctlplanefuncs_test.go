@@ -228,11 +228,11 @@ func TestWPCreateVdev(t *testing.T) {
 			cpReq := ctlplfl.CPReq{
 				Token: tc.setupToken(),
 				Payload: ctlplfl.VdevReq{
-					Vdev: &ctlplfl.VdevCfg{
+					Vdev: &ctlplfl.VdevConfig{
 						Name:       "wpvdev" + uuid.NewString()[:8],
 						Size:       tc.vdevSize,
-						NumChunks:  uint32(tc.numChunks),
-						NumReplica: uint8(tc.numReplica),
+						ChunkCnt:   uint32(tc.numChunks),
+						DataBlkCnt: uint8(tc.numReplica),
 					},
 				},
 			}
@@ -314,10 +314,10 @@ func TestWPCreateVdev_NilAuthorizer(t *testing.T) {
 	cpReq := ctlplfl.CPReq{
 		Token: token,
 		Payload: ctlplfl.VdevReq{
-			Vdev: &ctlplfl.VdevCfg{
+			Vdev: &ctlplfl.VdevConfig{
 				Size:       1073741824,
-				NumChunks:  4,
-				NumReplica: 3,
+				ChunkCnt:   4,
+				DataBlkCnt: 3,
 			},
 		},
 	}
@@ -434,7 +434,7 @@ func TestReadVdevInfo(t *testing.T) {
 				setupVdevData(ds, testVdevID)
 				// Add many chunks to ensure it exceeds the small reply buffer
 				for i := range 100 {
-					ds.Write(fmt.Sprintf("v/%s/c/%d/R.0", testVdevID, i), "nisd-001", "")
+					ds.Write(fmt.Sprintf("v/%s/c/%d/D.0", testVdevID, i), "nisd-001", "")
 				}
 				// Setup ownership key
 				ownershipKey := fmt.Sprintf("/u/%s/v/%s", testUserID1, testVdevID)
@@ -540,8 +540,8 @@ func TestAPDeleteVdev(t *testing.T) {
 	// mapped to testNisdUUID and a complete n_cfg subtree for that NISD.
 	setupBasicVdevAndNisd := func(ds storageiface.DataStore, vdevID, nisdID string) {
 		ds.Write(fmt.Sprintf("v/%s/cfg/size", vdevID), "8589934592", "")
-		ds.Write(fmt.Sprintf("v/%s/c/0/R.0", vdevID), nisdID, "")
-		ds.Write(fmt.Sprintf("n/%s/%s", nisdID, vdevID), "R.0.0", "")
+		ds.Write(fmt.Sprintf("v/%s/c/0/D.0", vdevID), nisdID, "")
+		ds.Write(fmt.Sprintf("n/%s/%s", nisdID, vdevID), "D.0.0", "")
 		ds.Write(fmt.Sprintf("%s/%s/d", NisdCfgKey, nisdID), testDev, "")
 		ds.Write(fmt.Sprintf("%s/%s/pp", NisdCfgKey, nisdID), "8160", "")
 		ds.Write(fmt.Sprintf("%s/%s/hv", NisdCfgKey, nisdID), testHV, "")
@@ -587,7 +587,7 @@ func TestAPDeleteVdev(t *testing.T) {
 					t.Error("Vdev metadata should be deleted")
 				}
 				// Chunk allocation key must be gone
-				if _, err := ds.Read(fmt.Sprintf("v/%s/c/0/R.0", testVdevUUID), ""); err == nil {
+				if _, err := ds.Read(fmt.Sprintf("v/%s/c/0/D.0", testVdevUUID), ""); err == nil {
 					t.Error("Chunk allocation should be deleted")
 				}
 				// NISD reverse-mapping key must be gone
@@ -622,11 +622,11 @@ func TestAPDeleteVdev(t *testing.T) {
 			setupData: func(ds storageiface.DataStore) {
 				// vdev has 2 chunks, each replica points to a different NISD
 				ds.Write(fmt.Sprintf("v/%s/cfg/size", testVdevUUID), "17179869184", "") // 16 GiB
-				ds.Write(fmt.Sprintf("v/%s/c/0/R.0", testVdevUUID), testNisdUUID, "")
-				ds.Write(fmt.Sprintf("v/%s/c/1/R.0", testVdevUUID), testNisdUUID2, "")
+				ds.Write(fmt.Sprintf("v/%s/c/0/D.0", testVdevUUID), testNisdUUID, "")
+				ds.Write(fmt.Sprintf("v/%s/c/1/D.0", testVdevUUID), testNisdUUID2, "")
 				// reverse-mapping for both NISDs
-				ds.Write(fmt.Sprintf("n/%s/%s", testNisdUUID, testVdevUUID), "R.0.0", "")
-				ds.Write(fmt.Sprintf("n/%s/%s", testNisdUUID2, testVdevUUID), "R.0.1", "")
+				ds.Write(fmt.Sprintf("n/%s/%s", testNisdUUID, testVdevUUID), "D.0.0", "")
+				ds.Write(fmt.Sprintf("n/%s/%s", testNisdUUID2, testVdevUUID), "D.0.1", "")
 				// n_cfg for NISD 1
 				for _, kv := range []struct{ k, v string }{
 					{"d", testDev}, {"pp", "8160"}, {"hv", testHV},
@@ -677,7 +677,7 @@ func TestAPDeleteVdev(t *testing.T) {
 					t.Error("Vdev metadata should be deleted")
 				}
 
-				_, err = ds.Read(fmt.Sprintf("v/%s/c/0/R.0", testVdevUUID), "")
+				_, err = ds.Read(fmt.Sprintf("v/%s/c/0/D.0", testVdevUUID), "")
 
 				if err == nil {
 					t.Error("Chunk allocation should be deleted")
