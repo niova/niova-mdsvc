@@ -447,7 +447,7 @@ func (vdevParser) GetEntity(entity Entity) Entity { return *entity.(*ctlplfl.Vde
 // Replication: v/<vdevID>/c/0/D.0 -> nisd-1
 // EC:          v/<vdevID>/c/0/D.0 -> nisd-1
 //
-//		v/<vdevID>/c/0/P.0 -> nisd-2
+//	v/<vdevID>/c/0/P.0 -> nisd-2
 type chunkParser struct{}
 
 func (chunkParser) GetRootKey() string { return vdevKey }
