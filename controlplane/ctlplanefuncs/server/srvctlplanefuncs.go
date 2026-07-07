@@ -1910,8 +1910,8 @@ func ReadChunk(args ...interface{}) (interface{}, error) {
 		return ctlplfl.EncodeResponse(chunkList)
 	}
 
-	// Resolve exact EC variant (32K/64K/128K) from the vdev-level redundancy key,
-	// since the chunk placement prefix (D/P) only signals generic EC.
+	// Resolve exact redundancy mode (Replica or EC 32K/64K/128K) from the vdev-level
+	// redundancy key, since the chunk placement prefix (D/P) only signals generic EC.
 	vdevRMKey := fmt.Sprintf("%s/%s/%s/%s", vdevKey, vdevID, cfgkey, REDUNDANCY_MODE)
 	if rmVal, err := cbargs.Store.Read(vdevRMKey, colmfamily); err == nil {
 		if rm, err := strconv.Atoi(string(rmVal)); err == nil {
@@ -1919,6 +1919,11 @@ func ReadChunk(args ...interface{}) (interface{}, error) {
 			for i := range chunkList {
 				if chunkList[i].Redundancy.IsEC() {
 					chunkList[i].Redundancy = ecType
+					if ecType == ctlplfl.RMReplica {
+						for j := range chunkList[i].Placements {
+							chunkList[i].Placements[j].Type = ctlplfl.Replica
+						}
+					}
 				}
 			}
 		}
@@ -2074,8 +2079,8 @@ func APDeleteVdev(args ...interface{}) (interface{}, error) {
 			})
 
 			// Check if it's a chunk allocation key
-			// Key format: v/<ID>/c/<chunk>/R.<Replica> -> <NISD_ID>
-			if strings.Contains(k, "/c/") && strings.Contains(k, "/R.") {
+			// Key format: v/<ID>/c/<chunk>/D.<Seq> or v/<ID>/c/<chunk>/P.<Seq> -> <NISD_ID>
+			if strings.Contains(k, "/c/") && (strings.Contains(k, "/D.") || strings.Contains(k, "/P.")) {
 				nisdID := string(v)
 
 				if _, ok := nisdRefundMap[nisdID]; !ok {

@@ -124,9 +124,7 @@ const (
 
 func ChunkPrefix(t ChunkType) string {
 	switch t {
-	case Replica:
-		return "R"
-	case Data:
+	case Replica, Data:
 		return "D"
 	case Parity:
 		return "P"
@@ -379,7 +377,7 @@ type Chunk struct {
 }
 
 type Vdev struct {
-	Cfg          VdevConfig  `xml:"Config"`
+	Cfg          VdevConfig  `xml:"Vdev"`
 	NisdToChkMap []NisdChunk `xml:"NisdChunks>Chunk"`
 }
 
@@ -464,15 +462,15 @@ type VdevMountInfo struct {
 	LastUpdatedLTS time.Time `xml:"LastUpdatedLTS" json:"LastUpdatedLTS"`
 }
 
-func (vdev *VdevConfig) Init() error {
+func (v *VdevConfig) Init() error {
 
 	id, err := uuid.NewV7()
 	if err != nil {
 		log.Error("failed to generate uuid:", err)
 		return err
 	}
-	vdev.ID = id.String()
-	vdev.ChunkCnt = uint32(Count8GBChunks(vdev.Size))
+	v.ID = id.String()
+	v.ChunkCnt = uint32(Count8GBChunks(v.Size))
 	return nil
 }
 

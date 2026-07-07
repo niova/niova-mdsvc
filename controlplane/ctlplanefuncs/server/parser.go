@@ -447,7 +447,7 @@ func (vdevParser) GetEntity(entity Entity) Entity { return *entity.(*ctlplfl.Vde
 // Replication: v/<vdevID>/c/0/D.0 -> nisd-1
 // EC:          v/<vdevID>/c/0/D.0 -> nisd-1
 //
-//	v/<vdevID>/c/0/P.0 -> nisd-2
+//		v/<vdevID>/c/0/P.0 -> nisd-2
 type chunkParser struct{}
 
 func (chunkParser) GetRootKey() string { return vdevKey }
@@ -466,7 +466,7 @@ func (chunkParser) ParseField(entity Entity, parts []string, value []byte) {
 		return
 	}
 
-	placementStr := parts[CHUNK_PLACMENT] // e.g. "R.0", "D.0", "P.0"
+	placementStr := parts[CHUNK_PLACMENT] // e.g. "D.0", "P.0"
 	pParts := strings.Split(placementStr, ".")
 	if len(pParts) != MIN_CHUNK_PLACEMENT_KEY_LEN {
 		return
@@ -481,10 +481,9 @@ func (chunkParser) ParseField(entity Entity, parts []string, value []byte) {
 		NisdID:   string(value),
 	}
 
+	// "D" is shared by replica and EC-data placements; the caller resolves
+	// which one it actually is from the vdev-level redundancy mode.
 	switch pParts[CHUNK_REDUNDANCY] {
-	case "R":
-		placement.Type = ctlplfl.Replica
-		chunk.Redundancy = ctlplfl.RMReplica
 	case "D":
 		placement.Type = ctlplfl.Data
 		chunk.Redundancy = ctlplfl.RMEC32K
@@ -499,10 +498,9 @@ func (chunkParser) ParseField(entity Entity, parts []string, value []byte) {
 func (chunkParser) GetEntity(entity Entity) Entity { return *entity.(*ctlplfl.Chunk) }
 
 type cnInternal struct {
-	cn      ctlplfl.ChunkNisd
-	replica map[uint8]string
-	data    map[uint8]string
-	parity  map[uint8]string
+	cn     ctlplfl.ChunkNisd
+	data   map[uint8]string
+	parity map[uint8]string
 }
 
 type chunkNisdParser struct{}
@@ -511,9 +509,8 @@ func (chunkNisdParser) GetRootKey() string { return vdevKey }
 
 func (chunkNisdParser) NewEntity(id string) Entity {
 	return &cnInternal{
-		replica: make(map[uint8]string),
-		data:    make(map[uint8]string),
-		parity:  make(map[uint8]string),
+		data:   make(map[uint8]string),
+		parity: make(map[uint8]string),
 	}
 }
 
@@ -538,8 +535,6 @@ func (chunkNisdParser) ParseField(entity Entity, parts []string, value []byte) {
 	nisdID := string(value)
 
 	switch placement[CHUNK_REDUNDANCY] {
-	case "R":
-		in.replica[idx] = nisdID
 	case "D":
 		in.data[idx] = nisdID
 	case "P":
@@ -552,31 +547,21 @@ func (chunkNisdParser) GetEntity(entity Entity) Entity {
 
 	var ids []string
 
-	if len(in.replica) > 0 {
-		// Replica: ordered by sequence number 0, 1, 2, ...
-		for i := uint8(0); ; i++ {
-			id, ok := in.replica[i]
-			if !ok {
-				break
-			}
-			ids = append(ids, id)
+	// Replica and EC-data blocks share "D" and are ordered by sequence number;
+	// parity blocks (EC only) are appended in sequence order after them.
+	for i := uint8(0); ; i++ {
+		id, ok := in.data[i]
+		if !ok {
+			break
 		}
-	} else {
-		// EC: data blocks first in sequence order, then parity blocks in sequence order
-		for i := uint8(0); ; i++ {
-			id, ok := in.data[i]
-			if !ok {
-				break
-			}
-			ids = append(ids, id)
+		ids = append(ids, id)
+	}
+	for i := uint8(0); ; i++ {
+		id, ok := in.parity[i]
+		if !ok {
+			break
 		}
-		for i := uint8(0); ; i++ {
-			id, ok := in.parity[i]
-			if !ok {
-				break
-			}
-			ids = append(ids, id)
-		}
+		ids = append(ids, id)
 	}
 
 	in.cn.NisdIDs = strings.Join(ids, ",")
