@@ -124,7 +124,7 @@ func (c *Client) nextRncui() string {
 
 // decodeEnvelope unmarshals an APIResponse[T] body and returns the payload. The
 // proxy reports failures either as a non-2xx status (handled by restResult before
-// this is called) or, on 2xx, as {success:false, error}; this surfaces the latter
+// this is called) or, on 2xx, as {status:<0, error}; this surfaces the latter
 // as a Go error too.
 func decodeEnvelope[T any](body []byte) (T, error) {
 	var zero T
@@ -132,7 +132,7 @@ func decodeEnvelope[T any](body []byte) (T, error) {
 	if err := json.Unmarshal(body, &resp); err != nil {
 		return zero, err
 	}
-	if !resp.Success {
+	if resp.Status != restapi.StatusOK {
 		if resp.Error != "" {
 			return zero, fmt.Errorf("%s", resp.Error)
 		}

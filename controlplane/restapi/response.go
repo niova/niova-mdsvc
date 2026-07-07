@@ -6,55 +6,100 @@ import (
 	"net/http"
 )
 
+// Status is the small fixed set of outcome codes carried in every APIResponse.
+// Zero means success; a negative value classifies a failure. This is richer
+// than a bare success/fail bool: callers can branch on the failure class
+// without string-matching the error message.
+type Status int
+
+const (
+	StatusOK               Status = 0
+	StatusBadRequest       Status = -1 // malformed/invalid request (validation failure)
+	StatusUnauthorized     Status = -2 // missing/invalid credentials or token
+	StatusForbidden        Status = -3 // authenticated but not permitted
+	StatusNotFound         Status = -4 // resource does not exist
+	StatusConflict         Status = -5 // resource already exists / state conflict
+	StatusMethodNotAllowed Status = -6 // wrong HTTP method for this route
+	StatusInternal         Status = -7 // internal/unexpected error
+)
+
+// httpStatus maps a Status to the HTTP status code used for the user/auth
+// endpoints, which answer with a real HTTP status per Status (see WriteError).
+// Non-user endpoints always answer HTTP 200 regardless of Status (see
+// WriteMethodError).
+func (s Status) httpStatus() int {
+	switch s {
+	case StatusOK:
+		return http.StatusOK
+	case StatusBadRequest:
+		return http.StatusBadRequest
+	case StatusUnauthorized:
+		return http.StatusUnauthorized
+	case StatusForbidden:
+		return http.StatusForbidden
+	case StatusNotFound:
+		return http.StatusNotFound
+	case StatusConflict:
+		return http.StatusConflict
+	case StatusMethodNotAllowed:
+		return http.StatusMethodNotAllowed
+	default:
+		return http.StatusInternalServerError
+	}
+}
+
 // APIResponse is the unified response envelope for the REST API. Every endpoint
 // returns this shape:
 //
-//   - Success is the verdict.
-//   - Error carries a human-readable message when Success is false (omitted on
-//     success).
+//   - Status is the verdict: 0 on success, negative on failure (see the Status
+//     constants for what each code means).
+//   - Error carries a human-readable message when Status is non-zero (omitted
+//     on success).
 //   - Payload carries the method-specific result on success (omitted on error).
 //
-// For non-user (infra/vdev/resource) endpoints the HTTP status is always 200 and
-// Success is the sole verdict: a method-level error is reported as
-// {success:false, error:"..."} with HTTP 200, never an HTTP error code. The
-// user/auth endpoints still use real HTTP status codes (see WriteError).
+// For non-user (infra/vdev/resource) endpoints the HTTP status is always 200
+// and Status is the sole verdict: a method-level error is reported as
+// {status:<0, error:"..."} with HTTP 200, never an HTTP error code. The
+// user/auth endpoints still use real HTTP status codes (see WriteError), in
+// addition to the same Status code in the body.
 type APIResponse[T any] struct {
-	Success bool   `json:"success"`
+	Status  Status `json:"status"`
 	Error   string `json:"error,omitempty"`
 	Payload *T     `json:"payload,omitempty"`
 }
 
 // ErrorResponse is the payload-less form of the envelope, used to write errors
 // (no payload) and to decode an error body without committing to a payload type.
-// It is wire-compatible with APIResponse[T] on the error path ({success:false,
+// It is wire-compatible with APIResponse[T] on the error path ({status:<0,
 // error:"..."}; payload omitted).
 type ErrorResponse struct {
-	Success bool   `json:"success"`
-	Error   string `json:"error,omitempty"`
+	Status Status `json:"status"`
+	Error  string `json:"error,omitempty"`
 }
 
-// WriteDataStatus writes a success envelope ({success:true, payload:{...}}) with
+// WriteDataStatus writes a success envelope ({status:0, payload:{...}}) with
 // an explicit HTTP status code. Used by the user/auth endpoints that return a
 // non-200 success status (e.g. 201 Created).
-func WriteDataStatus[T any](w http.ResponseWriter, status int, payload T) {
-	WriteJSON(w, status, APIResponse[T]{Success: true, Payload: &payload})
+func WriteDataStatus[T any](w http.ResponseWriter, httpStatus int, payload T) {
+	WriteJSON(w, httpStatus, APIResponse[T]{Status: StatusOK, Payload: &payload})
 }
 
 // WriteData writes a 200 success envelope carrying payload
-// ({success:true, payload:{...}}). Use for endpoint success responses.
+// ({status:0, payload:{...}}). Use for endpoint success responses.
 func WriteData[T any](w http.ResponseWriter, payload T) {
 	WriteDataStatus(w, http.StatusOK, payload)
 }
 
 // WriteMethodError writes a 200 envelope carrying a method (business) error
-// ({success:false, error:"..."}). The method ran and reported failure; the
-// verdict travels in the body, not the HTTP status. Use for non-user endpoints —
-// they never emit an HTTP error code. (Contrast WriteError, which sets a real
-// status code for the user/auth endpoints and for protocol rejections.)
-func WriteMethodError(w http.ResponseWriter, format string, args ...any) {
+// ({status:code, error:"..."}) classified by code. The method ran and reported
+// failure; the verdict travels in the body, not the HTTP status. Use for
+// non-user endpoints — they never emit an HTTP error code. (Contrast
+// WriteError, which sets a real status code for the user/auth endpoints and
+// for protocol rejections.)
+func WriteMethodError(w http.ResponseWriter, code Status, format string, args ...any) {
 	WriteJSON(w, http.StatusOK, ErrorResponse{
-		Success: false,
-		Error:   fmt.Sprintf(format, args...),
+		Status: code,
+		Error:  fmt.Sprintf(format, args...),
 	})
 }
 
@@ -69,12 +114,13 @@ func WriteJSON(w http.ResponseWriter, status int, v any) {
 	}
 }
 
-// WriteError writes a generic {success:false, error:msg} body with the given
-// status code. Handlers that need to populate endpoint-specific fields should
-// build their typed response with Success=false and call WriteJSON instead.
-func WriteError(w http.ResponseWriter, status int, format string, args ...any) {
-	WriteJSON(w, status, ErrorResponse{
-		Success: false,
-		Error:   fmt.Sprintf(format, args...),
+// WriteError writes a generic {status:code, error:msg} body, using code's
+// mapped HTTP status code (see Status.httpStatus). Handlers that need to
+// populate endpoint-specific fields should build their typed response with
+// the desired Status and call WriteJSON instead.
+func WriteError(w http.ResponseWriter, code Status, format string, args ...any) {
+	WriteJSON(w, code.httpStatus(), ErrorResponse{
+		Status: code,
+		Error:  fmt.Sprintf(format, args...),
 	})
 }

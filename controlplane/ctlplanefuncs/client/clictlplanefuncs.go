@@ -172,7 +172,7 @@ func restResult(body []byte, status int, err error) ([]byte, error) {
 
 // decodeEnvelope unmarshals an APIResponse[T] body and returns the payload.
 // Non-user endpoints report method errors inside the envelope (HTTP 200,
-// success:false); this surfaces them as a Go error so callers see failures
+// status:<0); this surfaces them as a Go error so callers see failures
 // uniformly, whether they arrive as an HTTP error (restResult) or an envelope
 // error. On success with no payload it returns the zero value and a nil error.
 func decodeEnvelope[T any](body []byte) (T, error) {
@@ -181,7 +181,7 @@ func decodeEnvelope[T any](body []byte) (T, error) {
 	if err := json.Unmarshal(body, &resp); err != nil {
 		return zero, err
 	}
-	if !resp.Success {
+	if resp.Status != restapi.StatusOK {
 		if resp.Error != "" {
 			return zero, errors.New(resp.Error)
 		}

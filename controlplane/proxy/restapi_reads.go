@@ -16,7 +16,7 @@ import (
 // from the one the endpoint supports.
 func requireMethod(w http.ResponseWriter, r *http.Request, method string) bool {
 	if r.Method != method {
-		restapi.WriteError(w, http.StatusMethodNotAllowed,
+		restapi.WriteError(w, restapi.StatusMethodNotAllowed,
 			"method %s not allowed; use %s", r.Method, method)
 		return false
 	}
@@ -31,23 +31,23 @@ func cpErrOf(resp *cpLib.CPResp) *cpLib.CPError {
 	return resp.Error
 }
 
-// statusForCPError maps a structured control-plane error to an HTTP status code.
-func statusForCPError(e *cpLib.CPError) int {
+// statusForCPError maps a structured control-plane error to a Status code.
+func statusForCPError(e *cpLib.CPError) restapi.Status {
 	switch e.Code {
 	case cpLib.ErrAuth:
 		if strings.Contains(strings.ToLower(e.Message), "authoriz") {
-			return http.StatusForbidden
+			return restapi.StatusForbidden
 		}
-		return http.StatusUnauthorized
+		return restapi.StatusUnauthorized
 	case cpLib.ErrInternal:
-		return http.StatusInternalServerError
+		return restapi.StatusInternal
 	case cpLib.ErrFunc:
 		if isNotFoundMessage(e.Message) {
-			return http.StatusNotFound
+			return restapi.StatusNotFound
 		}
-		return http.StatusBadRequest
+		return restapi.StatusBadRequest
 	default:
-		return http.StatusInternalServerError
+		return restapi.StatusInternal
 	}
 }
 
@@ -64,25 +64,27 @@ func writeCPError(w http.ResponseWriter, err error, cpErr *cpLib.CPError) {
 	case cpErr != nil:
 		restapi.WriteError(w, statusForCPError(cpErr), "%s", cpErr.Message)
 	case cpLib.IsKeyNotFoundError(err):
-		restapi.WriteError(w, http.StatusNotFound, "%s", err.Error())
+		restapi.WriteError(w, restapi.StatusNotFound, "%s", err.Error())
 	case err != nil:
-		restapi.WriteError(w, http.StatusInternalServerError, "%s", err.Error())
+		restapi.WriteError(w, restapi.StatusInternal, "%s", err.Error())
 	default:
-		restapi.WriteError(w, http.StatusInternalServerError, "unknown control-plane error")
+		restapi.WriteError(w, restapi.StatusInternal, "unknown control-plane error")
 	}
 }
 
 // writeMethodCPError reports a failed control-plane call for a non-user endpoint:
-// HTTP 200 with the error in the APIResponse envelope ({success:false, error}),
+// HTTP 200 with the error in the APIResponse envelope ({status:<0, error}),
 // never an HTTP error code. This is the non-user counterpart to writeCPError.
 func writeMethodCPError(w http.ResponseWriter, err error, cpErr *cpLib.CPError) {
 	switch {
 	case cpErr != nil:
-		restapi.WriteMethodError(w, "%s", cpErr.Message)
+		restapi.WriteMethodError(w, statusForCPError(cpErr), "%s", cpErr.Message)
+	case cpLib.IsKeyNotFoundError(err):
+		restapi.WriteMethodError(w, restapi.StatusNotFound, "%s", err.Error())
 	case err != nil:
-		restapi.WriteMethodError(w, "%s", err.Error())
+		restapi.WriteMethodError(w, restapi.StatusInternal, "%s", err.Error())
 	default:
-		restapi.WriteMethodError(w, "unknown control-plane error")
+		restapi.WriteMethodError(w, restapi.StatusInternal, "unknown control-plane error")
 	}
 }
 
@@ -112,7 +114,7 @@ func (handler *proxyHandler) handleGetVdev(w http.ResponseWriter, r *http.Reques
 	}
 	id := strings.TrimSpace(r.URL.Query().Get("id"))
 	if id == "" {
-		restapi.WriteMethodError(w, "missing required query parameter: id")
+		restapi.WriteMethodError(w, restapi.StatusBadRequest, "missing required query parameter: id")
 		return
 	}
 
@@ -127,7 +129,7 @@ func (handler *proxyHandler) handleGetVdev(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	if vdev.ID == "" {
-		restapi.WriteMethodError(w, "vdev %s not found", id)
+		restapi.WriteMethodError(w, restapi.StatusNotFound, "vdev %s not found", id)
 		return
 	}
 
@@ -150,7 +152,7 @@ func (handler *proxyHandler) handleGetNisd(w http.ResponseWriter, r *http.Reques
 	}
 	id := strings.TrimSpace(r.URL.Query().Get("id"))
 	if id == "" {
-		restapi.WriteMethodError(w, "missing required query parameter: id")
+		restapi.WriteMethodError(w, restapi.StatusBadRequest, "missing required query parameter: id")
 		return
 	}
 
@@ -165,7 +167,7 @@ func (handler *proxyHandler) handleGetNisd(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	if nisd.ID == "" {
-		restapi.WriteMethodError(w, "nisd %s not found", id)
+		restapi.WriteMethodError(w, restapi.StatusNotFound, "nisd %s not found", id)
 		return
 	}
 
@@ -192,12 +194,12 @@ func (handler *proxyHandler) handleGetChunk(w http.ResponseWriter, r *http.Reque
 	vdevID := strings.TrimSpace(q.Get("vdev_id"))
 	chunkStr := strings.TrimSpace(q.Get("chunk_idx"))
 	if vdevID == "" || chunkStr == "" {
-		restapi.WriteMethodError(w, "missing required query parameters: vdev_id and chunk_idx")
+		restapi.WriteMethodError(w, restapi.StatusBadRequest, "missing required query parameters: vdev_id and chunk_idx")
 		return
 	}
 	chunkIdx, perr := strconv.Atoi(chunkStr)
 	if perr != nil || chunkIdx < 0 {
-		restapi.WriteMethodError(w, "invalid chunk_idx %q: must be a non-negative integer", chunkStr)
+		restapi.WriteMethodError(w, restapi.StatusBadRequest, "invalid chunk_idx %q: must be a non-negative integer", chunkStr)
 		return
 	}
 
@@ -214,7 +216,7 @@ func (handler *proxyHandler) handleGetChunk(w http.ResponseWriter, r *http.Reque
 
 	ids := splitCSV(cn.NisdUUIDs)
 	if len(ids) == 0 {
-		restapi.WriteMethodError(w, "chunk %d not found for vdev %s", chunkIdx, vdevID)
+		restapi.WriteMethodError(w, restapi.StatusNotFound, "chunk %d not found for vdev %s", chunkIdx, vdevID)
 		return
 	}
 

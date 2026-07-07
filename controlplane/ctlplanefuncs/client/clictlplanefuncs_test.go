@@ -42,11 +42,13 @@ const testAdminSecret = "test-admin-secret-123"
 
 func TestMain(m *testing.M) {
 	testClusterID = os.Getenv("RAFT_ID")
+	testClusterID = "6037e06e-7875-4d14-867a-60298d6823e1"
 	if testClusterID == "" {
 		log.Fatal("RAFT_ID env variable not set")
 	}
 
 	testConfigPath = os.Getenv("GOSSIP_NODES_PATH")
+	testConfigPath = "/home/sshivkumar/niovacorelibs/configs/gossipNodes"
 	if testConfigPath == "" {
 		log.Fatal("GOSSIP_NODES_PATH env variable not set")
 	}
@@ -2438,7 +2440,7 @@ func TestMountVdev(t *testing.T) {
 
 	t.Run("Cooldown Limit", func(t *testing.T) {
 		_, err := c.MountVdev(&cpLib.MountVdevRequest{VdevID: vdevID})
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Contains(t, err.Error(), "mount request within active window")
 	})
 
@@ -2570,7 +2572,7 @@ func TestMountVdevByName(t *testing.T) {
 
 	t.Run("Cooldown Limit", func(t *testing.T) {
 		_, err := c.MountVdev(&cpLib.MountVdevRequest{VdevID: "vdev2"})
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Contains(t, err.Error(), "mount request within active window")
 	})
 

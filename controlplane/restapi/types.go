@@ -69,13 +69,6 @@ type NISDNode struct {
 	NetInfo       []NetworkInfo `json:"net_info,omitempty"`
 }
 
-// CreateInfraResponse is returned for /create_infra.
-type CreateInfraResponse struct {
-	Success bool   `json:"success"`
-	Message string `json:"message,omitempty"`
-	Error   string `json:"error,omitempty"`
-}
-
 // ---- /create_vdev ----
 
 type CreateVdevRequest struct {
@@ -138,23 +131,4 @@ type GetChunkPayload struct {
 	VdevID   string   `json:"vdev_id,omitempty"`
 	ChunkIdx int      `json:"chunk_idx"`
 	NisdIDs  []string `json:"nisd_ids,omitempty"`
-}
-
-// ---- /get_chunks (paginated) ----
-
-type ChunkPlacement struct {
-	ChunkIdx int      `json:"chunk_idx"`
-	NisdIDs  []string `json:"nisd_ids"`
-}
-
-type GetChunksResponse struct {
-	Success           bool             `json:"success"`
-	VdevID            string           `json:"vdev_id,omitempty"`
-	StartChunkIdx     int              `json:"start_chunk_idx"`
-	Limit             int              `json:"limit,omitempty"`
-	NextStartChunkIdx int              `json:"next_start_chunk_idx"`
-	HasMore           bool             `json:"has_more"`
-	TotalChunks       int              `json:"total_chunks"`
-	Chunks            []ChunkPlacement `json:"chunks,omitempty"`
-	Error             string           `json:"error,omitempty"`
 }
