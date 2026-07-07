@@ -481,10 +481,3 @@ func checkIsVdevDeleted(t *testing.T, client *CliCFuncs, id string) (bool, error
 	}
 	return false, nil
 }
-
-func calcUsagePercent(total, available int64) int64 {
-	if total == 0 {
-		return 0
-	}
-	return ((total - available) * 100) / total
-}
