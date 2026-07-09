@@ -226,3 +226,35 @@ func (handler *proxyHandler) handleGetChunk(w http.ResponseWriter, r *http.Reque
 		NisdIDs:  ids,
 	})
 }
+
+// ---- GET /api/recovery_assignment?vdev_id=&chunk_idx=&client_snapshot_seqno= ----
+
+// handleGetRecoveryAssignment is a stub: the wire contract (route, request
+// params, response envelope/payload shape) is defined ahead of the real
+// recovery-assignment control-plane logic, which does not exist yet. Once a
+// real implementation lands, this should look up chunk recovery placement
+// the same way handleGetChunk does. For now it always reports StatusInternal
+// after validating the request shape, so the client's request/parse path is
+// fully exercisable ahead of the real backing logic.
+func (handler *proxyHandler) handleGetRecoveryAssignment(w http.ResponseWriter, r *http.Request) {
+	if !requireMethod(w, r, http.MethodGet) {
+		return
+	}
+	q := r.URL.Query()
+	vdevID := strings.TrimSpace(q.Get("vdev_id"))
+	chunkStr := strings.TrimSpace(q.Get("chunk_idx"))
+	if vdevID == "" || chunkStr == "" {
+		restapi.WriteMethodError(w, restapi.StatusBadRequest, "missing required query parameters: vdev_id and chunk_idx")
+		return
+	}
+	if _, perr := strconv.Atoi(chunkStr); perr != nil {
+		restapi.WriteMethodError(w, restapi.StatusBadRequest, "invalid chunk_idx %q: must be a non-negative integer", chunkStr)
+		return
+	}
+	if strings.TrimSpace(q.Get("client_snapshot_seqno")) == "" {
+		restapi.WriteMethodError(w, restapi.StatusBadRequest, "missing required query parameter: client_snapshot_seqno")
+		return
+	}
+
+	restapi.WriteMethodError(w, restapi.StatusInternal, "recovery assignment not yet implemented")
+}

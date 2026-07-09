@@ -132,3 +132,18 @@ type GetChunkPayload struct {
 	ChunkIdx int      `json:"chunk_idx"`
 	NisdIDs  []string `json:"nisd_ids,omitempty"`
 }
+
+// ---- /api/recovery_assignment ----
+
+// GetRecoveryAssignmentPayload is the payload of the recovery-assignment
+// envelope. Not yet backed by real control-plane logic (see
+// handleGetRecoveryAssignment, which always reports StatusInternal) - the
+// shape is defined now so the client's REST contract is stable ahead of the
+// real implementation.
+type GetRecoveryAssignmentPayload struct {
+	VdevID        string   `json:"vdev_id,omitempty"`
+	ChunkIdx      int      `json:"chunk_idx"`
+	SnapshotSeqno int64    `json:"snapshot_seqno,omitempty"`
+	TgtNisd       string   `json:"tgt_nisd,omitempty"`
+	SrcNisdList   []string `json:"src_nisd_list,omitempty"`
+}

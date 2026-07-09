@@ -39,6 +39,7 @@ func (handler *proxyHandler) restMux() *http.ServeMux {
 	// reads.
 	mux.HandleFunc("GET /api/nisd", handler.handleGetNisd)
 	mux.HandleFunc("GET /api/chunk", handler.handleGetChunk)
+	mux.HandleFunc("GET /api/recovery_assignment", handler.handleGetRecoveryAssignment)
 	// user auth + management (mirrors the TiDB user endpoints). Login lives at
 	// /users/login (outside /api/), so the httpserver also delegates /users/.
 	mux.HandleFunc("POST /users/login", handler.handleLogin)

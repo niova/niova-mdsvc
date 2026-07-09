@@ -143,4 +143,10 @@ type MountVdevPayload struct {
 	LastUpdatedLTS time.Time `json:"last_updated_lts"`
 	PFSID          string    `json:"pfs_id,omitempty"`
 	AccessToken    string    `json:"access_token,omitempty"`
+	// DataBlkCnt/ParityBlkCnt round-trip cpLib.VdevCfg.NumDataBlk/NumParityBlk,
+	// which the client's mount-validation path requires (see
+	// nclient_cmi_mount_vdev_validate() in niova-block) but which handleMountVdev
+	// previously dropped when projecting into this payload.
+	DataBlkCnt   uint8 `json:"data_blk_cnt,omitempty"`
+	ParityBlkCnt uint8 `json:"parity_blk_cnt,omitempty"`
 }

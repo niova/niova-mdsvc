@@ -295,5 +295,7 @@ func (handler *proxyHandler) handleMountVdev(w http.ResponseWriter, r *http.Requ
 		LastUpdatedLTS: resp.VdevMountInfo.LastUpdatedLTS,
 		PFSID:          resp.PFSID,
 		AccessToken:    resp.AccessToken,
+		DataBlkCnt:     resp.NumDataBlk,
+		ParityBlkCnt:   resp.NumParityBlk,
 	})
 }
