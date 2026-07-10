@@ -27,7 +27,7 @@ func (handler *proxyHandler) restMux() *http.ServeMux {
 	mux.HandleFunc("GET /api/vdev", handler.handleGetVdev)
 	mux.HandleFunc("DELETE /api/vdev/{id}", handler.handleDeleteVdev)
 	mux.HandleFunc("POST /api/snap", handler.handleCreateSnap)
-	mux.HandleFunc("POST /api/mount_vdev", handler.handleMountVdev)
+	mux.HandleFunc("POST /api/vdev/mount", handler.handleMountVdev)
 	// infra entity reads/upserts.
 	mux.HandleFunc("GET /api/resource", handler.handleGetResource)
 	mux.HandleFunc("PUT /api/resource", handler.handlePutResource)

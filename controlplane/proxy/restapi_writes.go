@@ -255,7 +255,7 @@ func (handler *proxyHandler) handleDeleteVdev(w http.ResponseWriter, r *http.Req
 	handler.runEntityWrite(w, r, cpLib.DELETE_VDEV, cpLib.DeleteVdevReq{ID: id}, id)
 }
 
-// POST /api/mount_vdev (MOUNT_VDEV)
+// POST /api/vdev/mount (MOUNT_VDEV)
 func (handler *proxyHandler) handleMountVdev(w http.ResponseWriter, r *http.Request) {
 	if !requireMethod(w, r, http.MethodPost) {
 		return

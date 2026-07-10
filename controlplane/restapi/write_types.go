@@ -124,7 +124,7 @@ type CreateSnapPayload struct {
 // ---- DELETE /api/vdev/{id} (DELETE_VDEV) ----
 // The vdev id travels in the URL path, so no request body type is needed.
 
-// ---- /mount_vdev (MOUNT_VDEV) ----
+// ---- /vdev/mount (MOUNT_VDEV) ----
 
 type MountVdevRequest struct {
 	VdevID string `json:"vdev_id"`
