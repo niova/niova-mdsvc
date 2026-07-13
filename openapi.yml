@@ -8,8 +8,9 @@ info:
     (infra, vdev/placement, pfs) and `/users` (auth). The DTOs mirror
     `controlplane/restapi/*.go` exactly (flat, snake_case JSON), following the TiDB
     control-plane REST contract where one exists; niova-only extensions
-    (`mount_vdev`, `snap`, `pfs`, `nisd_args`, the `name`/`pfs` vdev fields, and the
-    `X-RNCUI` write header) are called out below.
+    (`vdev/mount`, `snap`, `pfs`, `nisd_args`, `recovery_assignment`, the
+    `name`/`pfs` vdev fields, and the `X-RNCUI` write header) are called out
+    below.
 
     **Response envelope** — every endpoint returns
     `{ "status": int, "error"?: string, "payload"?: T }`.
@@ -209,7 +210,7 @@ paths:
         `failure_domain`/`entity_ids` scope allocation to one failure-domain
         entity; niova's allocator only honors the first `entity_ids` value.
         Optional `name` (niova-only) is indexed for name-based lookup elsewhere
-        (`GET /api/vdev?id=<name>`, `POST /api/mount_vdev`).
+        (`GET /api/vdev?id=<name>`, `POST /api/vdev/mount`).
       operationId: createVdev
       parameters:
         - $ref: '#/components/parameters/RncuiHeader'
@@ -281,7 +282,7 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/CreateSnapResponse' }
 
-  /api/mount_vdev:
+  /api/vdev/mount:
     post:
       tags: [vdev]
       summary: Mount a vdev
@@ -326,6 +327,39 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/GetChunkResponse' }
+
+  /api/recovery_assignment:
+    get:
+      tags: [vdev]
+      summary: Get chunk recovery placement assignment
+      description: |
+        niova-only. **Stub** — the wire contract (route, params, response
+        shape) is defined ahead of the real recovery-assignment control-plane
+        logic, which does not exist yet. The request shape is validated, but
+        the handler always answers `{status:-7, error:"recovery assignment
+        not yet implemented"}`.
+      operationId: getRecoveryAssignment
+      parameters:
+        - name: vdev_id
+          in: query
+          required: true
+          schema: { type: string }
+        - name: chunk_idx
+          in: query
+          required: true
+          schema: { type: integer, minimum: 0 }
+        - name: client_snapshot_seqno
+          in: query
+          required: true
+          schema: { type: integer, format: int64 }
+      responses:
+        '200':
+          description: |
+            Not yet implemented — always `{status:-7, error:"recovery
+            assignment not yet implemented"}`.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GetRecoveryAssignmentResponse' }
 
   # --------------------------------------------------------------- infra ----
   /api/resource:
@@ -853,6 +887,30 @@ components:
         payload: { $ref: '#/components/schemas/GetChunkPayload' }
       required: [status]
 
+    # ---- GET /api/recovery_assignment ----
+    GetRecoveryAssignmentPayload:
+      type: object
+      description: |
+        Stub shape; not yet backed by real control-plane logic (the handler
+        always answers `status:-7`).
+      properties:
+        vdev_id: { type: string }
+        chunk_idx: { type: integer }
+        snapshot_seqno: { type: integer, format: int64 }
+        tgt_nisd: { type: string }
+        src_nisd_list:
+          type: array
+          items: { type: string }
+      required: [chunk_idx]
+
+    GetRecoveryAssignmentResponse:
+      type: object
+      properties:
+        status: { $ref: '#/components/schemas/Status' }
+        error: { type: string }
+        payload: { $ref: '#/components/schemas/GetRecoveryAssignmentPayload' }
+      required: [status]
+
     # ---- POST/GET /api/vdev ----
     CreateVdevRequest:
       type: object
@@ -934,7 +992,7 @@ components:
         payload: { $ref: '#/components/schemas/CreateSnapPayload' }
       required: [status]
 
-    # ---- POST /api/mount_vdev ----
+    # ---- POST /api/vdev/mount ----
     MountVdevRequest:
       type: object
       properties:
@@ -955,6 +1013,12 @@ components:
         last_updated_lts: { type: string, format: date-time }
         pfs_id: { type: string }
         access_token: { type: string }
+        data_blk_cnt:
+          type: integer
+          description: Rounds-trip `cpLib.VdevCfg.NumDataBlk`; required by the client's mount-validation path.
+        parity_blk_cnt:
+          type: integer
+          description: Rounds-trip `cpLib.VdevCfg.NumParityBlk`; required by the client's mount-validation path.
       required: [id, mount_counter, last_updated_lts]
 
     MountVdevResponse:
