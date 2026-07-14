@@ -1,6 +1,7 @@
 package clictlplanefuncs
 
 import (
+	"os"
 	"testing"
 
 	"github.com/google/uuid"
@@ -102,9 +103,12 @@ func TestUserAuthVdevCreation(t *testing.T) {
 	log.Info("User logged in, access token obtained")
 	ctlClient.SetToken(user1AccessToken)
 
+	vdevName := "vdevtest"
+
 	// Step 3: Admin creates a vdev with their access token
 	vdev1 := &cpLib.VdevReq{
 		Vdev: &cpLib.VdevConfig{
+			Name:       vdevName,
 			Size:       8 * 1024 * 1024 * 1024, // 8 GB
 			DataBlkCnt: 1,
 		},
@@ -235,4 +239,29 @@ func TestUserVdevCreationForMultipleBlockTest(t *testing.T) {
 	for i, v := range vdevList {
 		log.Infof("Index: %d, Vdev ID: %s", i, v.ID)
 	}
+}
+
+func TestCreateVdevForMountCounter(t *testing.T) {
+	c := newClient(t)
+
+	vdevID := setupVdev(t, c, 8*1024*1024*1024)
+
+	vdevCfg, err := c.GetVdevConfigs(&cpLib.GetReq{ID: vdevID})
+	assert.NoError(t, err)
+	require.NotNil(t, vdevCfg)
+
+	log.Infof("Vdev ID: %s", vdevID)
+}
+
+func TestGetVdevMountCounter(t *testing.T) {
+	c := newClient(t)
+
+	vdevID := os.Getenv("VDEV_ID")
+	require.NotEmpty(t, vdevID, "VDEV_ID env var must be set")
+
+	vdevCfg, err := c.GetVdevConfigs(&cpLib.GetReq{ID: vdevID})
+	assert.NoError(t, err)
+	require.NotNil(t, vdevCfg)
+	log.Infof("Vdev ID: %s", vdevID)
+	log.Infof("current mount counter: %d", vdevCfg[0].VdevMountInfo.MountCounter)
 }
