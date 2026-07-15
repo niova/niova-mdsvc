@@ -32,27 +32,20 @@ func cpErrOf(resp *cpLib.CPResp) *cpLib.CPError {
 }
 
 // statusForCPError maps a structured control-plane error to a Status code.
+// CPError only carries a coarse 3-way code (AUTH_ERROR/FUNC_ERROR/INTERNAL)
+// plus a free-text message, so FUNC_ERROR collapses to a generic failure
+// rather than being classified further by message content.
 func statusForCPError(e *cpLib.CPError) restapi.Status {
 	switch e.Code {
 	case cpLib.ErrAuth:
-		if strings.Contains(strings.ToLower(e.Message), "authoriz") {
-			return restapi.StatusForbidden
-		}
 		return restapi.StatusUnauthorized
 	case cpLib.ErrInternal:
-		return restapi.StatusInternal
+		return restapi.StatusInternalError
 	case cpLib.ErrFunc:
-		if isNotFoundMessage(e.Message) {
-			return restapi.StatusNotFound
-		}
-		return restapi.StatusBadRequest
+		return restapi.StatusFailure
 	default:
-		return restapi.StatusInternal
+		return restapi.StatusInternalError
 	}
-}
-
-func isNotFoundMessage(msg string) bool {
-	return strings.Contains(strings.ToLower(msg), "not found")
 }
 
 // writeCPError translates a failed control-plane call into a JSON HTTP error.
@@ -66,14 +59,14 @@ func writeCPError(w http.ResponseWriter, err error, cpErr *cpLib.CPError) {
 	case cpLib.IsKeyNotFoundError(err):
 		restapi.WriteError(w, restapi.StatusNotFound, "%s", err.Error())
 	case err != nil:
-		restapi.WriteError(w, restapi.StatusInternal, "%s", err.Error())
+		restapi.WriteError(w, restapi.StatusInternalError, "%s", err.Error())
 	default:
-		restapi.WriteError(w, restapi.StatusInternal, "unknown control-plane error")
+		restapi.WriteError(w, restapi.StatusInternalError, "unknown control-plane error")
 	}
 }
 
 // writeMethodCPError reports a failed control-plane call for a non-user endpoint:
-// HTTP 200 with the error in the APIResponse envelope ({status:<0, error}),
+// HTTP 200 with the error in the APIResponse envelope ({status:!=0, error}),
 // never an HTTP error code. This is the non-user counterpart to writeCPError.
 func writeMethodCPError(w http.ResponseWriter, err error, cpErr *cpLib.CPError) {
 	switch {
@@ -82,9 +75,9 @@ func writeMethodCPError(w http.ResponseWriter, err error, cpErr *cpLib.CPError) 
 	case cpLib.IsKeyNotFoundError(err):
 		restapi.WriteMethodError(w, restapi.StatusNotFound, "%s", err.Error())
 	case err != nil:
-		restapi.WriteMethodError(w, restapi.StatusInternal, "%s", err.Error())
+		restapi.WriteMethodError(w, restapi.StatusInternalError, "%s", err.Error())
 	default:
-		restapi.WriteMethodError(w, restapi.StatusInternal, "unknown control-plane error")
+		restapi.WriteMethodError(w, restapi.StatusInternalError, "unknown control-plane error")
 	}
 }
 
@@ -114,7 +107,7 @@ func (handler *proxyHandler) handleGetVdev(w http.ResponseWriter, r *http.Reques
 	}
 	id := strings.TrimSpace(r.URL.Query().Get("id"))
 	if id == "" {
-		restapi.WriteMethodError(w, restapi.StatusBadRequest, "missing required query parameter: id")
+		restapi.WriteMethodError(w, restapi.StatusInvalidRequest, "missing required query parameter: id")
 		return
 	}
 
@@ -152,7 +145,7 @@ func (handler *proxyHandler) handleGetNisd(w http.ResponseWriter, r *http.Reques
 	}
 	id := strings.TrimSpace(r.URL.Query().Get("id"))
 	if id == "" {
-		restapi.WriteMethodError(w, restapi.StatusBadRequest, "missing required query parameter: id")
+		restapi.WriteMethodError(w, restapi.StatusInvalidRequest, "missing required query parameter: id")
 		return
 	}
 
@@ -194,12 +187,12 @@ func (handler *proxyHandler) handleGetChunk(w http.ResponseWriter, r *http.Reque
 	vdevID := strings.TrimSpace(q.Get("vdev_id"))
 	chunkStr := strings.TrimSpace(q.Get("chunk_idx"))
 	if vdevID == "" || chunkStr == "" {
-		restapi.WriteMethodError(w, restapi.StatusBadRequest, "missing required query parameters: vdev_id and chunk_idx")
+		restapi.WriteMethodError(w, restapi.StatusInvalidRequest, "missing required query parameters: vdev_id and chunk_idx")
 		return
 	}
 	chunkIdx, perr := strconv.Atoi(chunkStr)
 	if perr != nil || chunkIdx < 0 {
-		restapi.WriteMethodError(w, restapi.StatusBadRequest, "invalid chunk_idx %q: must be a non-negative integer", chunkStr)
+		restapi.WriteMethodError(w, restapi.StatusInvalidRequest, "invalid chunk_idx %q: must be a non-negative integer", chunkStr)
 		return
 	}
 
@@ -233,7 +226,7 @@ func (handler *proxyHandler) handleGetChunk(w http.ResponseWriter, r *http.Reque
 // params, response envelope/payload shape) is defined ahead of the real
 // recovery-assignment control-plane logic, which does not exist yet. Once a
 // real implementation lands, this should look up chunk recovery placement
-// the same way handleGetChunk does. For now it always reports StatusInternal
+// the same way handleGetChunk does. For now it always reports StatusInternalError
 // after validating the request shape, so the client's request/parse path is
 // fully exercisable ahead of the real backing logic.
 func (handler *proxyHandler) handleGetRecoveryAssignment(w http.ResponseWriter, r *http.Request) {
@@ -244,17 +237,17 @@ func (handler *proxyHandler) handleGetRecoveryAssignment(w http.ResponseWriter, 
 	vdevID := strings.TrimSpace(q.Get("vdev_id"))
 	chunkStr := strings.TrimSpace(q.Get("chunk_idx"))
 	if vdevID == "" || chunkStr == "" {
-		restapi.WriteMethodError(w, restapi.StatusBadRequest, "missing required query parameters: vdev_id and chunk_idx")
+		restapi.WriteMethodError(w, restapi.StatusInvalidRequest, "missing required query parameters: vdev_id and chunk_idx")
 		return
 	}
 	if _, perr := strconv.Atoi(chunkStr); perr != nil {
-		restapi.WriteMethodError(w, restapi.StatusBadRequest, "invalid chunk_idx %q: must be a non-negative integer", chunkStr)
+		restapi.WriteMethodError(w, restapi.StatusInvalidRequest, "invalid chunk_idx %q: must be a non-negative integer", chunkStr)
 		return
 	}
 	if strings.TrimSpace(q.Get("client_snapshot_seqno")) == "" {
-		restapi.WriteMethodError(w, restapi.StatusBadRequest, "missing required query parameter: client_snapshot_seqno")
+		restapi.WriteMethodError(w, restapi.StatusInvalidRequest, "missing required query parameter: client_snapshot_seqno")
 		return
 	}
 
-	restapi.WriteMethodError(w, restapi.StatusInternal, "recovery assignment not yet implemented")
+	restapi.WriteMethodError(w, restapi.StatusInternalError, "recovery assignment not yet implemented")
 }

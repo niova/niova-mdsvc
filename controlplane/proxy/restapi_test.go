@@ -105,7 +105,7 @@ func decodePayload[T any](t *testing.T, rr *httptest.ResponseRecorder) T {
 }
 
 // expectMethodError asserts a non-user endpoint reported a method error in the
-// envelope: HTTP 200 with {status:<0, error:non-empty}. Under the unified
+// envelope: HTTP 200 with {status:!=0, error:non-empty}. Under the unified
 // contract these endpoints never emit an HTTP error status (routing-level 405 is
 // the only exception; see requireMethod).
 func expectMethodError(t *testing.T, rr *httptest.ResponseRecorder) {
@@ -116,7 +116,7 @@ func expectMethodError(t *testing.T, rr *httptest.ResponseRecorder) {
 	var got restapi.ErrorResponse
 	decodeBody(t, rr, &got)
 	if got.Status == restapi.StatusOK || got.Error == "" {
-		t.Fatalf("want {status:<0, error:...}; got %+v", got)
+		t.Fatalf("want {status:!=0, error:...}; got %+v", got)
 	}
 }
 

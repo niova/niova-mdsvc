@@ -7,20 +7,40 @@ import (
 )
 
 // Status is the small fixed set of outcome codes carried in every APIResponse.
-// Zero means success; a negative value classifies a failure. This is richer
-// than a bare success/fail bool: callers can branch on the failure class
-// without string-matching the error message.
+// Zero means success; a non-zero value classifies a failure, grouped into
+// ranges by category (100s client/validation, 200s auth, 300s resource-state,
+// 400s capacity/concurrency, 500s server) so new codes can slot into the right
+// category without renumbering existing ones. This is richer than a bare
+// success/fail bool: callers can branch on the failure class without
+// string-matching the error message.
 type Status int
 
 const (
-	StatusOK               Status = 0
-	StatusBadRequest       Status = -1 // malformed/invalid request (validation failure)
-	StatusUnauthorized     Status = -2 // missing/invalid credentials or token
-	StatusForbidden        Status = -3 // authenticated but not permitted
-	StatusNotFound         Status = -4 // resource does not exist
-	StatusConflict         Status = -5 // resource already exists / state conflict
-	StatusMethodNotAllowed Status = -6 // wrong HTTP method for this route
-	StatusInternal         Status = -7 // internal/unexpected error
+	StatusOK      Status = 0
+	StatusFailure Status = 1 // generic/unclassified failure
+
+	// 100-199: client/validation
+	StatusInvalidRequest      Status = 100 // malformed/invalid request (validation failure)
+	StatusUnsupportedResource Status = 101 // unsupported resource type
+	StatusMethodNotAllowed    Status = 102 // wrong HTTP method for this route
+
+	// 200-299: auth
+	StatusUnauthorized Status = 200 // missing/invalid credentials or token
+	StatusForbidden    Status = 201 // authenticated but not permitted
+
+	// 300-399: resource-state
+	StatusNotFound           Status = 300 // resource does not exist
+	StatusConflict           Status = 301 // resource already exists / state conflict
+	StatusInfraAlreadyExists Status = 302 // reserved: infra-specific conflict, not yet emitted
+	StatusMountCooldown      Status = 303 // reserved: mount attempted during cooldown, not yet emitted
+
+	// 400-499: capacity/concurrency
+	StatusCapacityRace         Status = 400 // reserved: lost race on capacity allocation, not yet emitted
+	StatusInsufficientCapacity Status = 401 // reserved: not enough capacity to satisfy request, not yet emitted
+
+	// 500-599: server
+	StatusInternalError Status = 500 // internal/unexpected error
+	StatusUnavailable   Status = 501 // reserved: transient/retry-safe failure, not yet emitted
 )
 
 // httpStatus maps a Status to the HTTP status code used for the user/auth
@@ -31,8 +51,14 @@ func (s Status) httpStatus() int {
 	switch s {
 	case StatusOK:
 		return http.StatusOK
-	case StatusBadRequest:
+	case StatusFailure:
 		return http.StatusBadRequest
+	case StatusInvalidRequest:
+		return http.StatusBadRequest
+	case StatusUnsupportedResource:
+		return http.StatusBadRequest
+	case StatusMethodNotAllowed:
+		return http.StatusMethodNotAllowed
 	case StatusUnauthorized:
 		return http.StatusUnauthorized
 	case StatusForbidden:
@@ -41,8 +67,18 @@ func (s Status) httpStatus() int {
 		return http.StatusNotFound
 	case StatusConflict:
 		return http.StatusConflict
-	case StatusMethodNotAllowed:
-		return http.StatusMethodNotAllowed
+	case StatusInfraAlreadyExists:
+		return http.StatusConflict
+	case StatusMountCooldown:
+		return http.StatusTooManyRequests
+	case StatusCapacityRace:
+		return http.StatusConflict
+	case StatusInsufficientCapacity:
+		return http.StatusInsufficientStorage
+	case StatusInternalError:
+		return http.StatusInternalServerError
+	case StatusUnavailable:
+		return http.StatusServiceUnavailable
 	default:
 		return http.StatusInternalServerError
 	}
@@ -51,15 +87,15 @@ func (s Status) httpStatus() int {
 // APIResponse is the unified response envelope for the REST API. Every endpoint
 // returns this shape:
 //
-//   - Status is the verdict: 0 on success, negative on failure (see the Status
-//     constants for what each code means).
+//   - Status is the verdict: 0 on success, non-zero on failure, grouped by
+//     range (see the Status constants for what each code means).
 //   - Error carries a human-readable message when Status is non-zero (omitted
 //     on success).
 //   - Payload carries the method-specific result on success (omitted on error).
 //
 // For non-user (infra/vdev/resource) endpoints the HTTP status is always 200
 // and Status is the sole verdict: a method-level error is reported as
-// {status:<0, error:"..."} with HTTP 200, never an HTTP error code. The
+// {status:!=0, error:"..."} with HTTP 200, never an HTTP error code. The
 // user/auth endpoints still use real HTTP status codes (see WriteError), in
 // addition to the same Status code in the body.
 type APIResponse[T any] struct {
@@ -70,7 +106,7 @@ type APIResponse[T any] struct {
 
 // ErrorResponse is the payload-less form of the envelope, used to write errors
 // (no payload) and to decode an error body without committing to a payload type.
-// It is wire-compatible with APIResponse[T] on the error path ({status:<0,
+// It is wire-compatible with APIResponse[T] on the error path ({status:!=0,
 // error:"..."}; payload omitted).
 type ErrorResponse struct {
 	Status Status `json:"status"`

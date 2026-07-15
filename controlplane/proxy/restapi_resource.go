@@ -98,7 +98,7 @@ func toRestPFS(p cpLib.PFS) restapi.PFS {
 func (handler *proxyHandler) handlePutResource(w http.ResponseWriter, r *http.Request) {
 	rtype := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("type")))
 	if rtype == "" {
-		restapi.WriteMethodError(w, restapi.StatusBadRequest, "missing required query parameter: type")
+		restapi.WriteMethodError(w, restapi.StatusInvalidRequest, "missing required query parameter: type")
 		return
 	}
 
@@ -109,7 +109,7 @@ func (handler *proxyHandler) handlePutResource(w http.ResponseWriter, r *http.Re
 			return
 		}
 		if req.ID == "" {
-			restapi.WriteMethodError(w, restapi.StatusBadRequest, "id is required")
+			restapi.WriteMethodError(w, restapi.StatusInvalidRequest, "id is required")
 			return
 		}
 		handler.runEntityWrite(w, r, cpLib.PUT_PDU, cpLib.PDU{
@@ -126,7 +126,7 @@ func (handler *proxyHandler) handlePutResource(w http.ResponseWriter, r *http.Re
 			return
 		}
 		if req.ID == "" {
-			restapi.WriteMethodError(w, restapi.StatusBadRequest, "id is required")
+			restapi.WriteMethodError(w, restapi.StatusInvalidRequest, "id is required")
 			return
 		}
 		handler.runEntityWrite(w, r, cpLib.PUT_RACK, cpLib.Rack{
@@ -143,7 +143,7 @@ func (handler *proxyHandler) handlePutResource(w http.ResponseWriter, r *http.Re
 			return
 		}
 		if req.ID == "" {
-			restapi.WriteMethodError(w, restapi.StatusBadRequest, "id is required")
+			restapi.WriteMethodError(w, restapi.StatusInvalidRequest, "id is required")
 			return
 		}
 		handler.runEntityWrite(w, r, cpLib.PUT_HYPERVISOR, cpLib.Hypervisor{
@@ -162,7 +162,7 @@ func (handler *proxyHandler) handlePutResource(w http.ResponseWriter, r *http.Re
 			return
 		}
 		if req.ID == "" {
-			restapi.WriteMethodError(w, restapi.StatusBadRequest, "id is required")
+			restapi.WriteMethodError(w, restapi.StatusInvalidRequest, "id is required")
 			return
 		}
 		handler.runEntityWrite(w, r, cpLib.PUT_DEVICE, cpLib.Device{
@@ -182,7 +182,7 @@ func (handler *proxyHandler) handlePutResource(w http.ResponseWriter, r *http.Re
 			return
 		}
 		if req.ID == "" {
-			restapi.WriteMethodError(w, restapi.StatusBadRequest, "id is required")
+			restapi.WriteMethodError(w, restapi.StatusInvalidRequest, "id is required")
 			return
 		}
 		nisd := cpLib.Nisd{
@@ -205,7 +205,7 @@ func (handler *proxyHandler) handlePutResource(w http.ResponseWriter, r *http.Re
 			return
 		}
 		if req.PartitionID == "" {
-			restapi.WriteMethodError(w, restapi.StatusBadRequest, "partition_id is required")
+			restapi.WriteMethodError(w, restapi.StatusInvalidRequest, "partition_id is required")
 			return
 		}
 		handler.runEntityWrite(w, r, cpLib.PUT_PARTITION, cpLib.DevicePartition{
@@ -217,7 +217,7 @@ func (handler *proxyHandler) handlePutResource(w http.ResponseWriter, r *http.Re
 		}, req.PartitionID)
 
 	default:
-		restapi.WriteMethodError(w, restapi.StatusBadRequest, "unsupported resource type: %s", rtype)
+		restapi.WriteMethodError(w, restapi.StatusUnsupportedResource, "unsupported resource type: %s", rtype)
 	}
 }
 
@@ -242,14 +242,14 @@ func (handler *proxyHandler) getResourcesByType(r *http.Request, rtype cpLib.Res
 func (handler *proxyHandler) handleGetResource(w http.ResponseWriter, r *http.Request) {
 	rtype := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("type")))
 	if rtype == "" {
-		restapi.WriteMethodError(w, restapi.StatusBadRequest, "missing required query parameter: type")
+		restapi.WriteMethodError(w, restapi.StatusInvalidRequest, "missing required query parameter: type")
 		return
 	}
 	switch cpLib.ResourceType(rtype) {
 	case cpLib.ResourcePDU, cpLib.ResourceRack, cpLib.ResourceHypervisor,
 		cpLib.ResourceDevice, cpLib.ResourceNisd, cpLib.ResourcePartition:
 	default:
-		restapi.WriteMethodError(w, restapi.StatusBadRequest, "unsupported resource type: %s", rtype)
+		restapi.WriteMethodError(w, restapi.StatusUnsupportedResource, "unsupported resource type: %s", rtype)
 		return
 	}
 

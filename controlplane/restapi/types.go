@@ -137,7 +137,7 @@ type GetChunkPayload struct {
 
 // GetRecoveryAssignmentPayload is the payload of the recovery-assignment
 // envelope. Not yet backed by real control-plane logic (see
-// handleGetRecoveryAssignment, which always reports StatusInternal) - the
+// handleGetRecoveryAssignment, which always reports StatusInternalError) - the
 // shape is defined now so the client's REST contract is stable ahead of the
 // real implementation.
 type GetRecoveryAssignmentPayload struct {

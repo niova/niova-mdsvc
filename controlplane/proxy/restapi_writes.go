@@ -26,21 +26,21 @@ func (handler *proxyHandler) handleCreateVdev(w http.ResponseWriter, r *http.Req
 
 	var req restapi.CreateVdevRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		restapi.WriteMethodError(w, restapi.StatusBadRequest, "invalid request body: %v", err)
+		restapi.WriteMethodError(w, restapi.StatusInvalidRequest, "invalid request body: %v", err)
 		return
 	}
 	if req.SizeBytes < 1 {
-		restapi.WriteMethodError(w, restapi.StatusBadRequest, "size_bytes must be >= 1")
+		restapi.WriteMethodError(w, restapi.StatusInvalidRequest, "size_bytes must be >= 1")
 		return
 	}
 	if req.NumReplicas < 1 || req.NumReplicas > maxVdevReplicas {
-		restapi.WriteMethodError(w, restapi.StatusBadRequest, "num_replicas must be between 1 and %d", maxVdevReplicas)
+		restapi.WriteMethodError(w, restapi.StatusInvalidRequest, "num_replicas must be between 1 and %d", maxVdevReplicas)
 		return
 	}
 
 	rncui, err := rncuiFromRequest(r)
 	if err != nil {
-		restapi.WriteMethodError(w, restapi.StatusBadRequest, "%s", err.Error())
+		restapi.WriteMethodError(w, restapi.StatusInvalidRequest, "%s", err.Error())
 		return
 	}
 
@@ -49,7 +49,7 @@ func (handler *proxyHandler) handleCreateVdev(w http.ResponseWriter, r *http.Req
 	// so only the first entity_id is applied.
 	fdType, err := cpLib.ParseFD(req.FailureDomain)
 	if err != nil {
-		restapi.WriteMethodError(w, restapi.StatusBadRequest, "%s", err.Error())
+		restapi.WriteMethodError(w, restapi.StatusInvalidRequest, "%s", err.Error())
 		return
 	}
 	filter := cpLib.Filter{Type: fdType}
@@ -87,7 +87,7 @@ func (handler *proxyHandler) handleCreateVdev(w http.ResponseWriter, r *http.Req
 		return
 	}
 	if resp.ID == "" {
-		restapi.WriteMethodError(w, restapi.StatusInternal, "vdev creation returned no id")
+		restapi.WriteMethodError(w, restapi.StatusInternalError, "vdev creation returned no id")
 		return
 	}
 
@@ -109,7 +109,7 @@ func (handler *proxyHandler) handleCreateVdev(w http.ResponseWriter, r *http.Req
 // returning false on failure. Used by the user/auth endpoints (real HTTP codes).
 func decodeJSONBody(w http.ResponseWriter, r *http.Request, dst any) bool {
 	if err := json.NewDecoder(r.Body).Decode(dst); err != nil {
-		restapi.WriteError(w, restapi.StatusBadRequest, "invalid request body: %v", err)
+		restapi.WriteError(w, restapi.StatusInvalidRequest, "invalid request body: %v", err)
 		return false
 	}
 	return true
@@ -120,7 +120,7 @@ func decodeJSONBody(w http.ResponseWriter, r *http.Request, dst any) bool {
 // HTTP error code) and returns false.
 func decodeJSONBodyMethod(w http.ResponseWriter, r *http.Request, dst any) bool {
 	if err := json.NewDecoder(r.Body).Decode(dst); err != nil {
-		restapi.WriteMethodError(w, restapi.StatusBadRequest, "invalid request body: %v", err)
+		restapi.WriteMethodError(w, restapi.StatusInvalidRequest, "invalid request body: %v", err)
 		return false
 	}
 	return true
@@ -133,7 +133,7 @@ func decodeJSONBodyMethod(w http.ResponseWriter, r *http.Request, dst any) bool 
 func (handler *proxyHandler) runEntityWrite(w http.ResponseWriter, r *http.Request, op string, payload any, fallbackID string) {
 	rncui, err := rncuiFromRequest(r)
 	if err != nil {
-		restapi.WriteMethodError(w, restapi.StatusBadRequest, "%s", err.Error())
+		restapi.WriteMethodError(w, restapi.StatusInvalidRequest, "%s", err.Error())
 		return
 	}
 	cpReq := cpLib.CPReq{Token: tokenFromRequest(r), Payload: payload}
@@ -214,12 +214,12 @@ func (handler *proxyHandler) handleCreateSnap(w http.ResponseWriter, r *http.Req
 		return
 	}
 	if req.VdevID == "" || req.SnapName == "" {
-		restapi.WriteMethodError(w, restapi.StatusBadRequest, "vdev_id and snap_name are required")
+		restapi.WriteMethodError(w, restapi.StatusInvalidRequest, "vdev_id and snap_name are required")
 		return
 	}
 	rncui, err := rncuiFromRequest(r)
 	if err != nil {
-		restapi.WriteMethodError(w, restapi.StatusBadRequest, "%s", err.Error())
+		restapi.WriteMethodError(w, restapi.StatusInvalidRequest, "%s", err.Error())
 		return
 	}
 
@@ -237,7 +237,7 @@ func (handler *proxyHandler) handleCreateSnap(w http.ResponseWriter, r *http.Req
 		return
 	}
 	if !resp.SnapName.Success {
-		restapi.WriteMethodError(w, restapi.StatusInternal, "snapshot %q was not created", req.SnapName)
+		restapi.WriteMethodError(w, restapi.StatusInternalError, "snapshot %q was not created", req.SnapName)
 		return
 	}
 	restapi.WriteData(w, restapi.CreateSnapPayload{SnapName: resp.SnapName.Name})
@@ -249,7 +249,7 @@ func (handler *proxyHandler) handleCreateSnap(w http.ResponseWriter, r *http.Req
 func (handler *proxyHandler) handleDeleteVdev(w http.ResponseWriter, r *http.Request) {
 	id := strings.TrimSpace(r.PathValue("id"))
 	if id == "" {
-		restapi.WriteMethodError(w, restapi.StatusBadRequest, "vdev id is required")
+		restapi.WriteMethodError(w, restapi.StatusInvalidRequest, "vdev id is required")
 		return
 	}
 	handler.runEntityWrite(w, r, cpLib.DELETE_VDEV, cpLib.DeleteVdevReq{ID: id}, id)
@@ -265,12 +265,12 @@ func (handler *proxyHandler) handleMountVdev(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	if req.VdevID == "" {
-		restapi.WriteMethodError(w, restapi.StatusBadRequest, "vdev_id is required")
+		restapi.WriteMethodError(w, restapi.StatusInvalidRequest, "vdev_id is required")
 		return
 	}
 	rncui, err := rncuiFromRequest(r)
 	if err != nil {
-		restapi.WriteMethodError(w, restapi.StatusBadRequest, "%s", err.Error())
+		restapi.WriteMethodError(w, restapi.StatusInvalidRequest, "%s", err.Error())
 		return
 	}
 

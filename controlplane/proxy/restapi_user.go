@@ -35,7 +35,7 @@ func statusForUserMsg(msg string) restapi.Status {
 		strings.Contains(m, "unauthorized"):
 		return restapi.StatusUnauthorized
 	default:
-		return restapi.StatusBadRequest
+		return restapi.StatusInvalidRequest
 	}
 }
 
@@ -60,7 +60,7 @@ func (handler *proxyHandler) handleLogin(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	if strings.TrimSpace(req.Username) == "" || req.Password == "" {
-		restapi.WriteError(w, restapi.StatusBadRequest, "username and password are required")
+		restapi.WriteError(w, restapi.StatusInvalidRequest, "username and password are required")
 		return
 	}
 
@@ -95,17 +95,17 @@ func (handler *proxyHandler) handleCreateUser(w http.ResponseWriter, r *http.Req
 	}
 	req.Username = strings.TrimSpace(req.Username)
 	if req.Username == "" {
-		restapi.WriteError(w, restapi.StatusBadRequest, "username is required")
+		restapi.WriteError(w, restapi.StatusInvalidRequest, "username is required")
 		return
 	}
 	if req.Role != "" && req.Role != userlib.DefaultUserRole && req.Role != userlib.AdminUserRole {
-		restapi.WriteError(w, restapi.StatusBadRequest, "role must be one of: %s %s",
+		restapi.WriteError(w, restapi.StatusInvalidRequest, "role must be one of: %s %s",
 			userlib.DefaultUserRole, userlib.AdminUserRole)
 		return
 	}
 	rncui, err := rncuiFromRequest(r)
 	if err != nil {
-		restapi.WriteError(w, restapi.StatusBadRequest, "%s", err.Error())
+		restapi.WriteError(w, restapi.StatusInvalidRequest, "%s", err.Error())
 		return
 	}
 
@@ -141,12 +141,12 @@ func (handler *proxyHandler) handleCreateAdminUser(w http.ResponseWriter, r *htt
 		return
 	}
 	if strings.TrimSpace(req.Username) == "" {
-		restapi.WriteError(w, restapi.StatusBadRequest, "username is required")
+		restapi.WriteError(w, restapi.StatusInvalidRequest, "username is required")
 		return
 	}
 	rncui, err := rncuiFromRequest(r)
 	if err != nil {
-		restapi.WriteError(w, restapi.StatusBadRequest, "%s", err.Error())
+		restapi.WriteError(w, restapi.StatusInvalidRequest, "%s", err.Error())
 		return
 	}
 
@@ -200,7 +200,7 @@ func (handler *proxyHandler) handleGetUser(w http.ResponseWriter, r *http.Reques
 	}
 	id := strings.TrimSpace(r.PathValue("id"))
 	if uuid.Validate(id) != nil {
-		restapi.WriteError(w, restapi.StatusBadRequest, "invalid user id")
+		restapi.WriteError(w, restapi.StatusInvalidRequest, "invalid user id")
 		return
 	}
 	cpReq := cpLib.CPReq{Token: tokenFromRequest(r), Payload: userlib.GetReq{UserID: id}}
@@ -231,7 +231,7 @@ func (handler *proxyHandler) handleUpdateUser(w http.ResponseWriter, r *http.Req
 	}
 	id := strings.TrimSpace(r.PathValue("id"))
 	if uuid.Validate(id) != nil {
-		restapi.WriteError(w, restapi.StatusBadRequest, "invalid user id")
+		restapi.WriteError(w, restapi.StatusInvalidRequest, "invalid user id")
 		return
 	}
 	var req restapi.UpdateUserRequest
@@ -240,13 +240,13 @@ func (handler *proxyHandler) handleUpdateUser(w http.ResponseWriter, r *http.Req
 	}
 	req.Username = strings.TrimSpace(req.Username)
 	if req.Username == "" && req.NewSecretKey == "" {
-		restapi.WriteError(w, restapi.StatusBadRequest,
+		restapi.WriteError(w, restapi.StatusInvalidRequest,
 			"nothing to update: provide username and/or new_secret_key")
 		return
 	}
 	rncui, err := rncuiFromRequest(r)
 	if err != nil {
-		restapi.WriteError(w, restapi.StatusBadRequest, "%s", err.Error())
+		restapi.WriteError(w, restapi.StatusInvalidRequest, "%s", err.Error())
 		return
 	}
 

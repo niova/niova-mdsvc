@@ -14,12 +14,13 @@ info:
 
     **Response envelope** — every endpoint returns
     `{ "status": int, "error"?: string, "payload"?: T }`.
-    `status` is 0 on success and negative on failure, classifying the error (see
-    the `Status` schema for the fixed set of codes). Non-user endpoints
-    (everything under `/api` except `/api/users*`) always answer HTTP 200 and
-    carry business failures in the envelope (`status:<0, error:"..."`); only the
-    user/auth endpoints (`/users/*`, `/api/users*`) additionally use a matching
-    real HTTP status code for errors.
+    `status` is 0 on success and non-zero on failure, classifying the error by
+    range (see the `Status` schema for the fixed set of codes). Non-user
+    endpoints (everything under `/api` except `/api/users*`) always answer
+    HTTP 200 and carry business failures in the envelope
+    (`status:!=0, error:"..."`); only the user/auth endpoints (`/users/*`,
+    `/api/users*`) additionally use a matching real HTTP status code for
+    errors.
 
     **Writes** (`POST`/`PUT`/`DELETE`) require a client-generated `X-RNCUI`
     idempotency header in the form `<client-uuid>:0:0:0:<sequence>` — PumiceDB
@@ -222,7 +223,7 @@ paths:
       responses:
         '200':
           description: |
-            Vdev created, or `{status:<0, error}` on a validation/allocation
+            Vdev created, or `{status:!=0, error}` on a validation/allocation
             failure (still HTTP 200 — see the top-level envelope note).
           content:
             application/json:
@@ -239,7 +240,7 @@ paths:
           description: Vdev UUID, or its `name` if one was set at creation.
       responses:
         '200':
-          description: Vdev metadata, or `{status:<0, error}` if not found.
+          description: Vdev metadata, or `{status:!=0, error}` if not found.
           content:
             application/json:
               schema: { $ref: '#/components/schemas/GetVdevResponse' }
@@ -257,7 +258,7 @@ paths:
         - $ref: '#/components/parameters/RncuiHeader'
       responses:
         '200':
-          description: Deleted, or `{status:<0, error}` on failure.
+          description: Deleted, or `{status:!=0, error}` on failure.
           content:
             application/json:
               schema: { $ref: '#/components/schemas/WriteResponse' }
@@ -277,7 +278,7 @@ paths:
             schema: { $ref: '#/components/schemas/CreateSnapRequest' }
       responses:
         '200':
-          description: Snapshot created, or `{status:<0, error}` on failure.
+          description: Snapshot created, or `{status:!=0, error}` on failure.
           content:
             application/json:
               schema: { $ref: '#/components/schemas/CreateSnapResponse' }
@@ -302,7 +303,7 @@ paths:
             schema: { $ref: '#/components/schemas/MountVdevRequest' }
       responses:
         '200':
-          description: Mounted, or `{status:<0, error}` on failure (e.g. cooldown).
+          description: Mounted, or `{status:!=0, error}` on failure (e.g. cooldown).
           content:
             application/json:
               schema: { $ref: '#/components/schemas/MountVdevResponse' }
@@ -323,7 +324,7 @@ paths:
           schema: { type: integer, minimum: 0 }
       responses:
         '200':
-          description: Chunk placement, or `{status:<0, error}` if not found.
+          description: Chunk placement, or `{status:!=0, error}` if not found.
           content:
             application/json:
               schema: { $ref: '#/components/schemas/GetChunkResponse' }
@@ -336,7 +337,7 @@ paths:
         niova-only. **Stub** — the wire contract (route, params, response
         shape) is defined ahead of the real recovery-assignment control-plane
         logic, which does not exist yet. The request shape is validated, but
-        the handler always answers `{status:-7, error:"recovery assignment
+        the handler always answers `{status:500, error:"recovery assignment
         not yet implemented"}`.
       operationId: getRecoveryAssignment
       parameters:
@@ -355,7 +356,7 @@ paths:
       responses:
         '200':
           description: |
-            Not yet implemented — always `{status:-7, error:"recovery
+            Not yet implemented — always `{status:500, error:"recovery
             assignment not yet implemented"}`.
           content:
             application/json:
@@ -383,7 +384,7 @@ paths:
           description: Fetch a single resource by id instead of listing all.
       responses:
         '200':
-          description: Resource(s), or `{status:<0, error}` on failure.
+          description: Resource(s), or `{status:!=0, error}` on failure.
           content:
             application/json:
               schema: { $ref: '#/components/schemas/GetResourceResponse' }
@@ -415,7 +416,7 @@ paths:
                 - $ref: '#/components/schemas/Partition'
       responses:
         '200':
-          description: Upserted, or `{status:<0, error}` on failure.
+          description: Upserted, or `{status:!=0, error}` on failure.
           content:
             application/json:
               schema: { $ref: '#/components/schemas/WriteResponse' }
@@ -431,7 +432,7 @@ paths:
       operationId: getInfra
       responses:
         '200':
-          description: Infra tree, or `{status:<0, error}` on failure.
+          description: Infra tree, or `{status:!=0, error}` on failure.
           content:
             application/json:
               schema: { $ref: '#/components/schemas/GetInfraResponse' }
@@ -448,7 +449,7 @@ paths:
           schema: { type: string }
       responses:
         '200':
-          description: NISD info, or `{status:<0, error}` if not found.
+          description: NISD info, or `{status:!=0, error}` if not found.
           content:
             application/json:
               schema: { $ref: '#/components/schemas/GetNisdResponse' }
@@ -467,7 +468,7 @@ paths:
             schema: { $ref: '#/components/schemas/NisdArgs' }
       responses:
         '200':
-          description: Saved, or `{status:<0, error}` on failure.
+          description: Saved, or `{status:!=0, error}` on failure.
           content:
             application/json:
               schema: { $ref: '#/components/schemas/WriteResponse' }
@@ -477,7 +478,7 @@ paths:
       operationId: getNisdArgs
       responses:
         '200':
-          description: NISD args, or `{status:<0, error}` on failure.
+          description: NISD args, or `{status:!=0, error}` on failure.
           content:
             application/json:
               schema: { $ref: '#/components/schemas/GetNisdArgsResponse' }
@@ -500,7 +501,7 @@ paths:
             schema: { $ref: '#/components/schemas/PFS' }
       responses:
         '200':
-          description: Upserted, or `{status:<0, error}` on failure.
+          description: Upserted, or `{status:!=0, error}` on failure.
           content:
             application/json:
               schema: { $ref: '#/components/schemas/WriteResponse' }
@@ -516,7 +517,7 @@ paths:
           description: Omit to list all PFS groupings.
       responses:
         '200':
-          description: PFS metadata, or `{status:<0, error}` on failure.
+          description: PFS metadata, or `{status:!=0, error}` on failure.
           content:
             application/json:
               schema: { $ref: '#/components/schemas/GetPFSResponse' }
@@ -574,19 +575,28 @@ components:
     Status:
       type: integer
       description: |
-        0 on success; negative on failure, classifying the error:
+        0 on success; a non-zero value classifies the failure, grouped into
+        ranges by category so new codes can be added within a category
+        without renumbering existing ones:
 
         | Value | Meaning |
         |---|---|
         | `0` | success |
-        | `-1` | bad request (validation failure) |
-        | `-2` | unauthorized (missing/invalid credentials or token) |
-        | `-3` | forbidden (authenticated but not permitted) |
-        | `-4` | not found |
-        | `-5` | conflict (already exists / state conflict) |
-        | `-6` | method not allowed |
-        | `-7` | internal/unexpected error |
-      enum: [0, -1, -2, -3, -4, -5, -6, -7]
+        | `1` | generic/unclassified failure |
+        | `100` | invalid request (validation failure) |
+        | `101` | unsupported resource type |
+        | `102` | method not allowed |
+        | `200` | unauthorized (missing/invalid credentials or token) |
+        | `201` | forbidden (authenticated but not permitted) |
+        | `300` | not found |
+        | `301` | conflict (already exists / state conflict) |
+        | `302` | infra resource already exists (reserved, not yet emitted) |
+        | `303` | mount attempted during cooldown (reserved, not yet emitted) |
+        | `400` | lost race on capacity allocation (reserved, not yet emitted) |
+        | `401` | insufficient capacity (reserved, not yet emitted) |
+        | `500` | internal/unexpected error |
+        | `501` | service temporarily unavailable (reserved, not yet emitted) |
+      enum: [0, 1, 100, 101, 102, 200, 201, 300, 301, 302, 303, 400, 401, 500, 501]
       example: 0
 
     ErrorResponse:
@@ -892,7 +902,7 @@ components:
       type: object
       description: |
         Stub shape; not yet backed by real control-plane logic (the handler
-        always answers `status:-7`).
+        always answers `status:500`).
       properties:
         vdev_id: { type: string }
         chunk_idx: { type: integer }
