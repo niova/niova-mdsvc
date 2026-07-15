@@ -60,9 +60,10 @@ func (handler *proxyHandler) handleCreateVdev(w http.ResponseWriter, r *http.Req
 	// The server generates the vdev ID and chunk map. Name is a niova-only
 	// extension; the server validates it (alphanumeric) and indexes it for
 	// name-based lookup.
-	vdevCfg := &cpLib.VdevCfg{
+	vdevCfg := &cpLib.VdevConfig{
 		Size:       req.SizeBytes,
-		NumReplica: uint8(req.NumReplicas),
+		Redundancy: cpLib.RMReplica,
+		DataBlkCnt: uint8(req.NumReplicas),
 		Name:       strings.TrimSpace(req.Name),
 	}
 	// Optional PFS link, supplied as either the PFS id (UUID) or its name. The
@@ -275,11 +276,11 @@ func (handler *proxyHandler) handleMountVdev(w http.ResponseWriter, r *http.Requ
 	}
 
 	cpReq := cpLib.CPReq{Token: tokenFromRequest(r), Payload: cpLib.MountVdevRequest{VdevID: req.VdevID}}
-	// MOUNT_VDEV (APMountVdev) returns the full VdevCfg: it carries the updated
+	// MOUNT_VDEV (APMountVdev) returns the full VdevConfig: it carries the updated
 	// mount info (counter, last-updated) plus the freshly minted AccessToken the
 	// data path needs to open the vdev. Project it into the flat snake_case
 	// MountVdevPayload so the whole REST surface stays snake_case.
-	var resp cpLib.VdevCfg
+	var resp cpLib.VdevConfig
 	cpResp, err := handler.callFunc(cpLib.MOUNT_VDEV, cpReq, true, rncui, 0, &resp)
 	if err != nil || cpErrOf(cpResp) != nil {
 		writeMethodCPError(w, err, cpErrOf(cpResp))
@@ -289,13 +290,13 @@ func (handler *proxyHandler) handleMountVdev(w http.ResponseWriter, r *http.Requ
 		ID:             resp.ID,
 		Name:           resp.Name,
 		Size:           resp.Size,
-		NumChunks:      int(resp.NumChunks),
-		NumReplica:     int(resp.NumReplica),
+		NumChunks:      int(resp.ChunkCnt),
+		NumReplica:     int(resp.DataBlkCnt),
 		MountCounter:   resp.VdevMountInfo.MountCounter,
 		LastUpdatedLTS: resp.VdevMountInfo.LastUpdatedLTS,
 		PFSID:          resp.PFSID,
 		AccessToken:    resp.AccessToken,
-		DataBlkCnt:     resp.NumDataBlk,
-		ParityBlkCnt:   resp.NumParityBlk,
+		DataBlkCnt:     resp.DataBlkCnt,
+		ParityBlkCnt:   resp.ParityBlkCnt,
 	})
 }

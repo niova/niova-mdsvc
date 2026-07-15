@@ -115,7 +115,7 @@ func (handler *proxyHandler) handleGetVdev(w http.ResponseWriter, r *http.Reques
 		Token:   tokenFromRequest(r),
 		Payload: cpLib.GetReq{ID: id},
 	}
-	var vdev cpLib.VdevCfg
+	var vdev cpLib.VdevConfig
 	cpResp, err := handler.callFunc(cpLib.GET_VDEV_INFO, cpReq, false, "", 0, &vdev)
 	if err != nil || cpErrOf(cpResp) != nil {
 		writeMethodCPError(w, err, cpErrOf(cpResp))
@@ -130,8 +130,8 @@ func (handler *proxyHandler) handleGetVdev(w http.ResponseWriter, r *http.Reques
 		ID:            vdev.ID,
 		Name:          vdev.Name,
 		Size:          vdev.Size,
-		NumChunks:     int(vdev.NumChunks),
-		NumReplicas:   int(vdev.NumReplica),
+		NumChunks:     int(vdev.ChunkCnt),
+		NumReplicas:   int(vdev.DataBlkCnt),
 		FailureDomain: vdev.FilterType,
 	})
 }
@@ -207,7 +207,7 @@ func (handler *proxyHandler) handleGetChunk(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	ids := splitCSV(cn.NisdUUIDs)
+	ids := splitCSV(cn.NisdIDs)
 	if len(ids) == 0 {
 		restapi.WriteMethodError(w, restapi.StatusNotFound, "chunk %d not found for vdev %s", chunkIdx, vdevID)
 		return

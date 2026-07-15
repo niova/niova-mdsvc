@@ -123,7 +123,7 @@ func expectMethodError(t *testing.T, rr *httptest.ResponseRecorder) {
 // ---- GET /vdev ----
 
 func TestHandleGetVdev_Success(t *testing.T) {
-	reply := gobReply(t, cpLib.VdevCfg{ID: "vdev-1", Size: 16 * cpLib.CHUNK_SIZE, NumChunks: 2, NumReplica: 3})
+	reply := gobReply(t, cpLib.VdevConfig{ID: "vdev-1", Size: 16 * cpLib.CHUNK_SIZE, ChunkCnt: 2, DataBlkCnt: 3})
 	h := newFakeHandler(reply, nil, nil)
 
 	rr := httptest.NewRecorder()
@@ -145,8 +145,8 @@ func TestHandleGetVdev_MissingID(t *testing.T) {
 }
 
 func TestHandleGetVdev_NotFound_EmptyID(t *testing.T) {
-	// Server returns a zero-value VdevCfg (no such vdev) -> method error in body.
-	h := newFakeHandler(gobReply(t, cpLib.VdevCfg{}), nil, nil)
+	// Server returns a zero-value VdevConfig (no such vdev) -> method error in body.
+	h := newFakeHandler(gobReply(t, cpLib.VdevConfig{}), nil, nil)
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/vdev?id=missing", nil)
 	h.handleGetVdev(rr, req)
@@ -223,7 +223,7 @@ func TestHandleGetNisd_NotFound(t *testing.T) {
 // ---- GET /get_chunk ----
 
 func TestHandleGetChunk_Success(t *testing.T) {
-	cn := cpLib.ChunkNisd{NumReplicas: 2, NisdUUIDs: "nisd-a, nisd-b"}
+	cn := cpLib.ChunkNisd{NisdIDs: "nisd-a, nisd-b"}
 	var cap capturedCall
 	h := newFakeHandler(gobReply(t, cn), nil, &cap)
 	rr := httptest.NewRecorder()
@@ -261,7 +261,7 @@ func TestHandleGetChunk_InvalidChunkIdx(t *testing.T) {
 }
 
 func TestHandleGetChunk_NotFound_Empty(t *testing.T) {
-	h := newFakeHandler(gobReply(t, cpLib.ChunkNisd{NisdUUIDs: ""}), nil, nil)
+	h := newFakeHandler(gobReply(t, cpLib.ChunkNisd{NisdIDs: ""}), nil, nil)
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/get_chunk?vdev_id=v1&chunk_idx=0", nil)
 	h.handleGetChunk(rr, req)
@@ -622,7 +622,7 @@ func TestHandleDeleteVdev_MissingRNCUI(t *testing.T) {
 
 func TestHandleMountVdev_Success(t *testing.T) {
 	var cap capturedCall
-	reply := gobReply(t, cpLib.VdevCfg{
+	reply := gobReply(t, cpLib.VdevConfig{
 		ID:            "v1",
 		AccessToken:   "tok-1",
 		VdevMountInfo: cpLib.VdevMountInfo{MountCounter: 7},

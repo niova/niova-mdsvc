@@ -132,7 +132,7 @@ type MountVdevRequest struct {
 
 // MountVdevPayload is the payload of the mount-vdev envelope: the post-mount
 // vdev state (updated mount info + the freshly minted access token). It is the
-// flat snake_case projection of the internal cpLib.VdevCfg the server returns.
+// flat snake_case projection of the internal cpLib.VdevConfig the server returns.
 type MountVdevPayload struct {
 	ID             string    `json:"id"`
 	Name           string    `json:"name,omitempty"`
@@ -143,7 +143,7 @@ type MountVdevPayload struct {
 	LastUpdatedLTS time.Time `json:"last_updated_lts"`
 	PFSID          string    `json:"pfs_id,omitempty"`
 	AccessToken    string    `json:"access_token,omitempty"`
-	// DataBlkCnt/ParityBlkCnt round-trip cpLib.VdevCfg.NumDataBlk/NumParityBlk,
+	// DataBlkCnt/ParityBlkCnt round-trip cpLib.VdevConfig.DataBlkCnt/ParityBlkCnt,
 	// which the client's mount-validation path requires (see
 	// nclient_cmi_mount_vdev_validate() in niova-block) but which handleMountVdev
 	// previously dropped when projecting into this payload.
