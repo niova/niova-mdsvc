@@ -668,7 +668,7 @@ func WPCreateVdev(args ...interface{}) (interface{}, error) {
 		return ctlplfl.WPAuthError(err)
 	}
 	if len(req.Vdev.Name) > 0 && !isAlphanumeric(req.Vdev.Name) {
-		return ctlplfl.WPFuncError(fmt.Errorf("vdev name %q is invalid: must be non-empty and contain only letters and digits", req.Vdev.Name))
+		return ctlplfl.WPFuncError(fmt.Errorf("vdev name %q is invalid: must be non-empty and contain only letters, digits and hyphen(-)", req.Vdev.Name))
 	}
 
 	err = req.Vdev.Init()

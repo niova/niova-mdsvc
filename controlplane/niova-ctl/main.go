@@ -8457,7 +8457,7 @@ func (m model) updateVdevForm(msg tea.Msg) (model, tea.Cmd) {
 				return m, nil
 			}
 			if !isAlphanumericStr(nameStr) {
-				m.message = "Vdev name must contain only letters and digits"
+				m.message = "Vdev name must contain only letters, digits and hyphen(-)"
 				return m, nil
 			}
 
