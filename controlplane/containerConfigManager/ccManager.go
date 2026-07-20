@@ -129,7 +129,8 @@ func main() {
 	c.SetToken(adminToken)
 	nisdArgs, err := c.GetNisdArgs(req)
 	if err != nil {
-		log.Error("failed to fetch nisd args: ", err)
+		log.Warnf("failed to fetch nisd args (backend may not support /api/nisd_args): %v; "+
+			"generating config with empty cmdline_args", err)
 	}
 	naS := nisdArgs.BuildCmdArgs()
 	for i, nisd := range conf.NisdConfig {

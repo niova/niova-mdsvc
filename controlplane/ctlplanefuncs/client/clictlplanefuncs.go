@@ -567,22 +567,26 @@ func (ccf *CliCFuncs) PutPartition(devp *ctlplfl.DevicePartition) (*ctlplfl.Resp
 	return ccf.restWriteResource("partition", dto)
 }
 
+// GetPartition lists the partitions of the device given by req.ID (all
+// partitions when req.GetAll) via GET /api/resource?type=partition.
 func (ccf *CliCFuncs) GetPartition(req ctlplfl.GetReq) ([]ctlplfl.DevicePartition, error) {
-	cpReq := &ctlplfl.CPReq{
-		Token:   ccf.token,
-		Payload: req,
+	id := req.ID
+	if req.GetAll {
+		id = ""
 	}
-	pts := make([]ctlplfl.DevicePartition, 0)
-	cpResp, err := ccf.get(cpReq, ctlplfl.GET_PARTITION, &pts)
+	resp, err := ccf.getResourceList(string(ctlplfl.ResourcePartition), id)
 	if err != nil {
 		log.Error("Get Partition failed: ", err)
 		return nil, err
 	}
-
-	if err := cpResp.Err(); err != nil {
-		return nil, err
+	pts := make([]ctlplfl.DevicePartition, 0, len(resp.Resources))
+	for _, raw := range resp.Resources {
+		var p restapi.Partition
+		if err := json.Unmarshal(raw, &p); err != nil {
+			return nil, err
+		}
+		pts = append(pts, partitionFromRest(p))
 	}
-
 	return pts, nil
 }
 
