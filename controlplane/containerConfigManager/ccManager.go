@@ -133,20 +133,27 @@ func main() {
 			"generating config with empty cmdline_args", err)
 	}
 	naS := nisdArgs.BuildCmdArgs()
+
 	for i, nisd := range conf.NisdConfig {
-		req := cpLib.GetReq{
-			ID: nisd.DevID,
-		}
+		// GetPartition's id filter matches partition_id, so nisd.DevID (the
+		// partition name from config.yaml) fetches that single partition.
 		c.SetToken(adminToken)
-		pt, err := c.GetPartition(req)
+		pts, err := c.GetPartition(cpLib.GetReq{ID: nisd.DevID})
 		if err != nil {
-			log.Error("failed to get device uuid: ", err)
+			log.Error("failed to get partition: ", err)
 			os.Exit(-1)
 		}
-		log.Info("fetched device info from control plane: ", pt[ZERO_INDEX].NISDUUID)
+		if len(pts) == 0 {
+			log.Errorf("no partition found with partition_id %q", nisd.DevID)
+			os.Exit(-1)
+		}
+		pt := pts[ZERO_INDEX]
 
-		log.Info("setting nisd id: ", pt[ZERO_INDEX].NISDUUID)
-		req.ID = pt[ZERO_INDEX].NISDUUID
+		log.Info("fetched device info from control plane: ", pt.NISDUUID)
+
+		log.Info("setting nisd id: ", pt.NISDUUID)
+		req := cpLib.GetReq{ID: pt.NISDUUID}
+		c.SetToken(adminToken)
 		nisdInfo, err := c.GetNisd(req)
 		if err != nil {
 			log.Error("failed to get nisd details: ", err)
