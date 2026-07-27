@@ -197,6 +197,27 @@ func FDName(t FD) string {
 	}
 }
 
+// ParseFD maps a failure-domain name (see FDName) to its FD value. An empty
+// string or "any" means no scoping (FD_ANY); unknown names return an error.
+func ParseFD(s string) (FD, error) {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "", "any":
+		return FD_ANY, nil
+	case "pdu":
+		return FD_PDU, nil
+	case "rack":
+		return FD_RACK, nil
+	case "hv":
+		return FD_HV, nil
+	case "device":
+		return FD_DEVICE, nil
+	case "partition":
+		return FD_PARTITION, nil
+	default:
+		return FD_ANY, fmt.Errorf("unknown failure_domain %q", s)
+	}
+}
+
 // Define Snapshot XML structure
 type SnapName struct {
 	Name    string `xml:"Name,attr"`

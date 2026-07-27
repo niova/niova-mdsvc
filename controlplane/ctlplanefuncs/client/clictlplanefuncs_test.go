@@ -2438,7 +2438,7 @@ func TestMountVdev(t *testing.T) {
 
 	t.Run("Cooldown Limit", func(t *testing.T) {
 		_, err := c.MountVdev(&cpLib.MountVdevRequest{VdevID: vdevID})
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Contains(t, err.Error(), "mount request within active window")
 	})
 
@@ -2570,7 +2570,7 @@ func TestMountVdevByName(t *testing.T) {
 
 	t.Run("Cooldown Limit", func(t *testing.T) {
 		_, err := c.MountVdev(&cpLib.MountVdevRequest{VdevID: "vdev2"})
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Contains(t, err.Error(), "mount request within active window")
 	})
 

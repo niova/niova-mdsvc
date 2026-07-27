@@ -1,0 +1,1135 @@
+openapi: 3.0.3
+info:
+  title: niova-mdsvc Control Plane REST API
+  version: 0.2.0
+  description: |
+    REST API for the niova-mdsvc control plane. Routes are registered in
+    `controlplane/proxy/restapi.go` (`proxyHandler.restMux`) and served under `/api`
+    (infra, vdev/placement, pfs) and `/users` (auth). The DTOs mirror
+    `controlplane/restapi/*.go` exactly (flat, snake_case JSON), following the TiDB
+    control-plane REST contract where one exists; niova-only extensions
+    (`vdev/mount`, `snap`, `pfs`, `nisd_args`, `recovery_assignment`, the
+    `name`/`pfs` vdev fields, and the `X-RNCUI` write header) are called out
+    below.
+
+    **Response envelope** — every endpoint returns
+    `{ "status": int, "error"?: string, "payload"?: T }`.
+    `status` is 0 on success and non-zero on failure, classifying the error by
+    range (see the `Status` schema for the fixed set of codes). Non-user
+    endpoints (everything under `/api` except `/api/users*`) always answer
+    HTTP 200 and carry business failures in the envelope
+    (`status:!=0, error:"..."`); only the user/auth endpoints (`/users/*`,
+    `/api/users*`) additionally use a matching real HTTP status code for
+    errors.
+
+    **Writes** (`POST`/`PUT`/`DELETE`) require a client-generated `X-RNCUI`
+    idempotency header in the form `<client-uuid>:0:0:0:<sequence>` — PumiceDB
+    dedups retried writes on this key. `POST /users/login` is the only mutating-
+    looking endpoint that is actually a read and needs no `X-RNCUI`.
+
+    **Auth** — a bearer token from `POST /users/login` is accepted via
+    `Authorization: Bearer <token>` on every `/api` route. When the server runs
+    with `DISABLE_AUTH=true`, an absent/invalid token is not rejected at the REST
+    layer (downstream RBAC/ABAC decides), so the security requirement below is
+    advisory rather than universally enforced.
+
+servers:
+  - url: ""
+  - url: http://localhost:8080
+
+tags:
+  - name: auth
+  - name: users
+  - name: vdev
+  - name: infra
+  - name: pfs
+  - name: nisd
+
+security:
+  - bearerAuth: []
+  - {}
+
+paths:
+  # ---------------------------------------------------------------- auth ----
+  /users/login:
+    post:
+      tags: [auth]
+      summary: Log in
+      description: |
+        Authenticates with `username` + secret key (carried in `password`) and
+        returns a bearer access token. Maps to the internal `LoginAPI` (read); no
+        `X-RNCUI` required.
+      operationId: login
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LoginRequest' }
+      responses:
+        '200':
+          description: Login succeeded
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LoginResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /users/admin:
+    post:
+      tags: [auth]
+      summary: Bootstrap the admin user
+      description: |
+        Creates/resets the singleton admin user (`username` must be `"admin"`).
+        Unauthenticated because it runs before any admin/token exists — this is a
+        niova-only endpoint (bootstrap has no TiDB equivalent). `secret_key` is
+        optional; the control plane returns the effective secret key (default or
+        existing) so the caller can immediately log in.
+      operationId: createAdminUser
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/RncuiHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateAdminUserRequest' }
+      responses:
+        '200':
+          description: Admin user created/present
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UserResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  # --------------------------------------------------------------- users ----
+  /api/users:
+    post:
+      tags: [users]
+      summary: Create a user
+      description: |
+        Admin-only. The control plane generates the secret key server-side and
+        returns it once in `payload.secret_key` — there is no password input.
+      operationId: createUser
+      parameters:
+        - $ref: '#/components/parameters/RncuiHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateUserRequest' }
+      responses:
+        '201':
+          description: User created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UserResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+    get:
+      tags: [users]
+      summary: List users
+      description: Admin-only. Secret keys are never included in the collection response.
+      operationId: listUsers
+      parameters:
+        - name: username
+          in: query
+          required: false
+          schema: { type: string }
+          description: Filter to a single username.
+      responses:
+        '200':
+          description: User list
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ListUsersResponse' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/users/{id}:
+    get:
+      tags: [users]
+      summary: Get a user by id
+      description: |
+        Self-or-admin access, enforced by the control plane's ABAC layer. Unlike
+        `GET /api/users`, a single-entity fetch includes the decrypted secret key.
+      operationId: getUser
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: User found
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UserResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [users]
+      summary: Update a user
+      description: |
+        Self-or-admin. Supports changing the username and (admin only) the secret
+        key; role/status changes are not supported by the control plane. At least
+        one of `username`/`new_secret_key` must be supplied.
+      operationId: updateUser
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - $ref: '#/components/parameters/RncuiHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateUserRequest' }
+      responses:
+        '200':
+          description: User updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UserResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  # ---------------------------------------------------------------- vdev ----
+  /api/vdev:
+    post:
+      tags: [vdev]
+      summary: Create a vdev
+      description: |
+        Allocates chunks (8 GiB each) across NISDs and creates the vdev. Optional
+        `failure_domain`/`entity_ids` scope allocation to one failure-domain
+        entity; niova's allocator only honors the first `entity_ids` value.
+        Optional `name` (niova-only) is indexed for name-based lookup elsewhere
+        (`GET /api/vdev?id=<name>`, `POST /api/vdev/mount`).
+      operationId: createVdev
+      parameters:
+        - $ref: '#/components/parameters/RncuiHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateVdevRequest' }
+      responses:
+        '200':
+          description: |
+            Vdev created, or `{status:!=0, error}` on a validation/allocation
+            failure (still HTTP 200 — see the top-level envelope note).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CreateVdevResponse' }
+    get:
+      tags: [vdev]
+      summary: Get vdev metadata
+      operationId: getVdev
+      parameters:
+        - name: id
+          in: query
+          required: true
+          schema: { type: string }
+          description: Vdev UUID, or its `name` if one was set at creation.
+      responses:
+        '200':
+          description: Vdev metadata, or `{status:!=0, error}` if not found.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GetVdevResponse' }
+
+  /api/vdev/{id}:
+    delete:
+      tags: [vdev]
+      summary: Delete a vdev
+      operationId: deleteVdev
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+        - $ref: '#/components/parameters/RncuiHeader'
+      responses:
+        '200':
+          description: Deleted, or `{status:!=0, error}` on failure.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WriteResponse' }
+
+  /api/snap:
+    post:
+      tags: [vdev]
+      summary: Create a vdev snapshot
+      description: niova-only; not part of the TiDB REST contract.
+      operationId: createSnap
+      parameters:
+        - $ref: '#/components/parameters/RncuiHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateSnapRequest' }
+      responses:
+        '200':
+          description: Snapshot created, or `{status:!=0, error}` on failure.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CreateSnapResponse' }
+
+  /api/vdev/mount:
+    post:
+      tags: [vdev]
+      summary: Mount a vdev
+      description: |
+        niova-only. Returns the post-mount vdev state, including the freshly
+        minted `access_token` the data path needs to open the vdev. `vdev_id`
+        accepts either the vdev UUID or its `name`. Repeated mounts within a
+        cooldown window after the previous mount are rejected
+        (`error` contains "mount request within active window").
+      operationId: mountVdev
+      parameters:
+        - $ref: '#/components/parameters/RncuiHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MountVdevRequest' }
+      responses:
+        '200':
+          description: Mounted, or `{status:!=0, error}` on failure (e.g. cooldown).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MountVdevResponse' }
+
+  /api/chunk:
+    get:
+      tags: [vdev]
+      summary: Get NISD placement for one chunk
+      operationId: getChunk
+      parameters:
+        - name: vdev_id
+          in: query
+          required: true
+          schema: { type: string }
+        - name: chunk_idx
+          in: query
+          required: true
+          schema: { type: integer, minimum: 0 }
+      responses:
+        '200':
+          description: Chunk placement, or `{status:!=0, error}` if not found.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GetChunkResponse' }
+
+  /api/recovery_assignment:
+    get:
+      tags: [vdev]
+      summary: Get chunk recovery placement assignment
+      description: |
+        niova-only. **Stub** — the wire contract (route, params, response
+        shape) is defined ahead of the real recovery-assignment control-plane
+        logic, which does not exist yet. The request shape is validated, but
+        the handler always answers `{status:500, error:"recovery assignment
+        not yet implemented"}`.
+      operationId: getRecoveryAssignment
+      parameters:
+        - name: vdev_id
+          in: query
+          required: true
+          schema: { type: string }
+        - name: chunk_idx
+          in: query
+          required: true
+          schema: { type: integer, minimum: 0 }
+        - name: client_snapshot_seqno
+          in: query
+          required: true
+          schema: { type: integer, format: int64 }
+      responses:
+        '200':
+          description: |
+            Not yet implemented — always `{status:500, error:"recovery
+            assignment not yet implemented"}`.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GetRecoveryAssignmentResponse' }
+
+  # --------------------------------------------------------------- infra ----
+  /api/resource:
+    get:
+      tags: [infra]
+      summary: List (or get one) infra resource by type
+      description: |
+        Lists all resources of `type`, or fetches a single one when `id` is also
+        given. `payload.resources` is a generic array (TiDB shape): every element
+        is the flat DTO matching `type` (see the per-type schemas below).
+      operationId: getResource
+      parameters:
+        - name: type
+          in: query
+          required: true
+          schema: { $ref: '#/components/schemas/ResourceType' }
+        - name: id
+          in: query
+          required: false
+          schema: { type: string }
+          description: Fetch a single resource by id instead of listing all.
+      responses:
+        '200':
+          description: Resource(s), or `{status:!=0, error}` on failure.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GetResourceResponse' }
+    put:
+      tags: [infra]
+      summary: Upsert one infra resource by type
+      description: |
+        The TiDB-style replacement for the old per-entity write endpoints. The
+        request body shape depends on `type` (see `oneOf` below); `id` (or
+        `partition_id` for partitions) is required.
+      operationId: putResource
+      parameters:
+        - name: type
+          in: query
+          required: true
+          schema: { $ref: '#/components/schemas/ResourceType' }
+        - $ref: '#/components/parameters/RncuiHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: '#/components/schemas/PDU'
+                - $ref: '#/components/schemas/Rack'
+                - $ref: '#/components/schemas/Hypervisor'
+                - $ref: '#/components/schemas/Device'
+                - $ref: '#/components/schemas/NISD'
+                - $ref: '#/components/schemas/Partition'
+      responses:
+        '200':
+          description: Upserted, or `{status:!=0, error}` on failure.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WriteResponse' }
+
+  /api/infra:
+    get:
+      tags: [infra]
+      summary: Get the full infra hierarchy
+      description: |
+        Assembles PDU → Rack → Hypervisor → Device → NISD from five
+        `GET /api/resource` calls, nested by stored foreign keys. This is a
+        non-atomic, proxy-side read (not a single transactional snapshot).
+      operationId: getInfra
+      responses:
+        '200':
+          description: Infra tree, or `{status:!=0, error}` on failure.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GetInfraResponse' }
+
+  /api/nisd:
+    get:
+      tags: [nisd]
+      summary: Get NISD connection info
+      operationId: getNisd
+      parameters:
+        - name: id
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: NISD info, or `{status:!=0, error}` if not found.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GetNisdResponse' }
+
+  /api/nisd_args:
+    post:
+      tags: [nisd]
+      summary: Set the (singleton) NISD launch-arguments record
+      operationId: putNisdArgs
+      parameters:
+        - $ref: '#/components/parameters/RncuiHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/NisdArgs' }
+      responses:
+        '200':
+          description: Saved, or `{status:!=0, error}` on failure.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WriteResponse' }
+    get:
+      tags: [nisd]
+      summary: Get the (singleton) NISD launch-arguments record
+      operationId: getNisdArgs
+      responses:
+        '200':
+          description: NISD args, or `{status:!=0, error}` on failure.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GetNisdArgsResponse' }
+
+  # ----------------------------------------------------------------- pfs ----
+  /api/pfs:
+    post:
+      tags: [pfs]
+      summary: Create/upsert a PFS grouping
+      description: |
+        Mints a UUID when `id` is omitted (create); a supplied `id` upserts that
+        PFS. The applied id is echoed back in `payload.id`.
+      operationId: putPfs
+      parameters:
+        - $ref: '#/components/parameters/RncuiHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PFS' }
+      responses:
+        '200':
+          description: Upserted, or `{status:!=0, error}` on failure.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WriteResponse' }
+    get:
+      tags: [pfs]
+      summary: Get PFS metadata
+      operationId: getPfs
+      parameters:
+        - name: id
+          in: query
+          required: false
+          schema: { type: string }
+          description: Omit to list all PFS groupings.
+      responses:
+        '200':
+          description: PFS metadata, or `{status:!=0, error}` on failure.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GetPFSResponse' }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: Access token returned by `POST /users/login`.
+
+  parameters:
+    RncuiHeader:
+      name: X-RNCUI
+      in: header
+      required: true
+      schema:
+        type: string
+        example: "3d1f2b1a-9a3e-4e9e-8b1e-1a2b3c4d5e6f:0:0:0:0"
+      description: |
+        Client write-idempotency key: `<client-uuid>:0:0:0:<sequence>`. PumiceDB
+        rejects a write whose RNCUI was already used by a different client
+        ("RNCUI used by wrong pumice client") or replays a completed one instead
+        of double-applying it.
+
+  responses:
+    BadRequest:
+      description: Invalid request (validation failure, malformed body, etc.)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    Unauthorized:
+      description: Missing/invalid credentials or token
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    Forbidden:
+      description: Authenticated but not permitted to perform this action
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    NotFound:
+      description: Resource does not exist
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    Conflict:
+      description: Resource already exists / state conflict
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  schemas:
+    # ---- shared envelope / primitives ----
+    Status:
+      type: integer
+      description: |
+        0 on success; a non-zero value classifies the failure, grouped into
+        ranges by category so new codes can be added within a category
+        without renumbering existing ones:
+
+        | Value | Meaning |
+        |---|---|
+        | `0` | success |
+        | `1` | generic/unclassified failure |
+        | `100` | invalid request (validation failure) |
+        | `101` | unsupported resource type |
+        | `102` | method not allowed |
+        | `200` | unauthorized (missing/invalid credentials or token) |
+        | `201` | forbidden (authenticated but not permitted) |
+        | `300` | not found |
+        | `301` | conflict (already exists / state conflict) |
+        | `302` | infra resource already exists (reserved, not yet emitted) |
+        | `303` | mount attempted during cooldown (reserved, not yet emitted) |
+        | `400` | lost race on capacity allocation (reserved, not yet emitted) |
+        | `401` | insufficient capacity (reserved, not yet emitted) |
+        | `500` | internal/unexpected error |
+        | `501` | service temporarily unavailable (reserved, not yet emitted) |
+      enum: [0, 1, 100, 101, 102, 200, 201, 300, 301, 302, 303, 400, 401, 500, 501]
+      example: 0
+
+    ErrorResponse:
+      type: object
+      properties:
+        status: { $ref: '#/components/schemas/Status' }
+        error: { type: string }
+      required: [status]
+
+    NetworkInfo:
+      type: object
+      properties:
+        ip_addr: { type: string }
+        port: { type: integer }
+
+    ResourceType:
+      type: string
+      enum: [pdu, rack, hypervisor, device, nisd, partition]
+
+    WritePayload:
+      type: object
+      properties:
+        id: { type: string }
+        message: { type: string }
+
+    WriteResponse:
+      type: object
+      properties:
+        status: { $ref: '#/components/schemas/Status' }
+        error: { type: string }
+        payload: { $ref: '#/components/schemas/WritePayload' }
+      required: [status]
+
+    # ---- infra entities (shared by PUT/GET /api/resource and GET /api/infra) ----
+    PDU:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        location: { type: string }
+        specification: { type: string }
+        power_cap: { type: string }
+      required: [id]
+
+    Rack:
+      type: object
+      properties:
+        id: { type: string }
+        pdu_id: { type: string }
+        name: { type: string }
+        location: { type: string }
+        specification: { type: string }
+      required: [id]
+
+    Hypervisor:
+      type: object
+      properties:
+        id: { type: string }
+        rack_id: { type: string }
+        name: { type: string }
+        port_range: { type: string }
+        ssh_port: { type: string }
+        rdma_enabled: { type: boolean }
+        ip_addrs:
+          type: array
+          items: { type: string }
+      required: [id]
+
+    Device:
+      type: object
+      properties:
+        id: { type: string }
+        hypervisor_id: { type: string }
+        name: { type: string }
+        device_path: { type: string }
+        serial_number: { type: string }
+        state: { type: integer }
+        size: { type: integer, format: int64 }
+        failure_domain: { type: string }
+      required: [id]
+
+    NISD:
+      type: object
+      properties:
+        id: { type: string }
+        peer_port: { type: integer }
+        failure_domain:
+          type: array
+          items: { type: string }
+          description: Ordered [pdu, rack, hv, device, partition] ids.
+        total_size: { type: integer, format: int64 }
+        available_size: { type: integer, format: int64 }
+        socket_path: { type: string }
+        net_info:
+          type: array
+          items: { $ref: '#/components/schemas/NetworkInfo' }
+      required: [id]
+
+    Partition:
+      type: object
+      properties:
+        partition_id: { type: string }
+        partition_path: { type: string }
+        nisd_uuid: { type: string }
+        dev_id: { type: string }
+        size: { type: integer, format: int64 }
+      required: [partition_id]
+
+    PFS:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        offset: { type: integer }
+        vdev_ids:
+          type: array
+          items: { type: string }
+
+    NisdArgs:
+      type: object
+      properties:
+        defrag: { type: boolean }
+        allow_defrag_mcib_cache: { type: boolean }
+        mbc_cnt: { type: integer }
+        merge_h_cnt: { type: integer }
+        mcib_read_cache: { type: integer }
+        s3: { type: string }
+        dsync: { type: string }
+
+    # ---- nested infra tree (GET /api/infra) ----
+    NISDNode:
+      type: object
+      properties:
+        id: { type: string }
+        peer_port: { type: integer }
+        total_size: { type: integer, format: int64 }
+        available_size: { type: integer, format: int64 }
+        socket_path: { type: string }
+        net_info:
+          type: array
+          items: { $ref: '#/components/schemas/NetworkInfo' }
+
+    DeviceNode:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        device_path: { type: string }
+        serial_number: { type: string }
+        state: { type: integer }
+        size: { type: integer, format: int64 }
+        failure_domain: { type: string }
+        nisds:
+          type: array
+          items: { $ref: '#/components/schemas/NISDNode' }
+
+    HypervisorNode:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        port_range: { type: string }
+        ssh_port: { type: string }
+        rdma_enabled: { type: boolean }
+        ip_addrs:
+          type: array
+          items: { type: string }
+        devices:
+          type: array
+          items: { $ref: '#/components/schemas/DeviceNode' }
+
+    RackNode:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        location: { type: string }
+        specification: { type: string }
+        hypervisors:
+          type: array
+          items: { $ref: '#/components/schemas/HypervisorNode' }
+
+    PDUNode:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        location: { type: string }
+        specification: { type: string }
+        power_cap: { type: string }
+        racks:
+          type: array
+          items: { $ref: '#/components/schemas/RackNode' }
+
+    InfraTree:
+      type: object
+      properties:
+        pdus:
+          type: array
+          items: { $ref: '#/components/schemas/PDUNode' }
+
+    GetInfraPayload:
+      type: object
+      properties:
+        infra: { $ref: '#/components/schemas/InfraTree' }
+
+    GetInfraResponse:
+      type: object
+      properties:
+        status: { $ref: '#/components/schemas/Status' }
+        error: { type: string }
+        payload: { $ref: '#/components/schemas/GetInfraPayload' }
+      required: [status]
+
+    # ---- GET /api/resource ----
+    GetResourcePayload:
+      type: object
+      properties:
+        type: { $ref: '#/components/schemas/ResourceType' }
+        resources:
+          type: array
+          description: Each element is the flat DTO matching `type` (PDU/Rack/Hypervisor/Device/NISD/Partition).
+          items: { type: object }
+
+    GetResourceResponse:
+      type: object
+      properties:
+        status: { $ref: '#/components/schemas/Status' }
+        error: { type: string }
+        payload: { $ref: '#/components/schemas/GetResourcePayload' }
+      required: [status]
+
+    # ---- GET /api/pfs ----
+    GetPFSPayload:
+      type: object
+      properties:
+        pfs:
+          type: array
+          items: { $ref: '#/components/schemas/PFS' }
+
+    GetPFSResponse:
+      type: object
+      properties:
+        status: { $ref: '#/components/schemas/Status' }
+        error: { type: string }
+        payload: { $ref: '#/components/schemas/GetPFSPayload' }
+      required: [status]
+
+    # ---- GET /api/nisd_args ----
+    GetNisdArgsPayload:
+      type: object
+      properties:
+        nisd_args: { $ref: '#/components/schemas/NisdArgs' }
+      required: [nisd_args]
+
+    GetNisdArgsResponse:
+      type: object
+      properties:
+        status: { $ref: '#/components/schemas/Status' }
+        error: { type: string }
+        payload: { $ref: '#/components/schemas/GetNisdArgsPayload' }
+      required: [status]
+
+    # ---- GET /api/nisd ----
+    GetNisdPayload:
+      type: object
+      properties:
+        id: { type: string }
+        peer_port: { type: integer }
+        net_info:
+          type: array
+          items: { $ref: '#/components/schemas/NetworkInfo' }
+
+    GetNisdResponse:
+      type: object
+      properties:
+        status: { $ref: '#/components/schemas/Status' }
+        error: { type: string }
+        payload: { $ref: '#/components/schemas/GetNisdPayload' }
+      required: [status]
+
+    # ---- GET /api/chunk ----
+    GetChunkPayload:
+      type: object
+      properties:
+        vdev_id: { type: string }
+        chunk_idx: { type: integer }
+        nisd_ids:
+          type: array
+          items: { type: string }
+      required: [chunk_idx]
+
+    GetChunkResponse:
+      type: object
+      properties:
+        status: { $ref: '#/components/schemas/Status' }
+        error: { type: string }
+        payload: { $ref: '#/components/schemas/GetChunkPayload' }
+      required: [status]
+
+    # ---- GET /api/recovery_assignment ----
+    GetRecoveryAssignmentPayload:
+      type: object
+      description: |
+        Stub shape; not yet backed by real control-plane logic (the handler
+        always answers `status:500`).
+      properties:
+        vdev_id: { type: string }
+        chunk_idx: { type: integer }
+        snapshot_seqno: { type: integer, format: int64 }
+        tgt_nisd: { type: string }
+        src_nisd_list:
+          type: array
+          items: { type: string }
+      required: [chunk_idx]
+
+    GetRecoveryAssignmentResponse:
+      type: object
+      properties:
+        status: { $ref: '#/components/schemas/Status' }
+        error: { type: string }
+        payload: { $ref: '#/components/schemas/GetRecoveryAssignmentPayload' }
+      required: [status]
+
+    # ---- POST/GET /api/vdev ----
+    CreateVdevRequest:
+      type: object
+      properties:
+        size_bytes: { type: integer, format: int64, minimum: 1 }
+        num_replicas: { type: integer, minimum: 1, maximum: 255 }
+        failure_domain:
+          type: string
+          enum: [any, pdu, rack, hv, device, partition]
+          description: Scopes NISD allocation to a failure-domain level; empty/"any" auto-picks.
+        entity_ids:
+          type: array
+          items: { type: string }
+          description: Restricts allocation to specific entities. Only the first id is honored.
+        pfs:
+          type: string
+          description: Links the vdev to a PFS, given as either its id (UUID) or its name.
+        name:
+          type: string
+          description: niova-only. Alphanumeric; indexed for name-based lookup.
+      required: [size_bytes, num_replicas]
+
+    CreateVdevPayload:
+      type: object
+      properties:
+        vdev_id: { type: string }
+        name: { type: string }
+        num_chunks: { type: integer }
+        failure_domain: { type: string }
+        pfs_id: { type: string }
+
+    CreateVdevResponse:
+      type: object
+      properties:
+        status: { $ref: '#/components/schemas/Status' }
+        error: { type: string }
+        payload: { $ref: '#/components/schemas/CreateVdevPayload' }
+      required: [status]
+
+    GetVdevPayload:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        size: { type: integer, format: int64 }
+        num_chunks: { type: integer }
+        num_replicas: { type: integer }
+        failure_domain: { type: string }
+
+    GetVdevResponse:
+      type: object
+      properties:
+        status: { $ref: '#/components/schemas/Status' }
+        error: { type: string }
+        payload: { $ref: '#/components/schemas/GetVdevPayload' }
+      required: [status]
+
+    # ---- POST /api/snap ----
+    CreateSnapRequest:
+      type: object
+      properties:
+        vdev_id: { type: string }
+        snap_name: { type: string }
+        chunk_seq:
+          type: array
+          items: { type: integer, format: int64 }
+      required: [vdev_id, snap_name]
+
+    CreateSnapPayload:
+      type: object
+      properties:
+        snap_name: { type: string }
+
+    CreateSnapResponse:
+      type: object
+      properties:
+        status: { $ref: '#/components/schemas/Status' }
+        error: { type: string }
+        payload: { $ref: '#/components/schemas/CreateSnapPayload' }
+      required: [status]
+
+    # ---- POST /api/vdev/mount ----
+    MountVdevRequest:
+      type: object
+      properties:
+        vdev_id:
+          type: string
+          description: Vdev UUID, or its `name` if one was set at creation.
+      required: [vdev_id]
+
+    MountVdevPayload:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        size: { type: integer, format: int64 }
+        num_chunks: { type: integer }
+        num_replica: { type: integer }
+        mount_counter: { type: integer, format: int64 }
+        last_updated_lts: { type: string, format: date-time }
+        pfs_id: { type: string }
+        access_token: { type: string }
+        data_blk_cnt:
+          type: integer
+          description: Rounds-trip `cpLib.VdevCfg.NumDataBlk`; required by the client's mount-validation path.
+        parity_blk_cnt:
+          type: integer
+          description: Rounds-trip `cpLib.VdevCfg.NumParityBlk`; required by the client's mount-validation path.
+      required: [id, mount_counter, last_updated_lts]
+
+    MountVdevResponse:
+      type: object
+      properties:
+        status: { $ref: '#/components/schemas/Status' }
+        error: { type: string }
+        payload: { $ref: '#/components/schemas/MountVdevPayload' }
+      required: [status]
+
+    # ---- auth / users ----
+    LoginRequest:
+      type: object
+      properties:
+        username: { type: string }
+        password:
+          type: string
+          description: The niova secret key (not a traditional password).
+      required: [username, password]
+
+    LoginPayload:
+      type: object
+      properties:
+        access_token: { type: string }
+        token_type: { type: string }
+        expires_in: { type: integer, format: int64 }
+        user_id: { type: string }
+        username: { type: string }
+        role: { type: string }
+        is_admin: { type: boolean }
+
+    LoginResponse:
+      type: object
+      properties:
+        status: { $ref: '#/components/schemas/Status' }
+        error: { type: string }
+        payload: { $ref: '#/components/schemas/LoginPayload' }
+      required: [status]
+
+    CreateAdminUserRequest:
+      type: object
+      properties:
+        username: { type: string, description: Must be "admin". }
+        secret_key: { type: string }
+      required: [username]
+
+    CreateUserRequest:
+      type: object
+      properties:
+        username: { type: string }
+        role: { type: string, enum: [user, admin] }
+      required: [username]
+
+    UpdateUserRequest:
+      type: object
+      properties:
+        username: { type: string }
+        new_secret_key: { type: string }
+      description: At least one of `username`/`new_secret_key` must be supplied.
+
+    UserData:
+      type: object
+      properties:
+        id: { type: string }
+        username: { type: string }
+        role: { type: string }
+        account_status: { type: integer }
+      required: [account_status]
+
+    UserPayload:
+      allOf:
+        - $ref: '#/components/schemas/UserData'
+        - type: object
+          properties:
+            secret_key:
+              type: string
+              description: |
+                Populated only when the control plane returns a plaintext key
+                (create, admin bootstrap, or a secret-key update); never returned
+                by reads other than GET /api/users/{id}.
+
+    UserResponse:
+      type: object
+      properties:
+        status: { $ref: '#/components/schemas/Status' }
+        error: { type: string }
+        payload: { $ref: '#/components/schemas/UserPayload' }
+      required: [status]
+
+    ListUsersPayload:
+      type: object
+      properties:
+        users:
+          type: array
+          items: { $ref: '#/components/schemas/UserData' }
+      required: [users]
+
+    ListUsersResponse:
+      type: object
+      properties:
+        status: { $ref: '#/components/schemas/Status' }
+        error: { type: string }
+        payload: { $ref: '#/components/schemas/ListUsersPayload' }
+      required: [status]

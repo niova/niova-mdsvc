@@ -85,6 +85,11 @@ type proxyHandler struct {
 	metricsPort     int
 	metricsInterval time.Duration
 	metricsEnabled  bool
+
+	// sendFuncReqFn, when non-nil, replaces the real PMDB transport used by
+	// callFunc. Production leaves it nil (callFunc uses sendFuncReq); tests
+	// inject a fake to exercise the REST handlers without a live cluster.
+	sendFuncReqFn func(name string, cpReq cpLib.CPReq, isWrite bool, rncui string, wsn int64) ([]byte, error)
 }
 
 var MaxPort = 60000
@@ -682,6 +687,7 @@ func (handler *proxyHandler) startHTTPServer() error {
 		PMDBServerConfig: handler.PMDBServerConfigByteMap,
 		RecvdPort:        &RecvdPort,
 		AppType:          "Proxy",
+		RESTHandler:      handler.restMux(),
 	}
 	handler.httpServerObj.HTTPConnectionLimit, _ = strconv.Atoi(handler.limit)
 	if handler.requireStat != "0" {
