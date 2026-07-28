@@ -3,11 +3,8 @@
 # serf_gossip_interface.sh
 # Mimics the behavior of serf_gossip_interface.c
 
-# Gossip "Type" tag identifying a control-plane app server. APP_SERVER_TAG_LEGACY
-# is the pre-rename value, still accepted so a partially migrated fleet resolves;
-# drop it once every publisher emits APP_SERVER_TAG.
+# Gossip "Type" tag identifying a control-plane app server.
 APP_SERVER_TAG="${APP_SERVER_TAG:-niova-mdsvc}"
-APP_SERVER_TAG_LEGACY="PROXY"
 
 # Log function for stderr
 log() {
@@ -98,16 +95,13 @@ for IP in $IPS; do
         AGENT_ADDR="$IP:$PORT"
         
         # 3. Get the gossip data from the agent
-        # We ask for all alive members and filter on Type below. A single
-        # '-tag Type=' could not match both the current app-server tag and the
-        # legacy one, so the selection happens in jq instead.
-        RESULT=$(serf members -rpc-addr="$AGENT_ADDR" -rpc-auth="$GOSSIP_KEY" -format json -status alive 2>/dev/null)
+        # We query the agent for alive members tagged as app servers
+        RESULT=$(serf members -rpc-addr="$AGENT_ADDR" -rpc-auth="$GOSSIP_KEY" -tag Type="$APP_SERVER_TAG" -format json -status alive 2>/dev/null)
 
         if [ $? -eq 0 ] && [ -n "$RESULT" ]; then
             # identify HTTP port of the proxy!
-            # Accept the current app-server tag and the pre-rename value, so a
-            # partially migrated fleet still resolves.
-            PROXY_INFO=$(echo "$RESULT" | jq -r --arg tag "$APP_SERVER_TAG" --arg legacy "$APP_SERVER_TAG_LEGACY" '.members[] | select(.status == "alive" and (.tags.Type == $tag or .tags.Type == $legacy)) | "\(.addr) \(.tags.Hport)"' | head -n 1)
+            # Using jq to extract the Proxy IP and its Hport tag
+            PROXY_INFO=$(echo "$RESULT" | jq -r --arg tag "$APP_SERVER_TAG" '.members[] | select(.status == "alive" and .tags.Type == $tag) | "\(.addr) \(.tags.Hport)"' | head -n 1)
             
             if [ -n "$PROXY_INFO" ]; then
                 read -r ADDR HPORT <<< "$PROXY_INFO"

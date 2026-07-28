@@ -145,14 +145,14 @@ func decodeEnvelope[T any](body []byte) (T, error) {
 }
 
 func (c *Client) restGet(token, path string) ([]byte, error) {
-	c.sd.TillReady("PROXY", 5)
+	c.sd.TillReady(sd.ServiceTypeNiovaMdsvc, 5)
 	body, status, err := c.sd.RESTRequest(http.MethodGet, path, nil, c.restHeaders(token, false))
 	return restResult(body, status, err)
 }
 
 // restWrite issues a POST/PUT with the required X-RNCUI header.
 func (c *Client) restWrite(method, token, path string, jsonBody []byte) ([]byte, error) {
-	c.sd.TillReady("PROXY", 5)
+	c.sd.TillReady(sd.ServiceTypeNiovaMdsvc, 5)
 	h := c.restHeaders(token, true)
 	h["X-RNCUI"] = c.nextRncui()
 	body, status, err := c.sd.RESTRequest(method, path, jsonBody, h)
@@ -330,7 +330,7 @@ func (c *Client) Login(username, secretKey string) (*userlib.LoginResp, error) {
 	if err != nil {
 		return nil, err
 	}
-	c.sd.TillReady("PROXY", 5)
+	c.sd.TillReady(sd.ServiceTypeNiovaMdsvc, 5)
 	// Login is unauthenticated and carries no X-RNCUI.
 	body, status, err := c.sd.RESTRequest(http.MethodPost, "/users/login", reqBody,
 		map[string]string{"Content-Type": "application/json"})

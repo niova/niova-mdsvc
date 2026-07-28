@@ -271,7 +271,9 @@ func (handler *proxyHandler) startSerfAgent() error {
 		RaftUUID:          handler.raftUUID,
 		ServicePortRangeS: handler.ServicePortRangeS,
 		ServicePortRangeE: handler.ServicePortRangeE,
-		AppType:           "PROXY",
+		// Not gossiped; serfagent only checks whether this equals "PMDB" to pick
+		// a port-allocation strategy.
+		AppType: "APP_SERVER",
 	}
 	//Start serf agent
 	_, err := handler.serfAgentObj.SerfAgentStartup(true)
