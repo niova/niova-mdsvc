@@ -33,7 +33,7 @@ func (handler *proxyHandler) handleCreateVdev(w http.ResponseWriter, r *http.Req
 		restapi.WriteMethodError(w, restapi.StatusInvalidRequest, "size_bytes must be >= 1")
 		return
 	}
-	if req.NumReplicas < 1 || req.NumReplicas > maxVdevReplicas {
+	if req.DataBlkCnt < 1 || req.DataBlkCnt > maxVdevReplicas {
 		restapi.WriteMethodError(w, restapi.StatusInvalidRequest, "num_replicas must be between 1 and %d", maxVdevReplicas)
 		return
 	}
@@ -63,7 +63,7 @@ func (handler *proxyHandler) handleCreateVdev(w http.ResponseWriter, r *http.Req
 	vdevCfg := &cpLib.VdevConfig{
 		Size:       req.SizeBytes,
 		Redundancy: cpLib.RMReplica,
-		DataBlkCnt: uint8(req.NumReplicas),
+		DataBlkCnt: uint8(req.DataBlkCnt),
 		Name:       strings.TrimSpace(req.Name),
 	}
 	// Optional PFS link, supplied as either the PFS id (UUID) or its name. The
