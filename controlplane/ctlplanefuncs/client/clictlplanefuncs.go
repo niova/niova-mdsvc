@@ -496,9 +496,11 @@ func (ccf *CliCFuncs) CreateVdev(vdev *ctlplfl.VdevReq) (*ctlplfl.ResponseXML, e
 	// optional failure-domain filter, and an optional PFS link. Name is a
 	// niova-only extension the proxy forwards for name-based lookup.
 	reqBody := restapi.CreateVdevRequest{
-		SizeBytes:   vdev.Vdev.Size,
-		NumReplicas: int(vdev.Vdev.DataBlkCnt),
-		Name:        vdev.Vdev.Name,
+		SizeBytes:    vdev.Vdev.Size,
+		DataBlkCnt:   int(vdev.Vdev.DataBlkCnt),
+		ParityBlkCnt: int(vdev.Vdev.ParityBlkCnt),
+		Redundancy:   int(vdev.Vdev.Redundancy),
+		Name:         vdev.Vdev.Name,
 	}
 	// Forward failure-domain scoping. FD_ANY means no scoping, so omit it.
 	if vdev.Filter.Type != ctlplfl.FD_ANY {

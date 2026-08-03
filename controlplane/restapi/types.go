@@ -72,8 +72,12 @@ type NISDNode struct {
 // ---- /create_vdev ----
 
 type CreateVdevRequest struct {
-	SizeBytes   int64 `json:"size_bytes"`
-	NumReplicas int   `json:"num_replicas"`
+	SizeBytes    int64 `json:"size_bytes"`
+	DataBlkCnt   int   `json:"data_blk_cnt"`             // data blocks per chunk (replica count for replication)
+	ParityBlkCnt int   `json:"parity_blk_cnt,omitempty"` // parity blocks per chunk (0 for replication)
+	// Redundancy selects the chunk redundancy scheme: 0=REPLICATION, 1=EC_32K,
+	// 2=EC_64K, 3=EC_128K. See models.Redundancy for the full mapping.
+	Redundancy int `json:"redundancy,omitempty"`
 	// FailureDomain scopes NISD allocation to a failure-domain level
 	// ("pdu"|"rack"|"hv"|"device"|"partition"); empty/"any" auto-picks.
 	FailureDomain string `json:"failure_domain,omitempty"`
