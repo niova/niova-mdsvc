@@ -792,21 +792,28 @@ func (ccf *CliCFuncs) GetVdevConfig(req *ctlplfl.GetReq) (ctlplfl.VdevConfig, er
 }
 
 func (ccf *CliCFuncs) GetVdevConfigs(req *ctlplfl.GetReq) ([]ctlplfl.VdevConfig, error) {
-	cpReq := &ctlplfl.CPReq{
-		Token:   ccf.token,
-		Payload: req,
-	}
 	vdevs := make([]ctlplfl.VdevConfig, 0)
-	cpResp, err := ccf.get(cpReq, ctlplfl.GET_ALL_VDEV, &vdevs)
+	body, err := ccf.restGet("/api/resource?type=vdev")
 	if err != nil {
-		log.Error("Read Vdev Cfg failed: ", err)
+		log.Error("Read Vdev Configs failed: ", err)
+		return nil, err
+	}
+	resp, err := decodeEnvelope[restapi.GetVdevsPayload](body)
+	if err != nil {
+		log.Error("failed to decode vdev list response: ", err)
 		return nil, err
 	}
 
-	if err := cpResp.Err(); err != nil {
-		return nil, err
+	for _, r := range resp.Resources {
+		vdevs = append(vdevs, ctlplfl.VdevConfig{
+			ID:         r.ID,
+			Name:       r.Name,
+			Size:       r.Size,
+			ChunkCnt:   uint32(r.NumChunks),
+			DataBlkCnt: uint8(r.NumReplicas),
+			FilterType: r.FailureDomain,
+		})
 	}
-
 	return vdevs, nil
 }
 

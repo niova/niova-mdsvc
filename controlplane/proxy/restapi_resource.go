@@ -90,6 +90,17 @@ func toRestPFS(p cpLib.PFS) restapi.PFS {
 	}
 }
 
+func toRestVdev(v cpLib.VdevConfig) restapi.GetVdevPayload {
+	return restapi.GetVdevPayload{
+		Size:          v.Size,
+		NumReplicas:   int(v.DataBlkCnt),
+		FailureDomain: v.FilterType,
+		NumChunks:     int(v.ChunkCnt),
+		Name:          v.Name,
+		ID:            v.ID,
+	}
+}
+
 // ---- PUT /api/resource?type= ----
 
 // handlePutResource upserts a single infra entity selected by the ?type= query
@@ -247,7 +258,7 @@ func (handler *proxyHandler) handleGetResource(w http.ResponseWriter, r *http.Re
 	}
 	switch cpLib.ResourceType(rtype) {
 	case cpLib.ResourcePDU, cpLib.ResourceRack, cpLib.ResourceHypervisor,
-		cpLib.ResourceDevice, cpLib.ResourceNisd, cpLib.ResourcePartition:
+		cpLib.ResourceDevice, cpLib.ResourceNisd, cpLib.ResourcePartition, cpLib.ResourceVdev:
 	default:
 		restapi.WriteMethodError(w, restapi.StatusUnsupportedResource, "unsupported resource type: %s", rtype)
 		return
@@ -294,6 +305,10 @@ func (handler *proxyHandler) handleGetResource(w http.ResponseWriter, r *http.Re
 	case cpLib.ResourcePartition:
 		for _, x := range rl.Partitions {
 			appendResource(toRestPartition(x))
+		}
+	case cpLib.ResourceVdev:
+		for _, x := range rl.Vdevs {
+			appendResource(toRestVdev(x))
 		}
 	}
 	restapi.WriteData(w, resp)

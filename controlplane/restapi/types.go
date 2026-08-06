@@ -119,6 +119,10 @@ type GetVdevPayload struct {
 	FailureDomain string `json:"failure_domain,omitempty"`
 }
 
+type GetVdevsPayload struct {
+	Resources []GetVdevPayload `json:"resources"`
+}
+
 // ---- /nisd ----
 
 // GetNisdPayload is the payload of the get-nisd envelope.
