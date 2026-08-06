@@ -70,43 +70,6 @@ func (ccf *CliCFuncs) request(rqb []byte, urla string, isWrite bool) ([]byte, er
 	return rsp, nil
 }
 
-func (ccf *CliCFuncs) _put(urla string, rqb []byte) ([]byte, error) {
-	seq := ccf.writeSeq.Add(1) - 1
-	rncui := fmt.Sprintf("%s:0:0:0:%d", ccf.appUUID, seq)
-	urla += "&rncui=" + rncui
-	rsb, err := ccf.request(rqb, urla, true)
-	return rsb, err
-}
-
-func (ccf *CliCFuncs) put(cpReq *ctlplfl.CPReq, urla string, target any) (*ctlplfl.CPResp, error) {
-	url := "name=" + urla
-	rqb, err := pmCmn.Encoder(ccf.encType, cpReq)
-	if err != nil {
-		log.Error("failed to encode data: ", err)
-		return nil, err
-	}
-
-	rsb, err := ccf._put(url, rqb)
-	if err != nil {
-		log.Error("failed to send request(_put): ", err)
-		return nil, err
-	}
-	if rsb == nil {
-		return nil, fmt.Errorf("failed to fetch response from control plane: %v", err)
-	}
-
-	cpResp := &ctlplfl.CPResp{
-		Payload: target,
-	}
-	err = pmCmn.Decoder(ccf.encType, rsb, cpResp)
-	if err != nil {
-		log.Error("failed to decode response in put: ", err)
-		return nil, err
-	}
-
-	return cpResp, nil
-}
-
 func (ccf *CliCFuncs) get(cpReq *ctlplfl.CPReq, urla string, target any) (*ctlplfl.CPResp, error) {
 	url := "name=" + urla
 	rqb, err := pmCmn.Encoder(ccf.encType, cpReq)
