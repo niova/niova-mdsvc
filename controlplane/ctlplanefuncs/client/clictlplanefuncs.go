@@ -61,7 +61,7 @@ func InitCliCFuncs(appUUID string, key string, gossipConfigPath string, logPath 
 }
 
 func (ccf *CliCFuncs) request(rqb []byte, urla string, isWrite bool) ([]byte, error) {
-	ccf.sdObj.TillReady("PROXY", 5)
+	ccf.sdObj.TillReady(sd.ServiceTypeNiovaMdsvc, 5)
 	rsp, err := ccf.sdObj.Request(rqb, "/func?"+urla, isWrite)
 	if err != nil {
 		log.Error("failed to send request to server: ", err)
@@ -158,7 +158,7 @@ func decodeEnvelope[T any](body []byte) (T, error) {
 
 // restGet issues a GET to a migrated REST endpoint (path includes any query).
 func (ccf *CliCFuncs) restGet(path string) ([]byte, error) {
-	ccf.sdObj.TillReady("PROXY", 5)
+	ccf.sdObj.TillReady(sd.ServiceTypeNiovaMdsvc, 5)
 	body, status, err := ccf.sdObj.RESTRequest(http.MethodGet, path, nil, ccf.restHeaders(false))
 	return restResult(body, status, err)
 }
@@ -166,7 +166,7 @@ func (ccf *CliCFuncs) restGet(path string) ([]byte, error) {
 // restPost issues a POST to a migrated REST endpoint, supplying the PumiceDB
 // write idempotency key via the X-RNCUI header (required by the proxy).
 func (ccf *CliCFuncs) restPost(path string, jsonBody []byte, rncui string) ([]byte, error) {
-	ccf.sdObj.TillReady("PROXY", 5)
+	ccf.sdObj.TillReady(sd.ServiceTypeNiovaMdsvc, 5)
 	headers := ccf.restHeaders(true)
 	headers["X-RNCUI"] = rncui
 	body, status, err := ccf.sdObj.RESTRequest(http.MethodPost, path, jsonBody, headers)
@@ -177,7 +177,7 @@ func (ccf *CliCFuncs) restPost(path string, jsonBody []byte, rncui string) ([]by
 // write idempotency key via the X-RNCUI header (required by the proxy for
 // writes), and maps the generic WriteResponse back to a ResponseXML.
 func (ccf *CliCFuncs) restDelete(path string) (*ctlplfl.ResponseXML, error) {
-	ccf.sdObj.TillReady("PROXY", 5)
+	ccf.sdObj.TillReady(sd.ServiceTypeNiovaMdsvc, 5)
 	headers := ccf.restHeaders(false)
 	headers["X-RNCUI"] = ccf.nextRncui()
 	body, status, err := ccf.sdObj.RESTRequest(http.MethodDelete, path, nil, headers)
@@ -220,7 +220,7 @@ func (ccf *CliCFuncs) restWrite(path string, dto any) (*ctlplfl.ResponseXML, err
 // restPut issues a PUT to a migrated REST endpoint, supplying the PumiceDB write
 // idempotency key via the X-RNCUI header (required by the proxy for writes).
 func (ccf *CliCFuncs) restPut(path string, jsonBody []byte, rncui string) ([]byte, error) {
-	ccf.sdObj.TillReady("PROXY", 5)
+	ccf.sdObj.TillReady(sd.ServiceTypeNiovaMdsvc, 5)
 	headers := ccf.restHeaders(true)
 	headers["X-RNCUI"] = rncui
 	body, status, err := ccf.sdObj.RESTRequest(http.MethodPut, path, jsonBody, headers)

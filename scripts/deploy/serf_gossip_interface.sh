@@ -3,6 +3,9 @@
 # serf_gossip_interface.sh
 # Mimics the behavior of serf_gossip_interface.c
 
+# Gossip "Type" tag identifying a control-plane app server.
+APP_SERVER_TAG="${APP_SERVER_TAG:-niova-mdsvc}"
+
 # Log function for stderr
 log() {
     echo "$@" >&2
@@ -92,13 +95,13 @@ for IP in $IPS; do
         AGENT_ADDR="$IP:$PORT"
         
         # 3. Get the gossip data from the agent
-        # We query the agent for members with tag Type=PROXY and status=alive
-        RESULT=$(serf members -rpc-addr="$AGENT_ADDR" -rpc-auth="$GOSSIP_KEY" -tag Type=PROXY -format json -status alive 2>/dev/null)
-        
+        # We query the agent for alive members tagged as app servers
+        RESULT=$(serf members -rpc-addr="$AGENT_ADDR" -rpc-auth="$GOSSIP_KEY" -tag Type="$APP_SERVER_TAG" -format json -status alive 2>/dev/null)
+
         if [ $? -eq 0 ] && [ -n "$RESULT" ]; then
             # identify HTTP port of the proxy!
             # Using jq to extract the Proxy IP and its Hport tag
-            PROXY_INFO=$(echo "$RESULT" | jq -r '.members[] | select(.status == "alive" and .tags.Type == "PROXY") | "\(.addr) \(.tags.Hport)"' | head -n 1)
+            PROXY_INFO=$(echo "$RESULT" | jq -r --arg tag "$APP_SERVER_TAG" '.members[] | select(.status == "alive" and .tags.Type == $tag) | "\(.addr) \(.tags.Hport)"' | head -n 1)
             
             if [ -n "$PROXY_INFO" ]; then
                 read -r ADDR HPORT <<< "$PROXY_INFO"
