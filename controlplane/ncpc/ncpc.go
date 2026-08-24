@@ -489,7 +489,7 @@ func (c *clientHandler) getKVArray() []clientReq {
 func (c *clientHandler) processReadWriteReq(rArr []clientReq) ([]byte, error) {
 
 	//Wait till proxy is ready
-	err := c.waitServiceInit("PROXY")
+	err := c.waitServiceInit(serviceDiscovery.ServiceTypeNiovaMdsvc)
 	if err != nil {
 		return nil, err
 	}
@@ -701,7 +701,7 @@ func (c *clientHandler) writeData2Json(data interface{}) {
 }
 
 func (c *clientHandler) performLeaseReq(resource, client string) ([]byte, error) {
-	c.clientAPIObj.TillReady("PROXY", c.serviceRetry)
+	c.clientAPIObj.TillReady(serviceDiscovery.ServiceTypeNiovaMdsvc, c.serviceRetry)
 
 	op := getLeaseOperationType(c.operation)
 

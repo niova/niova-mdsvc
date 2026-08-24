@@ -61,50 +61,13 @@ func InitCliCFuncs(appUUID string, key string, gossipConfigPath string, logPath 
 }
 
 func (ccf *CliCFuncs) request(rqb []byte, urla string, isWrite bool) ([]byte, error) {
-	ccf.sdObj.TillReady("PROXY", 5)
+	ccf.sdObj.TillReady(sd.ServiceTypeNiovaMdsvc, 5)
 	rsp, err := ccf.sdObj.Request(rqb, "/func?"+urla, isWrite)
 	if err != nil {
 		log.Error("failed to send request to server: ", err)
 		return nil, err
 	}
 	return rsp, nil
-}
-
-func (ccf *CliCFuncs) _put(urla string, rqb []byte) ([]byte, error) {
-	seq := ccf.writeSeq.Add(1) - 1
-	rncui := fmt.Sprintf("%s:0:0:0:%d", ccf.appUUID, seq)
-	urla += "&rncui=" + rncui
-	rsb, err := ccf.request(rqb, urla, true)
-	return rsb, err
-}
-
-func (ccf *CliCFuncs) put(cpReq *ctlplfl.CPReq, urla string, target any) (*ctlplfl.CPResp, error) {
-	url := "name=" + urla
-	rqb, err := pmCmn.Encoder(ccf.encType, cpReq)
-	if err != nil {
-		log.Error("failed to encode data: ", err)
-		return nil, err
-	}
-
-	rsb, err := ccf._put(url, rqb)
-	if err != nil {
-		log.Error("failed to send request(_put): ", err)
-		return nil, err
-	}
-	if rsb == nil {
-		return nil, fmt.Errorf("failed to fetch response from control plane: %v", err)
-	}
-
-	cpResp := &ctlplfl.CPResp{
-		Payload: target,
-	}
-	err = pmCmn.Decoder(ccf.encType, rsb, cpResp)
-	if err != nil {
-		log.Error("failed to decode response in put: ", err)
-		return nil, err
-	}
-
-	return cpResp, nil
 }
 
 func (ccf *CliCFuncs) get(cpReq *ctlplfl.CPReq, urla string, target any) (*ctlplfl.CPResp, error) {
@@ -195,7 +158,7 @@ func decodeEnvelope[T any](body []byte) (T, error) {
 
 // restGet issues a GET to a migrated REST endpoint (path includes any query).
 func (ccf *CliCFuncs) restGet(path string) ([]byte, error) {
-	ccf.sdObj.TillReady("PROXY", 5)
+	ccf.sdObj.TillReady(sd.ServiceTypeNiovaMdsvc, 5)
 	body, status, err := ccf.sdObj.RESTRequest(http.MethodGet, path, nil, ccf.restHeaders(false))
 	return restResult(body, status, err)
 }
@@ -203,7 +166,7 @@ func (ccf *CliCFuncs) restGet(path string) ([]byte, error) {
 // restPost issues a POST to a migrated REST endpoint, supplying the PumiceDB
 // write idempotency key via the X-RNCUI header (required by the proxy).
 func (ccf *CliCFuncs) restPost(path string, jsonBody []byte, rncui string) ([]byte, error) {
-	ccf.sdObj.TillReady("PROXY", 5)
+	ccf.sdObj.TillReady(sd.ServiceTypeNiovaMdsvc, 5)
 	headers := ccf.restHeaders(true)
 	headers["X-RNCUI"] = rncui
 	body, status, err := ccf.sdObj.RESTRequest(http.MethodPost, path, jsonBody, headers)
@@ -214,7 +177,7 @@ func (ccf *CliCFuncs) restPost(path string, jsonBody []byte, rncui string) ([]by
 // write idempotency key via the X-RNCUI header (required by the proxy for
 // writes), and maps the generic WriteResponse back to a ResponseXML.
 func (ccf *CliCFuncs) restDelete(path string) (*ctlplfl.ResponseXML, error) {
-	ccf.sdObj.TillReady("PROXY", 5)
+	ccf.sdObj.TillReady(sd.ServiceTypeNiovaMdsvc, 5)
 	headers := ccf.restHeaders(false)
 	headers["X-RNCUI"] = ccf.nextRncui()
 	body, status, err := ccf.sdObj.RESTRequest(http.MethodDelete, path, nil, headers)
@@ -257,7 +220,7 @@ func (ccf *CliCFuncs) restWrite(path string, dto any) (*ctlplfl.ResponseXML, err
 // restPut issues a PUT to a migrated REST endpoint, supplying the PumiceDB write
 // idempotency key via the X-RNCUI header (required by the proxy for writes).
 func (ccf *CliCFuncs) restPut(path string, jsonBody []byte, rncui string) ([]byte, error) {
-	ccf.sdObj.TillReady("PROXY", 5)
+	ccf.sdObj.TillReady(sd.ServiceTypeNiovaMdsvc, 5)
 	headers := ccf.restHeaders(true)
 	headers["X-RNCUI"] = rncui
 	body, status, err := ccf.sdObj.RESTRequest(http.MethodPut, path, jsonBody, headers)
