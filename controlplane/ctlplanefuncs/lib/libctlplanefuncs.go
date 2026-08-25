@@ -456,6 +456,7 @@ const (
 	ResourceHypervisor ResourceType = "hypervisor"
 	ResourceDevice     ResourceType = "device"
 	ResourcePartition  ResourceType = "partition"
+	ResourceVdev       ResourceType = "vdev"
 )
 
 type GetResourceReq struct {
@@ -472,6 +473,7 @@ type ResourceListResp struct {
 	Hypervisors  []Hypervisor
 	Devices      []Device
 	Partitions   []DevicePartition
+	Vdevs        []VdevConfig
 }
 
 type MountVdevRequest struct {

@@ -1378,7 +1378,13 @@ func ReadAllResources(args ...any) (any, error) {
 			return ctlplfl.FuncError(err)
 		}
 		resp.Partitions = ParseEntities[ctlplfl.DevicePartition](rm, ptParser{}, BASE_UUID_PREFIX)
-
+	case ctlplfl.ResourceVdev:
+		rm, err := rangeRead(vdevKey)
+		if err != nil {
+			log.Errorf("ReadAllResources: range read failed for vdev: %v", err)
+			return ctlplfl.FuncError(err)
+		}
+		resp.Vdevs = ParseEntities[ctlplfl.VdevConfig](rm, vdevParser{}, BASE_UUID_PREFIX)
 	default:
 		return ctlplfl.FuncError(fmt.Errorf("unknown resource type: %q", req.ResourceType))
 	}
