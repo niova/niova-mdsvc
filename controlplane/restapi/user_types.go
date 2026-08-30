@@ -18,9 +18,12 @@ package restapi
 // ---- POST /users/login (LoginAPI) ----
 
 // LoginRequest is the login body. password is the niova secret key.
+// TenantUUID is optional: empty logs into the default tenant, matching
+// mdsvc-tidb's own LoginRequest DTO (internal/models/dto/requests.go).
 type LoginRequest struct {
-	Username string `json:"username"`
-	Password string `json:"password"`
+	Username   string `json:"username"`
+	Password   string `json:"password"`
+	TenantUUID string `json:"tenant_uuid,omitempty"`
 }
 
 // LoginPayload is the payload of the login envelope (APIResponse[LoginPayload]).

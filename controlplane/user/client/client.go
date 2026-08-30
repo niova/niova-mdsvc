@@ -324,24 +324,49 @@ func (c *Client) UpdateAdminSecretKey(userID, newSecretKey, userToken string) (*
 	return userRespFromREST(body)
 }
 
-// Login authenticates with username and secret key, returning a JWT.
+// Login authenticates with username and secret key against the default
+// tenant, returning a JWT. Equivalent to LoginWithTenant(username, secretKey, "").
 func (c *Client) Login(username, secretKey string) (*userlib.LoginResp, error) {
-	reqBody, err := json.Marshal(restapi.LoginRequest{Username: username, Password: secretKey})
+	return c.LoginWithTenant(username, secretKey, "")
+}
+
+// LoginWithTenant authenticates with username and secret key, optionally
+// scoped to a specific tenant (tenantUUID == "" logs into the default
+// tenant, same convention as mdsvc-tidb's own /users/login handler).
+func (c *Client) LoginWithTenant(username, secretKey, tenantUUID string) (*userlib.LoginResp, error) {
+	reqBody, err := json.Marshal(restapi.LoginRequest{Username: username, Password: secretKey, TenantUUID: tenantUUID})
 	if err != nil {
 		return nil, err
 	}
-	c.sd.TillReady(sd.ServiceTypeNiovaMdsvc, 5)
+	tenantForLog := tenantUUID
+	if tenantForLog == "" {
+		tenantForLog = "<default>"
+	}
+	log.Infof("attempting control-plane login: user=%q tenant=%s", username, tenantForLog)
+	// TillReady blocks on gossip/service discovery finding a live
+	// "niova-mdsvc"-tagged peer; a hang or timeout here means gossip
+	// discovery itself failed (wrong gossip ports/peers, or no mdsvc-tidb
+	// reachable) rather than a credentials problem — surfaced explicitly
+	// below so it isn't mistaken for a bad username/secret.
+	if err := c.sd.TillReady(sd.ServiceTypeNiovaMdsvc, 5); err != nil {
+		return nil, fmt.Errorf(
+			"login failed: no live control-plane (niova-mdsvc) peer found via gossip after retries "+
+				"(user=%q tenant=%s): %w — check gossip ipaddr/ports in config.yaml match the control plane's "+
+				"actual serf bind/join ports, and that MDSVC_SERF_RPC_AUTH matches the --raft value passed here",
+			username, tenantForLog, err)
+	}
 	// Login is unauthenticated and carries no X-RNCUI.
 	body, status, err := c.sd.RESTRequest(http.MethodPost, "/users/login", reqBody,
 		map[string]string{"Content-Type": "application/json"})
 	body, err = restResult(body, status, err)
 	if err != nil {
-		return nil, fmt.Errorf("login failed: %w", err)
+		return nil, fmt.Errorf("login failed: user=%q tenant=%s status=%d: %w", username, tenantForLog, status, err)
 	}
 	lr, err := decodeEnvelope[restapi.LoginPayload](body)
 	if err != nil {
-		return nil, fmt.Errorf("login failed: %w", err)
+		return nil, fmt.Errorf("login failed: user=%q tenant=%s: %w", username, tenantForLog, err)
 	}
+	log.Infof("control-plane login succeeded: user=%q tenant=%s user_id=%s", username, tenantForLog, lr.UserID)
 	return &userlib.LoginResp{
 		AccessToken: lr.AccessToken,
 		TokenType:   lr.TokenType,
