@@ -20,6 +20,15 @@ import (
 const GEN_CONF_FILE = "config-gen.yaml"
 const ZERO_INDEX = 0
 
+// tenantLogValue renders a tenant UUID for log output, making the
+// default-tenant case explicit instead of printing an empty string.
+func tenantLogValue(tenantUUID string) string {
+	if tenantUUID == "" {
+		return "<default>"
+	}
+	return tenantUUID
+}
+
 type Nisd struct {
 	ClientPort uint16 `yaml:"client_port"`
 	PeerPort   uint16 `yaml:"peer_port"`
@@ -73,9 +82,12 @@ func main() {
 	logLevel := flag.Int("ll", 4, "set log level (0=panic, 1=fatal, 2=error, 3=warn, 4=info, 5=debug, 6=trace)")
 	// PASS the secret key here
 	adminSecret := flag.String("as", "", "admin secret key for authentication")
+	authUser := flag.String("au", userlib.AdminUsername, "auth username for authentication (defaults to the admin user)")
+	tenantUUID := flag.String("t", "", "tenant UUID to authenticate against (empty = default tenant)")
 	flag.Parse()
 	log.SetLevel(log.Level(*logLevel))
-	log.Infof("starting config app - raft: %s, config: %s", *raftID, *configPath)
+	log.Infof("starting config app - raft: %s, config: %s, setupConfig: %s, authUser: %s, tenant: %s",
+		*raftID, *configPath, *setupConfig, *authUser, tenantLogValue(*tenantUUID))
 
 	var adminToken string
 	authEnabled := os.Getenv("AUTH_ENABLED") != "false"
@@ -98,16 +110,21 @@ func main() {
 		}
 		defer tearDown()
 
-		// Login as admin to get UserToken
-		loginResp, err := authClient.Login(userlib.AdminUsername, *adminSecret)
+		// Login to get UserToken. authUser/tenantUUID default to the admin
+		// user / default tenant respectively, but either can be overridden
+		// via -au/-t for a non-default-tenant or non-admin deployment.
+		loginResp, err := authClient.LoginWithTenant(*authUser, *adminSecret, *tenantUUID)
 		if err != nil {
-			log.Fatalf("admin login failed: %v", err)
+			// err already carries user/tenant/status context and a gossip
+			// hint from LoginWithTenant (client.go) — do not strip it.
+			log.Fatalf("control-plane login failed (raft=%s, gossipConfig=%s): %v", *raftID, *configPath, err)
 		}
 		if !loginResp.Success || loginResp.AccessToken == "" {
-			log.Fatal("admin login failed: no access token received")
+			log.Fatalf("control-plane login failed: user=%q tenant=%s: no access token received (unexpected empty success response)",
+				*authUser, tenantLogValue(*tenantUUID))
 		}
 		adminToken = loginResp.AccessToken
-		log.Info("admin authentication successful")
+		log.Infof("control-plane authentication successful: user=%q tenant=%s", *authUser, tenantLogValue(*tenantUUID))
 	} else {
 		log.Warn("Starting ccManager with AUTH_ENABLED=false")
 	}
@@ -140,11 +157,13 @@ func main() {
 		c.SetToken(adminToken)
 		pts, err := c.GetPartition(cpLib.GetReq{ID: nisd.DevID})
 		if err != nil {
-			log.Error("failed to get partition: ", err)
+			log.Errorf("failed to get partition %q from control plane (raft=%s): %v", nisd.DevID, *raftID, err)
 			os.Exit(-1)
 		}
 		if len(pts) == 0 {
-			log.Errorf("no partition found with partition_id %q", nisd.DevID)
+			log.Errorf("no partition found with partition_id %q — this device name from config.yaml's "+
+				"nisd_config was never registered via POST /api/infra (or infra was loaded for a "+
+				"different tenant than %s); load/verify infra before retrying", nisd.DevID, tenantLogValue(*tenantUUID))
 			os.Exit(-1)
 		}
 		pt := pts[ZERO_INDEX]
@@ -156,7 +175,7 @@ func main() {
 		c.SetToken(adminToken)
 		nisdInfo, err := c.GetNisd(req)
 		if err != nil {
-			log.Error("failed to get nisd details: ", err)
+			log.Errorf("failed to get nisd details for %q (partition_id=%s, raft=%s): %v", pt.NISDUUID, nisd.DevID, *raftID, err)
 			os.Exit(-1)
 		}
 		conf.NisdConfig[i].ID = nisdInfo.ID
