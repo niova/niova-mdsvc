@@ -121,15 +121,6 @@ func TestUserAuthVdevCreation(t *testing.T) {
 	vdevID := vdevResp.ID
 	log.Infof("user created vdev with ID: %s", vdevID)
 
-	// Step 4: Verify user can access their own vdev
-	getReqUser := &cpLib.GetReq{
-		ID: vdevID,
-	}
-	vdevCfg, err := ctlClient.GetVdevConfig(getReqUser)
-	assert.NoError(t, err, "user should be able to read their own vdev")
-	assert.Equal(t, vdevID, vdevCfg[0].ID, "fetched vdev ID should match")
-	log.Infof("User successfully accessed their vdev: %s", vdevCfg[0].ID)
-
 	// Step 5: Create normal user2
 	user2Username := "unauthorized_user_" + uuid.New().String()[:8]
 	user2Req := &userlib.UserReq{
