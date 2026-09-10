@@ -2258,7 +2258,7 @@ func ReadPFSCfg(args ...interface{}) (interface{}, error) {
 	pfsMap := make(map[string]*ctlplfl.PFS)
 	for k, v := range readResult.ResultMap {
 		parts := strings.Split(strings.Trim(k, "/"), "/")
-		if len(parts) < 2 || parts[0] != pfsKey {
+		if len(parts) < 3 || parts[0] != pfsKey || uuid.Validate(parts[1]) != nil {
 			continue
 		}
 		id := parts[1]

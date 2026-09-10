@@ -1,7 +1,10 @@
-package main
+package domain
 
 import (
+	"bufio"
 	"fmt"
+	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -12,102 +15,167 @@ import (
 	ctlplfl "github.com/00pauln00/niova-mdsvc/controlplane/ctlplanefuncs/lib"
 )
 
-// Type aliases to use libctlplanefuncs types
-type Device = ctlplfl.Device
-type DevicePartition = ctlplfl.DevicePartition
-type PDU = ctlplfl.PDU
-type Rack = ctlplfl.Rack
-type Hypervisor = ctlplfl.Hypervisor
-type Vdev = ctlplfl.Vdev
+// ParseByIdDevices parses `ls -la /dev/disk/by-id/` output
+func ParseByIdDevices(output string) []ctlplfl.Device {
+	devices := make([]Device, 0)
+	lines := strings.Split(strings.TrimSpace(output), "\n")
 
-// DevicePartitionInfo holds information about a partition
-type DevicePartitionInfo struct {
-	Name string
-	Size int64
-}
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
 
-// ParsePortRange parses a port range string like "8000-8100" and returns start and end ports
-func ParsePortRange(portRange string) (int, int, error) {
-	if portRange == "" {
-		return 0, 0, fmt.Errorf("empty port range")
-	}
+		parts := strings.Fields(line)
+		if len(parts) >= 2 {
+			id := parts[0]
+			target := parts[1]
 
-	parts := strings.Split(portRange, "-")
-	if len(parts) != 2 {
-		return 0, 0, fmt.Errorf("invalid port range format: %s", portRange)
-	}
+			if strings.Contains(id, "-part") {
+				continue
+			}
 
-	start := 0
-	end := 0
-	var err error
+			if strings.Contains(target, "../") {
+				deviceName := strings.TrimPrefix(filepath.Base(target), "../")
 
-	if start, err = strconv.Atoi(strings.TrimSpace(parts[0])); err != nil {
-		return 0, 0, fmt.Errorf("invalid start port: %s", parts[0])
-	}
-
-	if end, err = strconv.Atoi(strings.TrimSpace(parts[1])); err != nil {
-		return 0, 0, fmt.Errorf("invalid end port: %s", parts[1])
-	}
-
-	if start >= end {
-		return 0, 0, fmt.Errorf("start port must be less than end port")
-	}
-
-	return start, end, nil
-}
-
-// AllocatePortPair allocates a contiguous pair of ports (serverPort=N, clientPort=N+1)
-// from the given range, avoiding already allocated ports by querying existing NISDs
-// from the control plane. Ports are isolated per hypervisor via FailureDomain[HV_IDX].
-func AllocatePortPair(hypervisorUUID string, portRange string, userToken string, cpClient interface{}) (int, int, error) {
-	startPort, endPort, err := ParsePortRange(portRange)
-	if err != nil {
-		return 0, 0, err
-	}
-
-	// Collect all allocated ports for this hypervisor
-	allocatedPorts := make(map[int]bool)
-
-	// Query existing NISDs from control plane to get allocated ports
-	if cpClient != nil {
-		if client, ok := cpClient.(interface {
-			GetNisds(ctlplfl.GetReq) ([]ctlplfl.Nisd, error)
-		}); ok {
-			// Get all NISDs and filter by hypervisor UUID locally
-			nisds, err := client.GetNisds(ctlplfl.GetReq{GetAll: true})
-			if err == nil {
-				for _, nisd := range nisds {
-					if nisd.FailureDomain[ctlplfl.HV_IDX] == hypervisorUUID {
-						allocatedPorts[int(nisd.PeerPort)] = true
-						allocatedPorts[int(nisd.NetInfo[0].Port)] = true
-					}
+				if regexp.MustCompile(`p\d+$|[a-z]\d+$`).MatchString(deviceName) {
+					continue
 				}
+
+				devices = append(devices, Device{
+					ID:         id,
+					Name:       id,
+					DevicePath: "/dev/" + deviceName,
+				})
 			}
 		}
 	}
 
-	for port := startPort; port < endPort-1; port += 2 {
-		serverPort := port
-		clientPort := port + 1
+	return devices
+}
 
-		if !allocatedPorts[serverPort] && !allocatedPorts[clientPort] {
-			return clientPort, serverPort, nil
+// ParseSizeToBytes converts human-readable size strings (like "1T", "500G", "1.2G") to bytes
+func ParseSizeToBytes(sizeStr string) int64 {
+	if sizeStr == "" {
+		return 0
+	}
+
+	sizeStr = strings.TrimSpace(sizeStr)
+	if sizeStr == "" {
+		return 0
+	}
+
+	re := regexp.MustCompile(`^(\d+(?:\.\d+)?)\s*([KMGTPE]?)$`)
+	matches := re.FindStringSubmatch(strings.ToUpper(sizeStr))
+	if len(matches) < 3 {
+		if bytes, err := strconv.ParseInt(sizeStr, 10, 64); err == nil {
+			return bytes
+		}
+		return 0
+	}
+
+	value, err := strconv.ParseFloat(matches[1], 64)
+	if err != nil {
+		return 0
+	}
+
+	unit := matches[2]
+	var multiplier int64 = 1
+
+	switch unit {
+	case "K":
+		multiplier = 1024
+	case "M":
+		multiplier = 1024 * 1024
+	case "G":
+		multiplier = 1024 * 1024 * 1024
+	case "T":
+		multiplier = 1024 * 1024 * 1024 * 1024
+	case "P":
+		multiplier = 1024 * 1024 * 1024 * 1024 * 1024
+	case "E":
+		multiplier = 1024 * 1024 * 1024 * 1024 * 1024 * 1024
+	case "":
+		multiplier = 1
+	}
+
+	return int64(value * float64(multiplier))
+}
+
+// ParseLsblkDevices parses lsblk command output
+func ParseLsblkDevices(output string) []ctlplfl.Device {
+	devices := make([]Device, 0)
+	scanner := bufio.NewScanner(strings.NewReader(output))
+	re := regexp.MustCompile(`^(\S*)\s+(\S+)\s+(\S+)\s+(\S*)\s+disk`)
+
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+
+		matches := re.FindStringSubmatch(line)
+		if len(matches) >= 5 {
+			id := matches[1]
+			name := matches[2]
+			sizeStr := matches[3]
+			serialNum := matches[4]
+
+			if id == "" {
+				id = name
+			}
+
+			sizeBytes := ParseSizeToBytes(sizeStr)
+			log.Infof("Device %s: size string '%s' parsed to %d bytes", name, sizeStr, sizeBytes)
+
+			devices = append(devices, Device{
+				ID:           id,
+				Name:         name,
+				DevicePath:   "/dev/" + name,
+				Size:         sizeBytes,
+				SerialNumber: serialNum,
+			})
 		}
 	}
 
-	return 0, 0, fmt.Errorf("no available port pairs in range %s", portRange)
+	return devices
 }
 
-// GetDeviceSize gets the actual size of a device in bytes
+// ParseLsblkPartitions parses `lsblk -ln -b -o NAME,SIZE,PKNAME,TYPE` output
+// into a map of parent disk name (e.g. "nvme1n1") to the OS-level partitions
+// found on it. One bulk call covers every disk on the hypervisor, instead of
+// a GetDevicePartitionInfo-style round trip per device — needed for the
+// discovery table, which lists every disk in one screen.
+func ParseLsblkPartitions(output string) map[string][]ctlplfl.DevicePartition {
+	result := make(map[string][]ctlplfl.DevicePartition)
+	scanner := bufio.NewScanner(strings.NewReader(output))
+	for scanner.Scan() {
+		fields := strings.Fields(scanner.Text())
+		if len(fields) < 4 || fields[3] != "part" || fields[2] == "" {
+			continue
+		}
+		name, sizeStr, parent := fields[0], fields[1], fields[2]
+		size, err := strconv.ParseInt(sizeStr, 10, 64)
+		if err != nil {
+			log.Warnf("ParseLsblkPartitions: failed to parse size for %s: %v", name, err)
+		}
+		result[parent] = append(result[parent], ctlplfl.DevicePartition{
+			PartitionPath: "/dev/" + name,
+			Size:          size,
+		})
+	}
+	return result
+}
+
+// GetDeviceSize gets the actual size of a device in bytes via SSH
 func GetDeviceSize(hv ctlplfl.Hypervisor, deviceName string) (int64, error) {
-	sshClient, err := NewSSHClient(hv.IPAddrs)
+	sshClient, err := newSSHExecutor(hv.IPAddrs)
 	if err != nil {
 		return 0, fmt.Errorf("failed to connect to hypervisor %s: %v", hv.IPAddrs, err)
 	}
 	defer sshClient.Close()
 
 	devicePath := fmt.Sprintf("/dev/%s", deviceName)
-
 	checkCmd := fmt.Sprintf("test -b %s && echo 'exists' || echo 'not found'", devicePath)
 	result, err := sshClient.RunCommand(checkCmd)
 	if err != nil {
@@ -116,7 +184,7 @@ func GetDeviceSize(hv ctlplfl.Hypervisor, deviceName string) (int64, error) {
 	if strings.TrimSpace(result) != "exists" {
 		ip, err2 := hv.GetPrimaryIP()
 		if err2 != nil {
-			log.Error("GetDeviceSize():failed to fetch network info: ", err2)
+			log.Error("GetDeviceSize(): failed to fetch network info: ", err2)
 		}
 		return 0, fmt.Errorf("device %s not found on hypervisor %s", devicePath, ip)
 	}
@@ -137,7 +205,7 @@ func GetDeviceSize(hv ctlplfl.Hypervisor, deviceName string) (int64, error) {
 
 // DeleteAllPartitionsFromDevice removes all partitions from a device
 func DeleteAllPartitionsFromDevice(hv ctlplfl.Hypervisor, deviceName string) error {
-	sshClient, err := NewSSHClient(hv.IPAddrs)
+	sshClient, err := newSSHExecutor(hv.IPAddrs)
 	if err != nil {
 		return fmt.Errorf("failed to connect to hypervisor %s: %v", hv.IPAddrs, err)
 	}
@@ -174,7 +242,7 @@ func CreateMultipleEqualPartitions(hv ctlplfl.Hypervisor, deviceName string, num
 		return fmt.Errorf("failed to get device size: %v", err)
 	}
 
-	sshClient, err := NewSSHClient(hv.IPAddrs)
+	sshClient, err := newSSHExecutor(hv.IPAddrs)
 	if err != nil {
 		return fmt.Errorf("failed to connect to hypervisor %s: %v", hv.IPAddrs, err)
 	}
@@ -204,9 +272,9 @@ func CreateMultipleEqualPartitions(hv ctlplfl.Hypervisor, deviceName string, num
 	return nil
 }
 
-// GetDevicePartitionNames retrieves the actual partition names for a device using lsblk
+// GetDevicePartitionNames retrieves partition names for a device using lsblk
 func GetDevicePartitionNames(hv ctlplfl.Hypervisor, deviceName string) ([]string, error) {
-	sshClient, err := NewSSHClient(hv.IPAddrs)
+	sshClient, err := newSSHExecutor(hv.IPAddrs)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to hypervisor %s: %v", hv.IPAddrs, err)
 	}
@@ -232,9 +300,9 @@ func GetDevicePartitionNames(hv ctlplfl.Hypervisor, deviceName string) ([]string
 	return partitionNames, nil
 }
 
-// GetDevicePartitionInfo retrieves the actual partition names and sizes for a device using lsblk
+// GetDevicePartitionInfo retrieves partition names and sizes for a device using lsblk
 func GetDevicePartitionInfo(hv ctlplfl.Hypervisor, deviceName string) ([]DevicePartitionInfo, error) {
-	sshClient, err := NewSSHClient(hv.IPAddrs)
+	sshClient, err := newSSHExecutor(hv.IPAddrs)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to hypervisor %s: %v", hv.IPAddrs, err)
 	}
@@ -272,6 +340,9 @@ func GetDevicePartitionInfo(hv ctlplfl.Hypervisor, deviceName string) ([]DeviceP
 						log.Warnf("Failed to parse size for partition %s: %v", partitionName, err)
 						size = 0
 					}
+					// The kernel device node — what a NISD actually opens —
+					// regardless of whether the by-id lookup below succeeds.
+					partitionPath := "/dev/" + partitionName
 
 					partitionByIdCmd := fmt.Sprintf("ls -la /dev/disk/by-id/ | grep '%s$' | head -1 | awk '{print $9}'", partitionName)
 					partitionByIdOutput, err := sshClient.RunCommand(partitionByIdCmd)
@@ -279,6 +350,7 @@ func GetDevicePartitionInfo(hv ctlplfl.Hypervisor, deviceName string) ([]DeviceP
 						log.Warnf("Failed to get by-id name for partition %s: %v", partitionName, err)
 						partitionInfos = append(partitionInfos, DevicePartitionInfo{
 							Name: partitionName,
+							Path: partitionPath,
 							Size: size,
 						})
 					} else {
@@ -286,11 +358,13 @@ func GetDevicePartitionInfo(hv ctlplfl.Hypervisor, deviceName string) ([]DeviceP
 						if partitionByIdName != "" {
 							partitionInfos = append(partitionInfos, DevicePartitionInfo{
 								Name: partitionByIdName,
+								Path: partitionPath,
 								Size: size,
 							})
 						} else {
 							partitionInfos = append(partitionInfos, DevicePartitionInfo{
 								Name: partitionName,
+								Path: partitionPath,
 								Size: size,
 							})
 						}
@@ -306,9 +380,9 @@ func GetDevicePartitionInfo(hv ctlplfl.Hypervisor, deviceName string) ([]DeviceP
 	return partitionInfos, nil
 }
 
-// getDeviceByIdName gets the /dev/disk/by-id/ name for a device
-func getDeviceByIdName(hv ctlplfl.Hypervisor, deviceName string) (string, error) {
-	sshClient, err := NewSSHClient(hv.IPAddrs)
+// GetDeviceByIdName gets the /dev/disk/by-id/ name for a device
+func GetDeviceByIdName(hv ctlplfl.Hypervisor, deviceName string) (string, error) {
+	sshClient, err := newSSHExecutor(hv.IPAddrs)
 	if err != nil {
 		return "", fmt.Errorf("failed to connect to hypervisor %s: %v", hv.IPAddrs, err)
 	}
@@ -327,9 +401,9 @@ func getDeviceByIdName(hv ctlplfl.Hypervisor, deviceName string) (string, error)
 	return deviceByIdName, nil
 }
 
-// DeletePhysicalPartition removes an actual partition from the physical device
+// DeletePhysicalPartition removes an actual partition from physical device
 func DeletePhysicalPartition(hv ctlplfl.Hypervisor, deviceName string, partitionNumber int) error {
-	sshClient, err := NewSSHClient(hv.IPAddrs)
+	sshClient, err := newSSHExecutor(hv.IPAddrs)
 	if err != nil {
 		return fmt.Errorf("failed to connect to hypervisor %s: %v", hv.IPAddrs, err)
 	}
@@ -374,14 +448,13 @@ func DeletePhysicalPartition(hv ctlplfl.Hypervisor, deviceName string, partition
 
 // RemoveDevicePartition removes a physical NISD partition from a device via SSH
 func RemoveDevicePartition(hv ctlplfl.Hypervisor, deviceName, partitionID string) error {
-	sshClient, err := NewSSHClient(hv.IPAddrs)
+	sshClient, err := newSSHExecutor(hv.IPAddrs)
 	if err != nil {
 		return fmt.Errorf("failed to connect to hypervisor %s: %v", hv.IPAddrs, err)
 	}
 
 	devicePath := fmt.Sprintf("/dev/%s", deviceName)
 
-	// List partitions to find the matching one by index
 	listCmd := fmt.Sprintf("parted -s %s print 2>/dev/null | grep -E '^ *[0-9]+'", devicePath)
 	output, err := sshClient.RunCommand(listCmd)
 	sshClient.Close()
@@ -397,7 +470,6 @@ func RemoveDevicePartition(hv ctlplfl.Hypervisor, deviceName, partitionID string
 		}
 	}
 
-	// Partition may already be deleted
 	log.Warnf("Partition %s not found on device %s, may already be removed", partitionID, deviceName)
 	return nil
 }
